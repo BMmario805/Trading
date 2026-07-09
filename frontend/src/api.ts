@@ -1,4 +1,15 @@
-import type { Analysis, Candle, SentimentPoint, SymbolInfo, Tick } from './types'
+import type {
+  Analysis,
+  BotPerformance,
+  BotStatus,
+  BotTrade,
+  Candle,
+  OpinionsResponse,
+  SentimentPoint,
+  SymbolInfo,
+  Tick,
+  TrainingStatus,
+} from './types'
 
 async function getJson<T>(url: string): Promise<T> {
   const r = await fetch(url)
@@ -16,6 +27,46 @@ export const fetchAnalysis = (id: string, interval: string) =>
 
 export const fetchSentimentHistory = (id: string, hours = 72) =>
   getJson<SentimentPoint[]>(`/api/sentiment/${id}/history?hours=${hours}`)
+
+export const fetchOpinions = (id: string) =>
+  getJson<OpinionsResponse>(`/api/opinions/${id}`)
+
+export const fetchBots = () => getJson<BotStatus[]>('/api/bots')
+
+export const fetchBotTrades = (id: string, limit = 30) =>
+  getJson<BotTrade[]>(`/api/bots/${id}/trades?limit=${limit}`)
+
+export async function botAction(
+  id: string,
+  action: 'start' | 'stop' | 'reset',
+): Promise<BotStatus> {
+  const r = await fetch(`/api/bots/${id}/${action}`, { method: 'POST' })
+  if (!r.ok) throw new Error(`bot ${action} -> ${r.status}`)
+  return r.json()
+}
+
+export async function startTraining(id: string): Promise<void> {
+  const r = await fetch(`/api/bots/${id}/train`, { method: 'POST' })
+  if (!r.ok) throw new Error(`bot train -> ${r.status}`)
+}
+
+export const fetchTraining = (id: string) =>
+  getJson<TrainingStatus>(`/api/bots/${id}/training`)
+
+export function fetchBotPerformance(filters: {
+  bot?: string
+  symbol?: string
+  from?: number
+  to?: number
+}): Promise<BotPerformance> {
+  const q = new URLSearchParams()
+  if (filters.bot) q.set('bot', filters.bot)
+  if (filters.symbol) q.set('symbol', filters.symbol)
+  if (filters.from) q.set('from', String(filters.from))
+  if (filters.to) q.set('to', String(filters.to))
+  const qs = q.toString()
+  return getJson<BotPerformance>(`/api/bots/performance${qs ? `?${qs}` : ''}`)
+}
 
 /** WebSocket de precios con reconexión y resuscripción automáticas. */
 export class PriceSocket {

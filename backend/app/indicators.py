@@ -63,6 +63,105 @@ def macd(values: list[float]) -> tuple[list[float | None], list[float | None]]:
     return line, signal
 
 
+def atr(candles: list[dict], period: int = 14) -> float | None:
+    """Average True Range (Wilder) de la última vela; None si faltan datos."""
+    if len(candles) <= period:
+        return None
+    trs: list[float] = []
+    for i in range(1, len(candles)):
+        h, l, pc = candles[i]["high"], candles[i]["low"], candles[i - 1]["close"]
+        trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+    a = sum(trs[:period]) / period
+    for tr in trs[period:]:
+        a = (a * (period - 1) + tr) / period
+    return a
+
+
+def breakout_vote(candles: list[dict], lookback: int = 20) -> float:
+    """+1 si el cierre rompe el máximo de las `lookback` velas previas, -1 el mínimo."""
+    if len(candles) < lookback + 2:
+        return 0.0
+    window = candles[-(lookback + 1):-1]
+    last = candles[-1]["close"]
+    if last > max(c["high"] for c in window):
+        return 1.0
+    if last < min(c["low"] for c in window):
+        return -1.0
+    return 0.0
+
+
+def atr_series(candles: list[dict], period: int = 14) -> list[float | None]:
+    """ATR de Wilder por vela (misma fórmula que `atr`, pero la serie entera)."""
+    out: list[float | None] = [None] * len(candles)
+    if len(candles) <= period:
+        return out
+    trs: list[float] = []
+    for i in range(1, len(candles)):
+        h, l, pc = candles[i]["high"], candles[i]["low"], candles[i - 1]["close"]
+        trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+    a = sum(trs[:period]) / period
+    out[period] = a
+    for i in range(period, len(trs)):
+        a = (a * (period - 1) + trs[i]) / period
+        out[i + 1] = a
+    return out
+
+
+def adx_series(candles: list[dict], period: int = 14) -> list[float | None]:
+    """ADX de Wilder: fuerza de la tendencia (>25 tendencia, <20 rango)."""
+    n = len(candles)
+    out: list[float | None] = [None] * n
+    if n <= 2 * period:
+        return out
+    plus_dm: list[float] = []
+    minus_dm: list[float] = []
+    trs: list[float] = []
+    for i in range(1, n):
+        up = candles[i]["high"] - candles[i - 1]["high"]
+        down = candles[i - 1]["low"] - candles[i]["low"]
+        plus_dm.append(up if up > down and up > 0 else 0.0)
+        minus_dm.append(down if down > up and down > 0 else 0.0)
+        h, l, pc = candles[i]["high"], candles[i]["low"], candles[i - 1]["close"]
+        trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+
+    tr_s = sum(trs[:period])
+    pdm_s = sum(plus_dm[:period])
+    mdm_s = sum(minus_dm[:period])
+    dxs: list[float] = []
+    for i in range(period, len(trs)):
+        tr_s = tr_s - tr_s / period + trs[i]
+        pdm_s = pdm_s - pdm_s / period + plus_dm[i]
+        mdm_s = mdm_s - mdm_s / period + minus_dm[i]
+        pdi = 100 * pdm_s / tr_s if tr_s else 0.0
+        mdi = 100 * mdm_s / tr_s if tr_s else 0.0
+        dx = 100 * abs(pdi - mdi) / (pdi + mdi) if pdi + mdi else 0.0
+        dxs.append(dx)
+        if len(dxs) == period:
+            out[i + 1] = sum(dxs) / period
+        elif len(dxs) > period:
+            prev = out[i]
+            out[i + 1] = (prev * (period - 1) + dx) / period  # type: ignore[operator]
+    return out
+
+
+def pct_b(closes: list[float], period: int = 20, k: float = 2.0) -> list[float | None]:
+    """%B de Bollinger: 0 = banda inferior, 1 = superior (reversión en extremos)."""
+    out: list[float | None] = [None] * len(closes)
+    means = sma(closes, period)
+    for i in range(period - 1, len(closes)):
+        m = means[i]
+        if m is None:
+            continue
+        window = closes[i - period + 1 : i + 1]
+        var = sum((v - m) ** 2 for v in window) / period
+        sd = var ** 0.5
+        if sd == 0:
+            out[i] = 0.5
+        else:
+            out[i] = (closes[i] - (m - k * sd)) / (2 * k * sd)
+    return out
+
+
 def technical_analysis(candles: list[dict]) -> dict:
     """Puntuación técnica en [-1, 1] (+1 alcista) con desglose de indicadores."""
     closes = [c["close"] for c in candles]

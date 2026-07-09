@@ -2,11 +2,13 @@
 
 Fuentes:
   - StockTwits: mensajes de traders con etiqueta explícita Bullish/Bearish.
-  - Reddit: búsqueda pública JSON en subreddits de trading + VADER sobre los textos.
+  - Reddit: búsqueda pública RSS en subreddits de trading + VADER sobre los textos.
   - Fear & Greed Index (alternative.me) para cripto.
+  - TradingView: Ideas (dirección Long/Short explícita) y Minds (VADER).
 
-Cada fuente produce (bullish_ratio en [0,1], tamaño de muestra). La media
-ponderada por muestra da la "probabilidad" agregada de subida percibida.
+Cada fuente produce un agregado (bullish en [0,1], tamaño de muestra) y la
+lista de publicaciones individuales (`items`) para el visor de opiniones.
+La media ponderada por muestra da la "probabilidad" agregada de subida.
 """
 
 import asyncio
@@ -14,15 +16,15 @@ import html
 import re
 import time
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 from curl_cffi.requests import AsyncSession
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 from . import history
 from .config import SENTIMENT_TTL, Symbol
 from .market_data import client
+from .tradingview import classify_trader_text, ideas_source, minds_source
 
-_vader = SentimentIntensityAnalyzer()
 _cache: dict[str, tuple[float, dict]] = {}
 
 # StockTwits está detrás de Cloudflare y rechaza la huella TLS de httpx;
@@ -44,6 +46,15 @@ async def close_session() -> None:
         _curl = None
 
 
+def _epoch(iso: str | None) -> int | None:
+    if not iso:
+        return None
+    try:
+        return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
 async def _stocktwits_stream(stream: str) -> list[dict]:
     url = f"https://api.stocktwits.com/api/2/streams/symbol/{stream}.json"
     r = await _curl_session().get(url)
@@ -63,6 +74,7 @@ async def _stocktwits(sym: Symbol) -> dict | None:
     )
     seen: set[int] = set()
     bull = bear = total_msgs = 0
+    items: list[dict] = []
     for msgs in results:
         if isinstance(msgs, Exception):
             continue
@@ -76,15 +88,28 @@ async def _stocktwits(sym: Symbol) -> dict | None:
                 bull += 1
             elif basic == "Bearish":
                 bear += 1
+            user = (m.get("user") or {})
+            items.append({
+                "user": user.get("username"),
+                "avatar": user.get("avatar_url"),
+                "text": (m.get("body") or "")[:600],
+                "badge": basic.lower() if basic else "neutral",
+                "likes": (m.get("likes") or {}).get("total") or 0,
+                "time": _epoch(m.get("created_at")),
+                "url": f"https://stocktwits.com/{user.get('username')}/message/{m.get('id')}",
+                "image": None,
+            })
     total = bull + bear
     if total == 0:
         return None
+    items.sort(key=lambda i: i["time"] or 0, reverse=True)
     label = f" ({', '.join(streams)})" if len(streams) > 1 else ""
     return {
         "source": f"StockTwits{label}",
         "detail": f"{bull} alcistas / {bear} bajistas de {total_msgs} mensajes",
         "bullish": bull / total,
         "sample": total,
+        "items": items,
     }
 
 
@@ -122,25 +147,41 @@ async def _reddit(sym: Symbol) -> dict | None:
         _last_reddit = time.time()
     r.raise_for_status()
     root = ET.fromstring(r.text)
-    posts = []
+    n_posts = 0
+    pos = neg = 0
+    items: list[dict] = []
     for entry in root.iter(f"{_ATOM}entry"):
+        n_posts += 1
         title = entry.findtext(f"{_ATOM}title") or ""
         content = entry.findtext(f"{_ATOM}content") or ""
         content = html.unescape(_TAG_RE.sub(" ", content))
-        posts.append(f"{title}. {content[:500]}")
-    scores = []
-    for text in posts:
-        compound = _vader.polarity_scores(text)["compound"]
-        if abs(compound) >= 0.15:  # descartar posts neutrales
-            scores.append(compound)
-    if not scores:
+        author = (entry.findtext(f"{_ATOM}author/{_ATOM}name") or "").lstrip("/u/")
+        link_el = entry.find(f"{_ATOM}link")
+        link = link_el.get("href") if link_el is not None else None
+        badge = classify_trader_text(f"{title}. {content[:500]}")
+        if badge == "positive":
+            pos += 1
+        elif badge == "negative":
+            neg += 1
+        items.append({
+            "user": author,
+            "avatar": None,
+            "text": f"{title} — {content[:400]}".strip(" —"),
+            "badge": badge,
+            "likes": None,  # el RSS de Reddit no incluye los votos
+            "time": _epoch(entry.findtext(f"{_ATOM}updated")),
+            "url": link,
+            "image": None,
+        })
+    scored = pos + neg
+    if scored == 0:
         return None
-    pos = sum(1 for s in scores if s > 0)
     return {
         "source": f"Reddit (r/{', r/'.join(sym.reddit_subs)})",
-        "detail": f"{pos} positivos / {len(scores) - pos} negativos de {len(posts)} posts",
-        "bullish": pos / len(scores),
-        "sample": len(scores),
+        "detail": f"{pos} positivos / {neg} negativos de {n_posts} posts",
+        "bullish": pos / scored,
+        "sample": scored,
+        "items": items,
     }
 
 
@@ -156,17 +197,24 @@ async def _fear_greed(sym: Symbol) -> dict | None:
         "detail": f"{value}/100 ({data['value_classification']})",
         "bullish": value / 100,
         "sample": 10,  # peso fijo moderado: es un índice, no una muestra
+        "items": [],
     }
 
 
-async def get_sentiment(sym: Symbol) -> dict:
+async def _compute(sym: Symbol) -> dict:
+    """Resultado completo (agregados + items), cacheado SENTIMENT_TTL segundos."""
     now = time.time()
     cached = _cache.get(sym.id)
     if cached and now - cached[0] < SENTIMENT_TTL:
         return cached[1]
 
     results = await asyncio.gather(
-        _stocktwits(sym), _reddit(sym), _fear_greed(sym), return_exceptions=True
+        _stocktwits(sym),
+        _reddit(sym),
+        _fear_greed(sym),
+        ideas_source(sym),
+        minds_source(sym),
+        return_exceptions=True,
     )
     sources = [r for r in results if isinstance(r, dict)]
     errors = [type(r).__name__ for r in results if isinstance(r, Exception)]
@@ -182,7 +230,6 @@ async def get_sentiment(sym: Symbol) -> dict:
         "bajista" if bullish <= 0.45 else
         "neutral"
     )
-
     result = {
         "symbol": sym.id,
         "bullishPct": round(bullish * 100, 1),
@@ -199,3 +246,44 @@ async def get_sentiment(sym: Symbol) -> dict:
         if total > 0:
             history.record(sym.id, result["bullishPct"], total)
     return result
+
+
+def peek_cached(symbol_id: str) -> dict | None:
+    """Sentimiento cacheado aún vigente, sin disparar ningún cálculo.
+
+    Lo usan los bots: nunca bloquean esperando a las fuentes; si no hay
+    caché lanzan un refresco en segundo plano y operan solo con técnico.
+    """
+    cached = _cache.get(symbol_id)
+    if cached and time.time() - cached[0] < SENTIMENT_TTL:
+        return cached[1]
+    return None
+
+
+async def get_sentiment(sym: Symbol) -> dict:
+    """Agregados sin las publicaciones individuales (respuesta ligera)."""
+    full = await _compute(sym)
+    return {
+        **full,
+        "sources": [
+            {
+                **{k: v for k, v in s.items() if k != "items"},
+                "hasItems": bool(s.get("items")),
+            }
+            for s in full["sources"]
+        ],
+    }
+
+
+async def get_opinions(sym: Symbol) -> dict:
+    """Publicaciones individuales por fuente, para el visor de opiniones."""
+    full = await _compute(sym)
+    return {
+        "symbol": full["symbol"],
+        "updatedAt": full["updatedAt"],
+        "sources": [
+            {"source": s["source"], "detail": s["detail"], "items": s["items"]}
+            for s in full["sources"]
+            if s.get("items")
+        ],
+    }

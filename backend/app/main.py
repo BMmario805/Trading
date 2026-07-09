@@ -4,24 +4,29 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import SYMBOLS, SYMBOLS_BY_ID
-from . import history, market_data
+from . import bots, history, market_data, training
 from .hub import hub
 from .indicators import technical_analysis
 from . import sentiment as sentiment_mod
-from .sentiment import get_sentiment
+from . import tradingview
+from .sentiment import get_opinions, get_sentiment
 
 logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    bots.start_all()
     yield
+    await training.stop_all()
+    await bots.stop_all()
     await market_data.close_client()
     await sentiment_mod.close_session()
+    await tradingview.close_session()
 
 
 app = FastAPI(title="Trading Dashboard API", lifespan=lifespan)
@@ -72,6 +77,12 @@ async def sentiment(symbol_id: str):
     return await get_sentiment(_symbol(symbol_id))
 
 
+@app.get("/api/opinions/{symbol_id}")
+async def opinions(symbol_id: str):
+    """Publicaciones individuales (autor, texto, gráfico, votos) por fuente."""
+    return await get_opinions(_symbol(symbol_id))
+
+
 @app.get("/api/sentiment/{symbol_id}/history")
 async def sentiment_history(symbol_id: str, hours: int = 72):
     return history.get_history(_symbol(symbol_id).id, hours)
@@ -103,6 +114,74 @@ async def analysis(symbol_id: str, interval: str = "1h"):
             "bajista" if combined <= 0.4 else
             "neutral"
         ),
+    }
+
+
+def _bot(bot_id: str) -> bots.TradingBot:
+    bot = bots.BOTS.get(bot_id)
+    if not bot:
+        raise HTTPException(404, f"Bot desconocido: {bot_id}")
+    return bot
+
+
+@app.get("/api/bots")
+async def list_bots():
+    """Estado de los bots de paper trading (dinero simulado, precios reales)."""
+    return [bot.status() for bot in bots.BOTS.values()]
+
+
+@app.get("/api/bots/performance")
+async def bots_performance(
+    bot: str | None = None,
+    symbol: str | None = None,
+    from_ts: int | None = Query(None, alias="from"),
+    to_ts: int | None = Query(None, alias="to"),
+):
+    """PnL acumulado de operaciones cerradas, filtrable por bot/símbolo/fechas."""
+    return bots.performance(bot, symbol.upper() if symbol else None, from_ts, to_ts)
+
+
+@app.post("/api/bots/{bot_id}/start")
+async def start_bot(bot_id: str):
+    _bot(bot_id).set_running(True)
+    return _bot(bot_id).status()
+
+
+@app.post("/api/bots/{bot_id}/stop")
+async def stop_bot(bot_id: str):
+    """Pausa el bot: deja de abrir posiciones y de vigilar las abiertas."""
+    _bot(bot_id).set_running(False)
+    return _bot(bot_id).status()
+
+
+@app.post("/api/bots/{bot_id}/reset")
+async def reset_bot(bot_id: str):
+    """Borra el historial de operaciones y devuelve el balance inicial."""
+    bot = _bot(bot_id)
+    bot.reset()
+    return bot.status()
+
+
+@app.get("/api/bots/{bot_id}/trades")
+async def bot_trades(bot_id: str, limit: int = 50):
+    return _bot(bot_id).trades(limit)
+
+
+@app.post("/api/bots/{bot_id}/train")
+async def train_bot(bot_id: str, symbol: str | None = None):
+    """Entrenamiento walk-forward en segundo plano (todo el universo o un símbolo)."""
+    bot = _bot(bot_id)
+    symbols = [symbol.upper()] if symbol else None
+    return training.start_training(bot, symbols)
+
+
+@app.get("/api/bots/{bot_id}/training")
+async def bot_training(bot_id: str):
+    """Progreso del entrenamiento en curso + últimos resultados guardados."""
+    _bot(bot_id)
+    return {
+        **training.training_status(bot_id),
+        "saved": [r for r in training.load_results() if r["bot"] == bot_id],
     }
 
 

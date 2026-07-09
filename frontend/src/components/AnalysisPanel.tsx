@@ -3,9 +3,10 @@ import type { Analysis } from '../types'
 interface Props {
   analysis: Analysis | null
   loading: boolean
+  onSourceClick: (source: string) => void
 }
 
-export default function AnalysisPanel({ analysis, loading }: Props) {
+export default function AnalysisPanel({ analysis, loading, onSourceClick }: Props) {
   if (loading && !analysis) return <div className="panel">Cargando análisis…</div>
   if (!analysis) return <div className="panel">Sin datos de análisis.</div>
 
@@ -63,16 +64,32 @@ export default function AnalysisPanel({ analysis, loading }: Props) {
           )}
         </p>
         <ul className="sources">
-          {sentiment.sources.map((s) => (
-            <li key={s.source}>
-              <strong>{s.source}</strong>
-              <small className="muted">{s.detail}</small>
-            </li>
-          ))}
+          {sentiment.sources.map((s) =>
+            s.hasItems ? (
+              <li key={s.source}>
+                <button
+                  className="source-btn"
+                  onClick={() => onSourceClick(s.source)}
+                  title="Ver todas las opiniones de esta fuente"
+                >
+                  <strong>{s.source} ↗</strong>
+                  <small className="muted">{s.detail}</small>
+                </button>
+              </li>
+            ) : (
+              <li key={s.source}>
+                <strong>{s.source}</strong>
+                <small className="muted">{s.detail}</small>
+              </li>
+            ),
+          )}
           {sentiment.sources.length === 0 && (
             <li className="muted">Sin datos de opinión para este símbolo.</li>
           )}
         </ul>
+        <p className="muted small">
+          Haz clic en una fuente para ver cada opinión, su gráfico y sus votos.
+        </p>
       </div>
     </div>
   )

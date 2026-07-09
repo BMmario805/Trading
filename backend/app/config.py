@@ -19,6 +19,7 @@ class Symbol:
     reddit_subs: tuple[str, ...] = field(default_factory=tuple)
     is_crypto: bool = False
     note: str = ""               # aclaración sobre el origen de los datos (UI)
+    tradingview: str | None = None  # símbolo en TradingView (Ideas + Minds)
 
 
 SYMBOLS: list[Symbol] = [
@@ -31,52 +32,70 @@ SYMBOLS: list[Symbol] = [
            ("XAUUSD", "GC_F", "GLD"),
            "gold OR XAUUSD OR XAU",
            ("Gold", "Forex", "Daytrading", "wallstreetbets"),
-           note="Precio: spot Swissquote · Velas: futuros GC ajustados a la base spot"),
+           note="Precio: spot Swissquote · Velas: futuros GC ajustados a la base spot",
+           tradingview="XAUUSD"),
     Symbol("PAXG", "Oro 24/7 (PAXG)", "metales", "binance", "PAXGUSDT",
            "PAXG.X", "PAXG OR gold price", ("Gold", "CryptoCurrency"), True,
            note="Oro tokenizado (1 PAXG = 1 oz): cotiza 24/7 en Binance"),
 
     # --- Cripto (Binance) ---
     Symbol("BTC", "Bitcoin", "cripto", "binance", "BTCUSDT", "BTC.X",
-           "bitcoin OR BTC", ("CryptoCurrency", "Bitcoin", "CryptoMarkets"), True),
+           "bitcoin OR BTC", ("CryptoCurrency", "Bitcoin", "CryptoMarkets"), True,
+           tradingview="BTCUSD"),
     Symbol("ETH", "Ethereum", "cripto", "binance", "ETHUSDT", "ETH.X",
-           "ethereum OR ETH", ("CryptoCurrency", "ethereum", "CryptoMarkets"), True),
+           "ethereum OR ETH", ("CryptoCurrency", "ethereum", "CryptoMarkets"), True,
+           tradingview="ETHUSD"),
     Symbol("SOL", "Solana", "cripto", "binance", "SOLUSDT", "SOL.X",
-           "solana OR SOL", ("CryptoCurrency", "solana", "CryptoMarkets"), True),
+           "solana OR SOL", ("CryptoCurrency", "solana", "CryptoMarkets"), True,
+           tradingview="SOLUSD"),
     Symbol("XRP", "XRP", "cripto", "binance", "XRPUSDT", "XRP.X",
-           "XRP OR ripple", ("CryptoCurrency", "Ripple", "CryptoMarkets"), True),
+           "XRP OR ripple", ("CryptoCurrency", "Ripple", "CryptoMarkets"), True,
+           tradingview="XRPUSD"),
     Symbol("DOGE", "Dogecoin", "cripto", "binance", "DOGEUSDT", "DOGE.X",
-           "dogecoin OR DOGE", ("CryptoCurrency", "dogecoin"), True),
+           "dogecoin OR DOGE", ("CryptoCurrency", "dogecoin"), True,
+           tradingview="DOGEUSD"),
 
     # --- Acciones (Yahoo) ---
     Symbol("AAPL", "Apple", "acciones", "yahoo", "AAPL", "AAPL",
-           "AAPL OR Apple stock", ("wallstreetbets", "stocks", "investing")),
+           "AAPL OR Apple stock", ("wallstreetbets", "stocks", "investing"),
+           tradingview="AAPL"),
     Symbol("MSFT", "Microsoft", "acciones", "yahoo", "MSFT", "MSFT",
-           "MSFT OR Microsoft stock", ("wallstreetbets", "stocks", "investing")),
+           "MSFT OR Microsoft stock", ("wallstreetbets", "stocks", "investing"),
+           tradingview="MSFT"),
     Symbol("NVDA", "NVIDIA", "acciones", "yahoo", "NVDA", "NVDA",
-           "NVDA OR Nvidia", ("wallstreetbets", "stocks", "investing")),
+           "NVDA OR Nvidia", ("wallstreetbets", "stocks", "investing"),
+           tradingview="NVDA"),
     Symbol("TSLA", "Tesla", "acciones", "yahoo", "TSLA", "TSLA",
-           "TSLA OR Tesla stock", ("wallstreetbets", "stocks", "investing")),
+           "TSLA OR Tesla stock", ("wallstreetbets", "stocks", "investing"),
+           tradingview="TSLA"),
     Symbol("AMZN", "Amazon", "acciones", "yahoo", "AMZN", "AMZN",
-           "AMZN OR Amazon stock", ("wallstreetbets", "stocks", "investing")),
+           "AMZN OR Amazon stock", ("wallstreetbets", "stocks", "investing"),
+           tradingview="AMZN"),
     Symbol("META", "Meta", "acciones", "yahoo", "META", "META",
-           "META stock", ("wallstreetbets", "stocks", "investing")),
+           "META stock", ("wallstreetbets", "stocks", "investing"),
+           tradingview="META"),
     Symbol("GOOGL", "Alphabet", "acciones", "yahoo", "GOOGL", "GOOGL",
-           "GOOGL OR Google stock", ("wallstreetbets", "stocks", "investing")),
+           "GOOGL OR Google stock", ("wallstreetbets", "stocks", "investing"),
+           tradingview="GOOGL"),
 
     # --- Índices (Yahoo, vía ETF más líquidos) ---
     Symbol("SPY", "S&P 500 (SPY)", "indices", "yahoo", "SPY", "SPY",
-           "SPY OR S&P 500", ("wallstreetbets", "stocks", "investing")),
+           "SPY OR S&P 500", ("wallstreetbets", "stocks", "investing"),
+           tradingview="SPY"),
     Symbol("QQQ", "Nasdaq 100 (QQQ)", "indices", "yahoo", "QQQ", "QQQ",
-           "QQQ OR Nasdaq", ("wallstreetbets", "stocks", "investing")),
+           "QQQ OR Nasdaq", ("wallstreetbets", "stocks", "investing"),
+           tradingview="QQQ"),
 
     # --- Forex (Yahoo) ---
     Symbol("EURUSD", "EUR/USD", "forex", "yahoo", "EURUSD=X", None,
-           "EURUSD OR euro dollar", ("Forex", "Daytrading")),
+           "EURUSD OR euro dollar", ("Forex", "Daytrading"),
+           tradingview="EURUSD"),
     Symbol("GBPUSD", "GBP/USD", "forex", "yahoo", "GBPUSD=X", None,
-           "GBPUSD OR cable forex", ("Forex", "Daytrading")),
+           "GBPUSD OR cable forex", ("Forex", "Daytrading"),
+           tradingview="GBPUSD"),
     Symbol("USDJPY", "USD/JPY", "forex", "yahoo", "USDJPY=X", None,
-           "USDJPY OR yen forex", ("Forex", "Daytrading")),
+           "USDJPY OR yen forex", ("Forex", "Daytrading"),
+           tradingview="USDJPY"),
 
     # --- Futuros (Yahoo) ---
     Symbol("ES", "E-mini S&P 500", "futuros", "yahoo", "ES=F", "ES_F",

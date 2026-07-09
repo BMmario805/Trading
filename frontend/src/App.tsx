@@ -4,6 +4,8 @@ import Watchlist, { formatPrice } from './components/Watchlist'
 import ChartPanel from './components/ChartPanel'
 import AnalysisPanel from './components/AnalysisPanel'
 import SentimentHistory from './components/SentimentHistory'
+import OpinionsModal from './components/OpinionsModal'
+import BotsPanel from './components/BotsPanel'
 import {
   INTERVALS,
   type Analysis,
@@ -20,6 +22,7 @@ export default function App() {
   const [interval, setInterval_] = useState<Interval>('1h')
   const [prices, setPrices] = useState<Record<string, Tick>>({})
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [opinionsSource, setOpinionsSource] = useState<string | null>(null)
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -75,6 +78,8 @@ export default function App() {
     }
   }, [selected, interval])
 
+  useEffect(() => setOpinionsSource(null), [selected])
+
   const current = useMemo(
     () => symbols.find((s) => s.id === selected),
     [symbols, selected],
@@ -121,8 +126,20 @@ export default function App() {
           </nav>
         </header>
         <ChartPanel symbol={selected} interval={interval} socket={socket} />
-        <AnalysisPanel analysis={analysis} loading={loadingAnalysis} />
+        <AnalysisPanel
+          analysis={analysis}
+          loading={loadingAnalysis}
+          onSourceClick={setOpinionsSource}
+        />
         <SentimentHistory symbol={selected} />
+        <BotsPanel />
+        {opinionsSource && (
+          <OpinionsModal
+            symbol={selected}
+            initialSource={opinionsSource}
+            onClose={() => setOpinionsSource(null)}
+          />
+        )}
       </main>
     </div>
   )
