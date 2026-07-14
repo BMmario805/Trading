@@ -95,6 +95,95 @@ export interface Analysis {
   verdict: 'alcista' | 'bajista' | 'neutral'
 }
 
+/* ---------- sistemas de trading dibujables (overlays) ---------- */
+
+export interface OverlayPoint {
+  time: number
+  value: number
+}
+
+export interface SRLevel {
+  price: number
+  touches: number
+  kind: 'soporte' | 'resistencia'
+}
+
+export interface Trendline {
+  kind: 'soporte' | 'resistencia'
+  direction: 'alcista' | 'bajista'
+  from: { time: number; price: number }
+  to: { time: number; price: number }
+}
+
+export interface FibonacciSwing {
+  direction: 'alcista' | 'bajista'
+  high: { time: number; price: number }
+  low: { time: number; price: number }
+  levels: { ratio: number; price: number }[]
+}
+
+export interface Overlays {
+  sr: SRLevel[]
+  trendlines: Trendline[]
+  fibonacci: FibonacciSwing | null
+  ema20: OverlayPoint[]
+  ema50: OverlayPoint[]
+  bollinger: {
+    upper: OverlayPoint[]
+    middle: OverlayPoint[]
+    lower: OverlayPoint[]
+  }
+  supertrend?: OverlayPoint[]
+  keltner?: {
+    upper: OverlayPoint[]
+    lower: OverlayPoint[]
+  }
+  donchian?: {
+    upper: OverlayPoint[]
+    lower: OverlayPoint[]
+  }
+  psar?: OverlayPoint[]
+  ichimoku?: {
+    spanA: OverlayPoint[]
+    spanB: OverlayPoint[]
+  }
+  vwap?: OverlayPoint[]
+  openingRange?: { high: number; low: number; date: number }
+}
+
+export interface Confirmation {
+  system: string
+  detail: string
+  vote: number
+}
+
+export interface TradeSnapshot {
+  interval: string
+  score: number
+  confirmations: Confirmation[]
+  candles: Candle[]
+  overlays: Overlays
+}
+
+export interface TradeDetail {
+  id: number
+  bot: string
+  symbol: string
+  direction: 'long' | 'short'
+  qty: number
+  entryPrice: number
+  entryTime: number
+  sl: number
+  tp: number
+  exitPrice: number | null
+  exitTime: number | null
+  exitReason: string | null
+  pnl: number | null
+  status: 'open' | 'closed'
+  reasons: string[]
+  snapshot: TradeSnapshot | null
+}
+
 export interface BotPosition {
   id: number
   symbol: string
@@ -141,15 +230,25 @@ export interface BotStatus {
     winRate: number | null
     realizedPnl: number
   }
+  risk: {
+    dailyPnl: number
+    dailyLossLimit: number
+    dailyLossLimitPct: number
+    entriesPaused: boolean
+    consecLosses: number
+    riskScale: number
+    maxSameCategory: number
+    overextAtr: number
+  }
   trainedSymbols: string[]
+  learning: BotLearning | null
   config: {
     universe: string[]
     workInterval: string
     trendInterval: string
     scanSeconds: number
     riskPct: number
-    maxMargin: number
-    maxEquity: number
+    maxLeverage: number
     slAtr: number
     tpAtr: number
     trailAtr: number
@@ -157,6 +256,22 @@ export interface BotStatus {
     maxHoldSeconds: number
     sentimentWeight: number
   }
+}
+
+export interface LearningBlock {
+  symbol: string
+  direction: 'long' | 'short' | null
+  reason: string
+}
+
+export interface BotLearning {
+  blocks: LearningBlock[]
+  sizeMult: Record<string, number>
+  edges: Record<string, 'validated' | 'rejected' | 'unknown'>
+  autoRetrainHours: number
+  lastTrainedAt: number | null
+  nextRetrainAt: number | null
+  updatedAt: number | null
 }
 
 export interface TrainMetrics {
@@ -200,18 +315,45 @@ export interface PerfPoint {
   bot: string
 }
 
+export interface PerfSummary {
+  trades: number
+  wins: number
+  losses: number
+  winRate: number | null
+  pnl: number
+  best: number
+  worst: number
+}
+
+export interface PerfSeries {
+  id: string
+  name: string
+  points: PerfPoint[]
+  summary: PerfSummary
+}
+
 export interface BotPerformance {
   points: PerfPoint[]
-  summary: {
-    trades: number
-    wins: number
-    losses: number
-    winRate: number | null
-    pnl: number
-    best: number
-    worst: number
-  }
+  summary: PerfSummary
   symbols: string[]
+  bots: { id: string; name: string }[]
+  series?: PerfSeries[]
+}
+
+/* ---------- subpanel de indicadores del gráfico ---------- */
+
+export interface IndicatorPanel {
+  symbol: string
+  interval: string
+  rsi: OverlayPoint[]
+  macd: { line: OverlayPoint[]; signal: OverlayPoint[]; hist: OverlayPoint[] }
+  stoch: { k: OverlayPoint[]; d: OverlayPoint[] }
+  adx: OverlayPoint[]
+  mfi: OverlayPoint[]
+  cci: OverlayPoint[]
+  obv: OverlayPoint[]
+  roc: OverlayPoint[]
+  atr: OverlayPoint[]
 }
 
 export interface TrainingStatus {

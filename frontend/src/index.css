@@ -113,6 +113,30 @@ body {
   overflow: hidden;
 }
 
+/* ---------- barra de sistemas del gráfico ---------- */
+.chart-wrap { display: flex; flex-direction: column; gap: 6px; }
+.chart-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chart-toggle {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.chart-toggle.active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.chart-toggle:disabled { opacity: 0.4; cursor: default; }
+
 /* ---------- panels ---------- */
 .panels {
   display: grid;
@@ -396,6 +420,40 @@ body {
 }
 .dir-badge.long { background: rgba(38, 166, 154, 0.15); color: var(--up); }
 .dir-badge.short { background: rgba(239, 83, 80, 0.15); color: var(--down); }
+
+.risk-line { margin: 2px 0 8px; }
+
+/* ---------- detalle de operación (confirmaciones + gráfico) ---------- */
+.bot-table tr.clickable { cursor: pointer; }
+.bot-table tr.clickable:hover td { background: rgba(120, 140, 170, 0.08); }
+.modal-wide { width: min(920px, 100%); }
+.trade-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+}
+.trade-summary > div { display: flex; flex-direction: column; }
+.trade-summary small { font-size: 11px; }
+.detail-title { margin: 8px 0 0; font-size: 13px; }
+.snapshot-chart {
+  height: 300px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.confirm-list { list-style: none; margin: 0; padding: 0; }
+.confirm-list li {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.confirm-list li:last-child { border-bottom: 0; }
+.confirm-vote { font-variant-numeric: tabular-nums; font-weight: 600; }
 .bot-foot {
   display: flex;
   justify-content: space-between;
@@ -489,6 +547,46 @@ body {
 .training-status p { margin: 0; }
 .training-list { list-style: none; margin: 6px 0 0; padding: 0; }
 .training-list li { padding: 2px 0; }
+
+.learning-info {
+  background: var(--bg-3);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+.learning-info p { margin: 0; }
+
+/* leyenda del modo "una línea por bot" del gráfico de rendimiento */
+.perf-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 2px 0 6px;
+  font-size: 0.82rem;
+}
+.perf-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.perf-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* selector de oscilador del subpanel del gráfico */
+.chart-indicator {
+  margin-left: auto;
+  background: var(--bg-3);
+  color: var(--text);
+  border: 1px solid rgba(120, 140, 170, 0.25);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+}
 
 .error {
   background: rgba(239, 83, 80, 0.12);

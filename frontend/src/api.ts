@@ -4,10 +4,13 @@ import type {
   BotStatus,
   BotTrade,
   Candle,
+  IndicatorPanel,
   OpinionsResponse,
+  Overlays,
   SentimentPoint,
   SymbolInfo,
   Tick,
+  TradeDetail,
   TrainingStatus,
 } from './types'
 
@@ -30,6 +33,15 @@ export const fetchSentimentHistory = (id: string, hours = 72) =>
 
 export const fetchOpinions = (id: string) =>
   getJson<OpinionsResponse>(`/api/opinions/${id}`)
+
+export const fetchOverlays = (id: string, interval: string) =>
+  getJson<Overlays>(`/api/overlays/${id}?interval=${interval}`)
+
+export const fetchIndicators = (id: string, interval: string) =>
+  getJson<IndicatorPanel>(`/api/indicators/${id}?interval=${interval}`)
+
+export const fetchTradeDetail = (botId: string, tradeId: number) =>
+  getJson<TradeDetail>(`/api/bots/${botId}/trades/${tradeId}`)
 
 export const fetchBots = () => getJson<BotStatus[]>('/api/bots')
 
@@ -58,12 +70,14 @@ export function fetchBotPerformance(filters: {
   symbol?: string
   from?: number
   to?: number
+  perBot?: boolean
 }): Promise<BotPerformance> {
   const q = new URLSearchParams()
   if (filters.bot) q.set('bot', filters.bot)
   if (filters.symbol) q.set('symbol', filters.symbol)
   if (filters.from) q.set('from', String(filters.from))
   if (filters.to) q.set('to', String(filters.to))
+  if (filters.perBot) q.set('perBot', 'true')
   const qs = q.toString()
   return getJson<BotPerformance>(`/api/bots/performance${qs ? `?${qs}` : ''}`)
 }

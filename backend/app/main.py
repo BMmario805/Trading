@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import SYMBOLS, SYMBOLS_BY_ID
-from . import bots, history, market_data, training
+from . import bots, history, learning, market_data, systems, training
 from .hub import hub
 from .indicators import technical_analysis
 from . import sentiment as sentiment_mod
@@ -21,7 +21,9 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     bots.start_all()
+    learning.start_scheduler()   # reentrenamiento walk-forward automático
     yield
+    await learning.stop_scheduler()
     await training.stop_all()
     await bots.stop_all()
     await market_data.close_client()
@@ -117,6 +119,43 @@ async def analysis(symbol_id: str, interval: str = "1h"):
     }
 
 
+@app.get("/api/indicators/{symbol_id}")
+async def indicators_panel(symbol_id: str, interval: str = "1h"):
+    """Series de osciladores para el subpanel del gráfico: RSI, MACD,
+    estocástico, ADX, MFI, CCI, OBV, momento (ROC) y ATR."""
+    sym = _symbol(symbol_id)
+    try:
+        candles_data = await market_data.get_candles(sym, interval)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Fuente de datos no disponible: {exc}")
+    return {
+        "symbol": sym.id,
+        "interval": interval,
+        **systems.indicator_panel(candles_data),
+    }
+
+
+@app.get("/api/overlays/{symbol_id}")
+async def overlays(symbol_id: str, interval: str = "1h"):
+    """Trazados de los sistemas de trading para dibujar sobre el gráfico:
+    soportes/resistencias, líneas de tendencia, Fibonacci, medias, Bollinger
+    y VWAP de sesión (intradía)."""
+    sym = _symbol(symbol_id)
+    try:
+        candles_data = await market_data.get_candles(sym, interval)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Fuente de datos no disponible: {exc}")
+    return {
+        "symbol": sym.id,
+        "interval": interval,
+        **systems.chart_overlays(candles_data, intraday=interval in ("1m", "5m", "15m")),
+    }
+
+
 def _bot(bot_id: str) -> bots.TradingBot:
     bot = bots.BOTS.get(bot_id)
     if not bot:
@@ -136,9 +175,14 @@ async def bots_performance(
     symbol: str | None = None,
     from_ts: int | None = Query(None, alias="from"),
     to_ts: int | None = Query(None, alias="to"),
+    per_bot: bool = Query(False, alias="perBot"),
 ):
-    """PnL acumulado de operaciones cerradas, filtrable por bot/símbolo/fechas."""
-    return bots.performance(bot, symbol.upper() if symbol else None, from_ts, to_ts)
+    """PnL acumulado de operaciones cerradas, filtrable por bot/símbolo/fechas.
+    Con perBot=true añade una serie acumulada independiente por bot (una línea
+    por bot en el gráfico)."""
+    return bots.performance(
+        bot, symbol.upper() if symbol else None, from_ts, to_ts, per_bot
+    )
 
 
 @app.post("/api/bots/{bot_id}/start")
@@ -165,6 +209,26 @@ async def reset_bot(bot_id: str):
 @app.get("/api/bots/{bot_id}/trades")
 async def bot_trades(bot_id: str, limit: int = 50):
     return _bot(bot_id).trades(limit)
+
+
+@app.get("/api/bots/{bot_id}/trades/{trade_id}")
+async def bot_trade_detail(bot_id: str, trade_id: int):
+    """Detalle de una operación con sus confirmaciones y el gráfico dibujado
+    (velas + sistemas) del momento en que el bot decidió entrar."""
+    _bot(bot_id)
+    detail = bots.trade_detail(bot_id, trade_id)
+    if not detail:
+        raise HTTPException(404, f"Operación {trade_id} no encontrada")
+    return detail
+
+
+@app.get("/api/bots/{bot_id}/learning")
+async def bot_learning(bot_id: str):
+    """Lo que el bot ha aprendido de sus operaciones reales: vetos activos,
+    multiplicadores de tamaño, ventaja validada por símbolo y estadísticas
+    (por símbolo, dirección, hora y motivo de salida) de la ventana reciente."""
+    _bot(bot_id)
+    return learning.insights(bot_id)
 
 
 @app.post("/api/bots/{bot_id}/train")

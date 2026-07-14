@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   createChart,
   BaselineSeries,
+  LineSeries,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
@@ -13,6 +14,20 @@ const REFRESH_MS = 30_000
 const UP = '#26a69a'
 const DOWN = '#ef5350'
 
+/** Color fijo por bot para el modo "una línea por bot". */
+const BOT_COLORS: Record<string, string> = {
+  scalper: '#29b6f6',
+  swing: '#f0b90b',
+  trend: '#ff7043',
+  meanrev: '#b388ff',
+  orb: '#26c6da',
+  squeeze: '#ec407a',
+}
+const FALLBACK_COLORS = ['#66bb6a', '#ffa726', '#8d6e63', '#78909c']
+
+const botColor = (id: string, i: number) =>
+  BOT_COLORS[id] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]
+
 const PRESETS = [
   { id: '1d', label: 'Hoy', seconds: 86_400 },
   { id: '7d', label: '7 días', seconds: 7 * 86_400 },
@@ -21,11 +36,6 @@ const PRESETS = [
 ] as const
 
 type PresetId = (typeof PRESETS)[number]['id'] | 'custom'
-
-const BOT_LABELS: Record<string, string> = {
-  scalper: 'Scalper (minutos)',
-  swing: 'Swing (horas/días)',
-}
 
 const fmtPnl = (v: number) =>
   `${v >= 0 ? '+' : '-'}$${Math.abs(v).toLocaleString('en-US', {
@@ -46,11 +56,13 @@ export default function BotPerformance() {
   const [preset, setPreset] = useState<PresetId>('7d')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [perBot, setPerBot] = useState(false)
   const [perf, setPerf] = useState<Perf | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const seriesRef = useRef<ISeriesApi<'Baseline'> | null>(null)
+  const baselineRef = useRef<ISeriesApi<'Baseline'> | null>(null)
+  const linesRef = useRef<ISeriesApi<'Line'>[]>([])
 
   // crear el gráfico una sola vez
   useEffect(() => {
@@ -69,7 +81,7 @@ export default function BotPerformance() {
       crosshair: { mode: 0 },
       autoSize: true,
     })
-    seriesRef.current = chart.addSeries(BaselineSeries, {
+    baselineRef.current = chart.addSeries(BaselineSeries, {
       baseValue: { type: 'price', price: 0 },
       topLineColor: UP,
       topFillColor1: 'rgba(38,166,154,0.28)',
@@ -84,6 +96,8 @@ export default function BotPerformance() {
     return () => {
       chart.remove()
       chartRef.current = null
+      baselineRef.current = null
+      linesRef.current = []
     }
   }, [])
 
@@ -100,7 +114,13 @@ export default function BotPerformance() {
         const p = PRESETS.find((x) => x.id === preset)!
         if (p.seconds) from = Math.floor(Date.now() / 1000) - p.seconds
       }
-      fetchBotPerformance({ bot: bot || undefined, symbol: symbol || undefined, from, to })
+      fetchBotPerformance({
+        bot: bot || undefined,
+        symbol: symbol || undefined,
+        from,
+        to,
+        perBot,
+      })
         .then((p) => {
           if (!cancelled) setPerf(p)
         })
@@ -112,16 +132,43 @@ export default function BotPerformance() {
       cancelled = true
       window.clearInterval(id)
     }
-  }, [bot, symbol, preset, fromDate, toDate])
+  }, [bot, symbol, preset, fromDate, toDate, perBot])
 
-  // pintar la curva
+  // pintar la curva total o una línea por bot
   useEffect(() => {
-    if (!perf || !seriesRef.current) return
-    seriesRef.current.setData(
-      perf.points.map((p) => ({ time: p.ts as UTCTimestamp, value: p.cumPnl })),
-    )
-    chartRef.current?.timeScale().fitContent()
-  }, [perf])
+    const chart = chartRef.current
+    const baseline = baselineRef.current
+    if (!perf || !chart || !baseline) return
+    for (const s of linesRef.current) {
+      try {
+        chart.removeSeries(s)
+      } catch {
+        /* ya eliminada */
+      }
+    }
+    linesRef.current = []
+    if (perBot && perf.series) {
+      baseline.setData([])
+      perf.series.forEach((serie, i) => {
+        const s = chart.addSeries(LineSeries, {
+          color: botColor(serie.id, i),
+          lineWidth: 2,
+          priceLineVisible: false,
+          title: serie.name.replace('Bot ', ''),
+          priceFormat: { type: 'custom', formatter: (v: number) => fmtPnl(v) },
+        })
+        s.setData(
+          serie.points.map((p) => ({ time: p.ts as UTCTimestamp, value: p.cumPnl })),
+        )
+        linesRef.current.push(s)
+      })
+    } else {
+      baseline.setData(
+        perf.points.map((p) => ({ time: p.ts as UTCTimestamp, value: p.cumPnl })),
+      )
+    }
+    chart.timeScale().fitContent()
+  }, [perf, perBot])
 
   const s = perf?.summary
 
@@ -131,9 +178,12 @@ export default function BotPerformance() {
         <h3>📊 Rendimiento de los bots</h3>
         <div className="perf-filters">
           <select value={bot} onChange={(e) => setBot(e.target.value)}>
-            <option value="">Ambos bots</option>
-            <option value="scalper">{BOT_LABELS.scalper}</option>
-            <option value="swing">{BOT_LABELS.swing}</option>
+            <option value="">Todos los bots</option>
+            {(perf?.bots ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
           </select>
           <select value={symbol} onChange={(e) => setSymbol(e.target.value)}>
             <option value="">Todos los mercados</option>
@@ -143,6 +193,13 @@ export default function BotPerformance() {
               </option>
             ))}
           </select>
+          <button
+            className={`chart-toggle ${perBot ? 'active' : ''}`}
+            title="Dibuja una curva de PnL independiente por bot en lugar de la suma total"
+            onClick={() => setPerBot((v) => !v)}
+          >
+            Línea por bot
+          </button>
           <nav className="perf-presets">
             {PRESETS.map((p) => (
               <button
@@ -203,13 +260,33 @@ export default function BotPerformance() {
         </div>
       )}
 
+      {perBot && perf?.series && perf.series.length > 0 && (
+        <div className="perf-legend">
+          {perf.series.map((serie, i) => (
+            <span key={serie.id} className="perf-legend-item" title={
+              `${serie.summary.trades} operaciones · acierto ${serie.summary.winRate ?? '—'}%`
+            }>
+              <span
+                className="perf-legend-dot"
+                style={{ background: botColor(serie.id, i) }}
+              />
+              {serie.name.replace('Bot ', '')}{' '}
+              <strong className={serie.summary.pnl >= 0 ? 'up' : 'down'}>
+                {fmtPnl(serie.summary.pnl)}
+              </strong>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="perf-chart" ref={containerRef}>
-        {perf && perf.points.length === 0 && (
-          <p className="muted small perf-empty">
-            Sin operaciones cerradas con estos filtros. La curva se dibuja a medida
-            que los bots cierran operaciones.
-          </p>
-        )}
+        {perf &&
+          (perBot ? (perf.series ?? []).length === 0 : perf.points.length === 0) && (
+            <p className="muted small perf-empty">
+              Sin operaciones cerradas con estos filtros. La curva se dibuja a medida
+              que los bots cierran operaciones.
+            </p>
+          )}
       </div>
       <p className="muted small">
         PnL acumulado de operaciones cerradas (un punto por operación) · se

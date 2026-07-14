@@ -26,26 +26,53 @@ from . import market_data
 from .config import SYMBOLS_BY_ID, Symbol
 from .history import DB_PATH
 from .indicators import atr_series
-from .strategy import resample, score_series
+from .strategy import TREND_STEP, resample, score_series
 
 log = logging.getLogger("training")
 
-# (fuente, símbolo) usados SOLO para entrenar, cuando la fuente en vivo
-# no tiene histórico suficiente en ese marco temporal.
-TRAIN_PROXY: dict[tuple[str, str], tuple[str, str]] = {
-    ("scalper", "XAUUSD"): ("binance", "PAXGUSDT"),  # 1m profundo, oro 24/7
-    ("swing", "XAUUSD"): ("yahoo", "GC=F"),
-}
-
 # Rejilla de parámetros de ejecución (los periodos de los indicadores se
 # fijan: cada parámetro libre extra multiplica el riesgo de sobreajuste).
-GRID_THRESHOLD = (0.30, 0.375, 0.45, 0.55, 0.65)
-GRID_SL = (1.0, 1.5, 2.0, 2.5)
-GRID_TP = (1.5, 2.25, 3.0, 4.0)
-GRID_TRAIL = (0.8, 1.2, 1.6)
+# Incluye umbrales bajos (0.20/0.25): si la validación los sostiene, el bot
+# opera más a menudo; si no, el walk-forward los descarta solo.
+GRID_THRESHOLD = (0.20, 0.25, 0.30, 0.375, 0.45, 0.55, 0.65, 0.75)
+GRID_SL = (1.0, 1.5, 2.0, 2.5, 3.0)
+GRID_TP = (1.5, 2.25, 3.0, 4.0, 6.0)
+GRID_TRAIL = (0.8, 1.2, 1.6, 2.4)
 
 TRAIN_SPLIT = 0.7
-MIN_TRAIN_TRADES = {"scalper": 20, "swing": 8}
+# Embargo entre entrenamiento y validación: se descartan velas pegadas al
+# corte para que ninguna posición/indicador del tramo de entrenamiento
+# contamine la validación (purged walk-forward, práctica estándar actual)
+EMBARGO_BARS = 30
+MIN_TRAIN_TRADES = {
+    "scalper": 20, "swing": 8, "trend": 6, "meanrev": 8, "orb": 10, "squeeze": 8,
+}
+MIN_VALIDATION_TRADES = 3
+
+# Segundos por vela de cada intervalo de trabajo
+WORK_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
+
+# Histórico descargable por fuente e intervalo
+BINANCE_DAYS = {"1m": 21, "5m": 60, "15m": 90, "1h": 365, "1d": 730}
+YAHOO_RANGE = {
+    "1m": ("1m", "7d"), "5m": ("5m", "60d"), "15m": ("15m", "60d"),
+    "1h": ("60m", "1y"), "1d": ("1d", "5y"),
+}
+
+
+def train_source(sym: Symbol, interval: str) -> tuple[str, str]:
+    """(fuente, símbolo) para el histórico de entrenamiento.
+
+    El oro spot no tiene histórico gratuito: intradía se entrena con
+    PAXGUSDT de Binance (oro tokenizado 24/7, velas profundas) y en marcos
+    de horas con los futuros GC=F de Yahoo."""
+    if sym.id == "XAUUSD":
+        if interval in ("1m", "5m", "15m"):
+            return "binance", "PAXGUSDT"
+        return "yahoo", "GC=F"
+    if sym.source == "swissquote":
+        return "yahoo", market_data.SWISSQUOTE_CANDLE_PROXY[sym.source_symbol]
+    return sym.source, sym.source_symbol
 
 
 def _conn() -> sqlite3.Connection:
@@ -87,6 +114,15 @@ def load_results() -> list[dict]:
     ]
 
 
+def last_trained_at(bot_id: str) -> int | None:
+    """Momento del último entrenamiento del bot (None si nunca se entrenó)."""
+    with _conn() as con:
+        row = con.execute(
+            "SELECT MAX(trained_at) FROM bot_params WHERE bot = ?", (bot_id,)
+        ).fetchone()
+    return row[0] if row and row[0] else None
+
+
 # ---------------------------------------------------------------------------
 # Histórico
 # ---------------------------------------------------------------------------
@@ -119,19 +155,16 @@ async def _binance_history(source_symbol: str, interval: str, days: int) -> list
 
 
 async def _yahoo_history(source_symbol: str, interval: str) -> list[dict]:
-    y_int, y_range = {"1m": ("1m", "7d"), "1h": ("60m", "1y")}[interval]
+    y_int, y_range = YAHOO_RANGE[interval]
     return await market_data._yahoo_candles(source_symbol, y_int, y_range, 100_000)
 
 
 async def fetch_history(bot_id: str, sym: Symbol, interval: str) -> list[dict]:
-    source, source_symbol = TRAIN_PROXY.get(
-        (bot_id, sym.id), (sym.source, sym.source_symbol)
-    )
-    if source == "swissquote":  # sin histórico propio: velas del futuro proxy
-        source, source_symbol = "yahoo", market_data.SWISSQUOTE_CANDLE_PROXY[sym.source_symbol]
+    source, source_symbol = train_source(sym, interval)
     if source == "binance":
-        days = 21 if interval == "1m" else 365
-        return await _binance_history(source_symbol, interval, days)
+        return await _binance_history(
+            source_symbol, interval, BINANCE_DAYS.get(interval, 365)
+        )
     return await _yahoo_history(source_symbol, interval)
 
 
@@ -152,13 +185,16 @@ def simulate(
     max_hold_bars: int,
     cooldown_bars: int,
     risk_amount: float,
-    max_margin: float,
-    leverage: float,
+    notional_cap: float,
     start: int,
     end: int,
 ) -> dict:
     """Backtest de una configuración sobre candles[start:end]. Sin capitalizar
-    (tamaño fijo por operación) para que las métricas sean comparables."""
+    (tamaño fijo por operación) para que las métricas sean comparables.
+
+    Replica la mecánica del bot en vivo, incluidas las salidas por señal
+    contraria: entrenar un sistema sin ese cierre y operarlo con él haría
+    que lo validado no fuese lo operado."""
     pnl = 0.0
     wins = losses = 0
     gross_win = gross_loss = 0.0
@@ -178,14 +214,16 @@ def simulate(
         if p >= 0:
             wins += 1
             gross_win += p
+            # tras ganar, cooldown corto (mismo criterio que el bot en vivo)
+            cooldown = max(1, cooldown_bars // 4)
         else:
             losses += 1
             gross_loss -= p
+            cooldown = cooldown_bars
         equity += p
         equity_peak = max(equity_peak, equity)
         max_dd = max(max_dd, equity_peak - equity)
         direction = 0
-        cooldown = cooldown_bars
 
     for i in range(max(start, 1), end):
         c = candles[i]
@@ -202,7 +240,9 @@ def simulate(
                     continue
                 best = max(best, c["high"])
                 if best >= entry + sl_atr * atr0:   # breakeven + trailing
-                    sl = max(sl, entry + 2 * half, best - trail_atr * atr0)
+                    # el trailing se estrecha tras 2R (protege la ganancia)
+                    tr = trail_atr * (0.75 if best >= entry + 2 * sl_atr * atr0 else 1.0)
+                    sl = max(sl, entry + 2 * half, best - tr * atr0)
             else:
                 if c["high"] >= sl:
                     close(sl + half)
@@ -212,8 +252,13 @@ def simulate(
                     continue
                 best = min(best, c["low"])
                 if best <= entry - sl_atr * atr0:
-                    sl = min(sl, entry - 2 * half, best + trail_atr * atr0)
-            if bars_held >= max_hold_bars:
+                    tr = trail_atr * (0.75 if best <= entry - 2 * sl_atr * atr0 else 1.0)
+                    sl = min(sl, entry - 2 * half, best + tr * atr0)
+            # señal claramente contraria (histéresis 0.75×umbral, como en vivo)
+            if direction and scores[i] * direction <= -0.75 * threshold:
+                close(c["close"] - half if direction > 0 else c["close"] + half)
+                continue
+            if direction and bars_held >= max_hold_bars:
                 close(c["close"] - half if direction > 0 else c["close"] + half)
             continue
 
@@ -223,8 +268,9 @@ def simulate(
         s, a = scores[i], atrs[i]
         if a is None or a <= 0 or abs(s) < threshold:
             continue
-        # solo en el CRUCE del umbral (inicio de la señal, no a mitad del movimiento)
-        if abs(scores[i - 1]) >= threshold:
+        # solo con señal FRESCA: el cruce del umbral ocurrió en las últimas
+        # 3 velas (la misma ventana anti-madurez que aplica el bot en vivo)
+        if all(abs(scores[j]) >= threshold for j in range(max(1, i - 3), i)):
             continue
         # filtro de coste: sin volatilidad suficiente el spread se come el beneficio
         if a < 3 * c["close"] * spread_pct:
@@ -234,7 +280,7 @@ def simulate(
         atr0 = a
         sl = entry - direction * sl_atr * a
         tp = entry + direction * tp_atr * a
-        qty = min(risk_amount / (sl_atr * a), max_margin * leverage / entry)
+        qty = min(risk_amount / (sl_atr * a), notional_cap / entry)
         best = entry
         bars_held = 0
 
@@ -263,27 +309,31 @@ def optimize(
     max_hold_bars: int,
     cooldown_bars: int,
     risk_amount: float,
-    max_margin: float,
-    leverage: float,
+    notional_cap: float,
 ) -> dict:
     split = int(len(candles) * TRAIN_SPLIT)
-    min_trades = MIN_TRAIN_TRADES[bot_id]
+    min_trades = MIN_TRAIN_TRADES.get(bot_id, 8)
 
     best_cfg: tuple | None = None
     best_score = float("-inf")
     best_train: dict | None = None
     for th, sl, tp, tr in product(GRID_THRESHOLD, GRID_SL, GRID_TP, GRID_TRAIL):
-        if tp < sl:  # exigir recompensa >= riesgo inicial
+        # recompensa >= riesgo inicial, salvo en reversión a la media (su perfil
+        # clásico es ganancia corta y frecuente con stop amplio)
+        if tp < sl and bot_id != "meanrev":
             continue
         m = simulate(
             candles, scores, atrs, spread_pct, th, sl, tp, tr,
-            max_hold_bars, cooldown_bars, risk_amount, max_margin, leverage,
+            max_hold_bars, cooldown_bars, risk_amount, notional_cap,
             0, split,
         )
         if m["trades"] < min_trades:
             continue
         pf = m["profitFactor"] or 0.0
-        score = m["pnl"] * min(pf, 3.0)  # rentabilidad ponderada por consistencia
+        # rentabilidad ponderada por consistencia y penalizada por drawdown:
+        # entre dos configuraciones con el mismo PnL gana la de curva más suave
+        dd_penalty = 1.0 / (1.0 + m["maxDrawdown"] / max(risk_amount * 20, 1e-9))
+        score = m["pnl"] * min(pf, 3.0) * dd_penalty
         if m["pnl"] > 0 and score > best_score:
             best_score, best_cfg, best_train = score, (th, sl, tp, tr), m
 
@@ -293,15 +343,15 @@ def optimize(
     th, sl, tp, tr = best_cfg
     val = simulate(
         candles, scores, atrs, spread_pct, th, sl, tp, tr,
-        max_hold_bars, cooldown_bars, risk_amount, max_margin, leverage,
-        split, len(candles),
+        max_hold_bars, cooldown_bars, risk_amount, notional_cap,
+        min(split + EMBARGO_BARS, len(candles)), len(candles),
     )
     return {
         "ok": True,
         "params": {"entryThreshold": th, "slAtr": sl, "tpAtr": tp, "trailAtr": tr},
         "train": best_train,
         "validation": val,
-        "applied": val["pnl"] > 0 and val["trades"] > 0,
+        "applied": val["pnl"] > 0 and val["trades"] >= MIN_VALIDATION_TRADES,
         "bars": len(candles),
     }
 
@@ -324,10 +374,10 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
     c_work = await fetch_history(cfg.id, sym, cfg.work_interval)
     if len(c_work) < 500:
         return {"symbol": sym.id, "ok": False, "reason": f"histórico insuficiente ({len(c_work)} velas)"}
-    trend_step = 300 if cfg.id == "scalper" else 86400
+    trend_step = TREND_STEP.get(cfg.id, 86400)
     c_trend = resample(c_work, trend_step)
 
-    work_seconds = 60 if cfg.work_interval == "1m" else 3600
+    work_seconds = WORK_SECONDS.get(cfg.work_interval, 3600)
     max_hold_bars = max(1, cfg.max_hold_seconds // work_seconds)
     cooldown_bars = max(1, cfg.cooldown_seconds // work_seconds)
     spread = bot.spread_pct(sym)
@@ -338,7 +388,7 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
         return optimize(
             cfg.id, c_work, scores, atrs, spread, max_hold_bars, cooldown_bars,
             risk_amount=cfg.initial_balance * cfg.risk_pct,
-            max_margin=cfg.max_margin, leverage=cfg.max_leverage,
+            notional_cap=cfg.initial_balance * cfg.max_leverage,
         )
 
     result = await asyncio.to_thread(_run)
@@ -376,6 +426,12 @@ async def _train_bot(bot, symbols: list[str]) -> None:
         bot.reload_params()
     finally:
         status.update(running=False, current=None, finishedAt=int(time.time()))
+        # el entrenamiento cambia la ventaja validada -> refrescar la política
+        try:
+            from . import learning
+            learning.refresh(bot.cfg.id)
+        except Exception as exc:
+            log.debug("no se pudo refrescar el aprendizaje de %s: %s", bot.cfg.id, exc)
 
 
 def start_training(bot, symbols: list[str] | None = None) -> dict:

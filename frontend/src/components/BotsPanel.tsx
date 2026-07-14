@@ -8,7 +8,8 @@ import {
 } from '../api'
 import { formatPrice } from './Watchlist'
 import BotPerformance from './BotPerformance'
-import type { BotStatus, BotTrade, TrainingStatus } from '../types'
+import TradeDetailModal from './TradeDetailModal'
+import type { BotLearning, BotStatus, BotTrade, TrainingStatus } from '../types'
 
 const REFRESH_MS = 5_000
 
@@ -28,7 +29,13 @@ const fmtTime = (ts: number) =>
     minute: '2-digit',
   })
 
-function PositionsTable({ bot }: { bot: BotStatus }) {
+function PositionsTable({
+  bot,
+  onSelect,
+}: {
+  bot: BotStatus
+  onSelect: (tradeId: number) => void
+}) {
   if (bot.openPositions.length === 0)
     return <p className="muted small">Sin posiciones abiertas ahora mismo.</p>
   return (
@@ -48,7 +55,12 @@ function PositionsTable({ bot }: { bot: BotStatus }) {
         </thead>
         <tbody>
           {bot.openPositions.map((p) => (
-            <tr key={p.id} title={p.reasons.join('\n')}>
+            <tr
+              key={p.id}
+              className="clickable"
+              title="Click para ver las confirmaciones y el gráfico de la entrada"
+              onClick={() => onSelect(p.id)}
+            >
               <td>{p.symbol}</td>
               <td>
                 <span className={`dir-badge ${p.direction}`}>
@@ -71,7 +83,13 @@ function PositionsTable({ bot }: { bot: BotStatus }) {
   )
 }
 
-function TradesTable({ trades }: { trades: BotTrade[] }) {
+function TradesTable({
+  trades,
+  onSelect,
+}: {
+  trades: BotTrade[]
+  onSelect: (tradeId: number) => void
+}) {
   if (trades.length === 0)
     return <p className="muted small">Todavía no hay operaciones cerradas.</p>
   return (
@@ -89,7 +107,12 @@ function TradesTable({ trades }: { trades: BotTrade[] }) {
         </thead>
         <tbody>
           {trades.map((t) => (
-            <tr key={t.id} title={t.reasons.join('\n')}>
+            <tr
+              key={t.id}
+              className="clickable"
+              title="Click para ver las confirmaciones y el gráfico de la entrada"
+              onClick={() => onSelect(t.id)}
+            >
               <td>{fmtTime(t.exitTime)}</td>
               <td>{t.symbol}</td>
               <td>
@@ -106,6 +129,65 @@ function TradesTable({ trades }: { trades: BotTrade[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function LearningInfo({ learning }: { learning: BotLearning }) {
+  const edges = Object.entries(learning.edges)
+  const validated = edges.filter(([, e]) => e === 'validated').map(([s]) => s)
+  const rejected = edges.filter(([, e]) => e === 'rejected').map(([s]) => s)
+  const boosted = Object.entries(learning.sizeMult).filter(([, m]) => m > 1)
+  const hasContent =
+    learning.blocks.length > 0 || validated.length > 0 || rejected.length > 0
+  if (!hasContent) return null
+  return (
+    <div className="learning-info">
+      <p className="muted small">
+        🧠 Aprendizaje ·{' '}
+        {validated.length > 0 && (
+          <span title={validated.join(', ')}>
+            {validated.length} con ventaja validada
+          </span>
+        )}
+        {rejected.length > 0 && (
+          <>
+            {validated.length > 0 && ' · '}
+            <span
+              className="down"
+              title={`${rejected.join(', ')}: sin ventaja en el último walk-forward; no se operan hasta revalidar`}
+            >
+              {rejected.length} sin ventaja (no se operan)
+            </span>
+          </>
+        )}
+        {boosted.length > 0 && (
+          <span>
+            {' · tamaño ↑ en '}
+            {boosted.map(([s, m]) => `${s} ×${m}`).join(', ')}
+          </span>
+        )}
+        {learning.nextRetrainAt && (
+          <span className="muted">
+            {' · próximo reentreno '}
+            {new Date(learning.nextRetrainAt * 1000).toLocaleTimeString('es-ES', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+        )}
+      </p>
+      {learning.blocks.length > 0 && (
+        <ul className="training-list">
+          {learning.blocks.map((b) => (
+            <li key={`${b.symbol}-${b.direction ?? 'all'}`} className="small down">
+              ⛔ {b.symbol}
+              {b.direction ? (b.direction === 'long' ? ' largos' : ' cortos') : ''}{' '}
+              <span className="muted">— {b.reason}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
@@ -161,6 +243,7 @@ function BotCard({
   const [showHistory, setShowHistory] = useState(false)
   const [busy, setBusy] = useState(false)
   const [training, setTraining] = useState<TrainingStatus | null>(null)
+  const [detailTrade, setDetailTrade] = useState<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -272,8 +355,22 @@ function BotCard({
         </div>
       </div>
 
-      <PositionsTable bot={bot} />
+      {bot.risk && (
+        <p className={`small risk-line ${bot.risk.entriesPaused ? 'down' : 'muted'}`}>
+          🛡️ PnL hoy: <span className={bot.risk.dailyPnl >= 0 ? 'up' : 'down'}>
+            {fmtPnl(bot.risk.dailyPnl)}
+          </span>{' '}
+          (límite diario -{fmtMoney(bot.risk.dailyLossLimit)})
+          {bot.risk.entriesPaused &&
+            ' · ⛔ entradas pausadas hasta mañana por límite de pérdidas'}
+          {!bot.risk.entriesPaused && bot.risk.riskScale < 1 &&
+            ` · ⚠️ tamaño al ${bot.risk.riskScale * 100}% tras ${bot.risk.consecLosses} pérdidas seguidas`}
+        </p>
+      )}
 
+      <PositionsTable bot={bot} onSelect={setDetailTrade} />
+
+      {bot.learning && <LearningInfo learning={bot.learning} />}
       {training && <TrainingInfo training={training} />}
 
       <div className="bot-foot">
@@ -281,14 +378,22 @@ function BotCard({
           {showHistory ? 'Ocultar historial ▲' : `Ver historial (${stats.closedTrades}) ▼`}
         </button>
         <small className="muted">
-          Velas {config.workInterval} · máx. {config.maxEquity ?? config.maxMargin}€/op · SL{' '}
-          {config.slAtr}×ATR · TP {config.tpAtr}×ATR · trailing {config.trailAtr}×ATR ·{' '}
+          Velas {config.workInterval} · riesgo {config.riskPct}%/op (sin tope de
+          margen) · apalancamiento ×{config.maxLeverage} · SL {config.slAtr}×ATR ·
+          TP {config.tpAtr}×ATR · trailing {config.trailAtr}×ATR ·{' '}
           {config.sentimentWeight}% opinión pública
           {bot.trainedSymbols.length > 0 &&
             ` · entrenado: ${bot.trainedSymbols.join(', ')}`}
         </small>
       </div>
-      {showHistory && <TradesTable trades={trades ?? []} />}
+      {showHistory && <TradesTable trades={trades ?? []} onSelect={setDetailTrade} />}
+      {detailTrade != null && (
+        <TradeDetailModal
+          botId={bot.id}
+          tradeId={detailTrade}
+          onClose={() => setDetailTrade(null)}
+        />
+      )}
     </div>
   )
 }

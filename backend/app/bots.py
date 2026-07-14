@@ -30,12 +30,15 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from . import learning
 from . import market_data
 from . import sentiment as sentiment_mod
+from . import systems
 from .config import SYMBOLS_BY_ID, Symbol
 from .history import DB_PATH
 from .indicators import atr
-from .strategy import last_bar_reasons, score_series
+from .strategy import confirmations as strategy_confirmations
+from .strategy import extension_atr, score_series
 
 log = logging.getLogger("bots")
 
@@ -58,6 +61,10 @@ SPREAD_PCT = {
 # Solapamiento Londres-Nueva York (UTC): la franja más líquida del oro
 GOLD_SESSION_UTC = range(12, 17)
 
+# Velas de trabajo que se congelan con cada operación para poder redibujar
+# después el gráfico tal y como lo vio el bot al entrar
+SNAPSHOT_BARS = 150
+
 
 @dataclass(frozen=True)
 class BotConfig:
@@ -77,21 +84,24 @@ class BotConfig:
     tp_atr: float                # distancia del take-profit en múltiplos de ATR
     trail_atr: float             # trailing stop en múltiplos de ATR (tras 1R)
     risk_pct: float              # fracción del balance arriesgada por operación
-    max_margin: float            # margen máximo comprometido por operación
-    max_equity: float            # equity máxima (nocional) por operación
-    max_leverage: float          # tope de nocional / margen
+    max_leverage: float          # único límite físico: nocional <= margen × esto
     max_positions: int
     max_hold_seconds: int        # cierre forzoso por tiempo
     cooldown_seconds: int        # espera tras cerrar antes de reentrar al símbolo
     focus_threshold_mult: float  # descuento de umbral para el símbolo foco
     initial_balance: float = 10_000.0
+    # --- medidas de seguridad (estándar prop-firm) ---
+    max_daily_loss_pct: float = 0.05  # pérdida diaria máxima antes de pausar entradas
+    max_same_category: int = 2        # posiciones simultáneas misma categoría+dirección
+    overext_atr: float = 2.0          # no entrar si el precio está a más de esto de la EMA20
 
 
 SCALPER = BotConfig(
     id="scalper",
     name="Bot Scalper",
     horizon="corto plazo (minutos)",
-    universe=("XAUUSD", "PAXG", "BTC", "ETH", "SOL", "EURUSD", "GBPUSD", "USDJPY"),
+    universe=("XAUUSD", "PAXG", "BTC", "ETH", "SOL", "XRP", "DOGE",
+              "EURUSD", "GBPUSD", "USDJPY"),
     work_interval="1m",
     trend_interval="5m",
     scan_seconds=15,
@@ -104,13 +114,12 @@ SCALPER = BotConfig(
     tp_atr=2.25,
     trail_atr=1.2,
     risk_pct=0.01,
-    max_margin=100.0,
-    max_equity=100.0,
     max_leverage=20.0,
     max_positions=5,
     max_hold_seconds=45 * 60,
     cooldown_seconds=60,
     focus_threshold_mult=0.85,
+    max_daily_loss_pct=0.05,
 )
 
 SWING = BotConfig(
@@ -134,14 +143,135 @@ SWING = BotConfig(
     tp_atr=4.0,
     trail_atr=1.5,
     risk_pct=0.02,
-    max_margin=100.0,
-    max_equity=100.0,
     max_leverage=5.0,
     max_positions=8,
     max_hold_seconds=5 * 86400,
     cooldown_seconds=10 * 60,
     focus_threshold_mult=0.85,
+    max_daily_loss_pct=0.08,
+    max_same_category=3,
+    overext_atr=2.5,
 )
+
+TREND = BotConfig(
+    id="trend",
+    name="Bot Tendencia (Turtle)",
+    horizon="seguimiento de tendencia (días/semanas)",
+    universe=(
+        "XAUUSD", "PAXG", "BTC", "ETH", "SOL", "XRP", "DOGE", "CL",
+        "NVDA", "TSLA", "SPY", "QQQ", "EURUSD", "USDJPY",
+    ),
+    work_interval="1h",
+    trend_interval="1d",
+    scan_seconds=60,
+    tick_seconds=20,
+    weight_tech=0.9,
+    weight_senti=0.1,
+    entry_threshold=0.35,
+    atr_period=14,
+    sl_atr=2.0,          # stop 2N clásico de las Turtle
+    tp_atr=8.0,          # el objetivo lejos: la salida real es el trailing
+    trail_atr=2.4,
+    risk_pct=0.02,
+    max_leverage=5.0,
+    max_positions=6,
+    max_hold_seconds=10 * 86400,
+    cooldown_seconds=30 * 60,
+    focus_threshold_mult=1.0,
+    max_daily_loss_pct=0.08,
+    max_same_category=3,
+    overext_atr=3.5,     # las rupturas nacen estiradas: veto solo lo extremo
+)
+
+MEANREV = BotConfig(
+    id="meanrev",
+    name="Bot Reversión (RSI2)",
+    horizon="reversión a la media (horas/días)",
+    universe=(
+        "SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMZN",
+        "META", "GOOGL", "TSLA", "BTC", "ETH", "SOL",
+    ),
+    work_interval="1h",
+    trend_interval="1d",
+    scan_seconds=60,
+    tick_seconds=20,
+    weight_tech=0.85,
+    weight_senti=0.15,
+    entry_threshold=0.40,
+    atr_period=14,
+    sl_atr=2.5,          # stop amplio: la reversión necesita aire
+    tp_atr=1.5,          # ganancia corta y frecuente (perfil Connors)
+    trail_atr=1.6,
+    risk_pct=0.015,
+    max_leverage=5.0,
+    max_positions=6,
+    max_hold_seconds=3 * 86400,
+    cooldown_seconds=30 * 60,
+    focus_threshold_mult=1.0,
+    max_daily_loss_pct=0.06,
+    max_same_category=3,
+)
+
+ORB = BotConfig(
+    id="orb",
+    name="Bot Apertura (ORB)",
+    horizon="intradía (ruptura de apertura)",
+    universe=(
+        "SPY", "QQQ", "NVDA", "TSLA", "AAPL", "META",
+        "AMZN", "MSFT", "ES", "NQ",
+    ),
+    work_interval="5m",
+    trend_interval="15m",
+    scan_seconds=20,
+    tick_seconds=5,
+    weight_tech=1.0,
+    weight_senti=0.0,
+    entry_threshold=0.45,
+    atr_period=14,
+    sl_atr=1.0,          # stop pegado: el rango de apertura es la estructura
+    tp_atr=3.0,
+    trail_atr=1.2,
+    risk_pct=0.01,
+    max_leverage=10.0,
+    max_positions=4,
+    max_hold_seconds=5 * 3600,   # nunca de un día para otro
+    cooldown_seconds=15 * 60,
+    focus_threshold_mult=1.0,
+    max_daily_loss_pct=0.05,
+    max_same_category=3,
+    overext_atr=3.0,
+)
+
+SQUEEZE = BotConfig(
+    id="squeeze",
+    name="Bot Volatilidad (Squeeze)",
+    horizon="expansiones de volatilidad (horas)",
+    universe=(
+        "PAXG", "XAUUSD", "BTC", "ETH", "SOL", "XRP", "DOGE",
+        "EURUSD", "GBPUSD", "USDJPY",
+    ),
+    work_interval="15m",
+    trend_interval="1h",
+    scan_seconds=60,
+    tick_seconds=10,
+    weight_tech=0.9,
+    weight_senti=0.1,
+    entry_threshold=0.35,
+    atr_period=14,
+    sl_atr=1.5,
+    tp_atr=4.0,          # la expansión post-squeeze suele recorrer mucho
+    trail_atr=1.2,
+    risk_pct=0.015,
+    max_leverage=10.0,
+    max_positions=5,
+    max_hold_seconds=2 * 86400,
+    cooldown_seconds=20 * 60,
+    focus_threshold_mult=1.0,
+    max_daily_loss_pct=0.06,
+    overext_atr=3.0,
+)
+
+ALL_BOTS = (SCALPER, SWING, TREND, MEANREV, ORB, SQUEEZE)
 
 # ---------------------------------------------------------------------------
 # Persistencia (mismo data.db que el histórico de sentimiento)
@@ -171,7 +301,8 @@ def _conn() -> sqlite3.Connection:
             best_price REAL
         )"""
     )
-    for col in ("atr_entry REAL", "best_price REAL"):  # migración de la v1
+    # migraciones: v1 -> atr_entry/best_price, v2 -> snapshot (velas + análisis)
+    for col in ("atr_entry REAL", "best_price REAL", "snapshot TEXT"):
         try:
             con.execute(f"ALTER TABLE bot_trades ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -260,9 +391,70 @@ class TradingBot:
         self.trained_params: dict[str, dict] = {}   # símbolo -> params validados
         self._task: asyncio.Task | None = None
         self._last_scan = 0.0
+        # estado de riesgo del día (circuit breaker y rachas de pérdidas)
+        self.day_utc = int(time.time() // 86400)
+        self.day_start_balance = self.balance
+        self.consec_losses = 0                      # pérdidas seguidas hoy (global)
+        self.loss_streak: dict[str, int] = {}       # pérdidas seguidas por símbolo
 
     def spread_pct(self, sym: Symbol) -> float:
         return SPREAD_PCT.get(sym.category, 0.0003)
+
+    # -------------------- medidas de seguridad --------------------
+
+    def _load_risk_state(self) -> None:
+        """Reconstruye el estado de riesgo del día UTC desde la BD (sobrevive
+        a reinicios): PnL del día, pérdidas consecutivas y rachas por símbolo."""
+        day0 = int(time.time() // 86400) * 86400
+        with _conn() as con:
+            rows = con.execute(
+                """SELECT symbol, pnl FROM bot_trades
+                   WHERE bot = ? AND status = 'closed' AND exit_time >= ?
+                   ORDER BY exit_time""",
+                (self.cfg.id, day0),
+            ).fetchall()
+        self.day_utc = int(time.time() // 86400)
+        self.day_start_balance = self.balance - sum(r[1] for r in rows)
+        self.consec_losses = 0
+        self.loss_streak = {}
+        for sym, pnl in rows:
+            if pnl < 0:
+                self.consec_losses += 1
+                self.loss_streak[sym] = self.loss_streak.get(sym, 0) + 1
+            else:
+                self.consec_losses = 0
+                self.loss_streak[sym] = 0
+
+    def _roll_day(self) -> None:
+        """Al cambiar el día UTC se rearma el circuit breaker y las rachas."""
+        today = int(time.time() // 86400)
+        if today != self.day_utc:
+            self.day_utc = today
+            self.day_start_balance = self.balance
+            self.consec_losses = 0
+            self.loss_streak.clear()
+
+    def daily_pnl(self) -> float:
+        return self.balance - self.day_start_balance
+
+    def entries_paused(self) -> bool:
+        """Circuit breaker diario: con la pérdida máxima del día alcanzada no
+        se abren más posiciones hasta el día siguiente (las abiertas se siguen
+        gestionando con normalidad)."""
+        return self.daily_pnl() <= -self.cfg.max_daily_loss_pct * self.day_start_balance
+
+    def risk_scale(self) -> float:
+        """Tamaño a la mitad tras 2 pérdidas seguidas (regla de las dos pérdidas)."""
+        return 0.5 if self.consec_losses >= 2 else 1.0
+
+    def _category_exposure(self, category: str, direction: str) -> int:
+        """Posiciones abiertas de la misma categoría y dirección: BTC+ETH+SOL
+        largos son en la práctica la misma apuesta, no tres."""
+        return sum(
+            1 for p in self.positions.values()
+            if p.direction == direction
+            and SYMBOLS_BY_ID[p.symbol].category == category
+        )
 
     def reload_params(self) -> None:
         """Carga los parámetros entrenados y validados (tabla bot_params)."""
@@ -323,6 +515,7 @@ class TradingBot:
             )
             self.positions[pos.symbol] = pos
         self.reload_params()
+        self._load_risk_state()
         if open_rows:
             log.info("%s: %d posiciones abiertas recuperadas", self.cfg.id, len(open_rows))
 
@@ -386,12 +579,17 @@ class TradingBot:
                     self._close(pos, pos.tp - half_spread, "take-profit")
                     continue
                 pos.best_price = max(pos.best_price, price)
-                # tras avanzar 1R: stop a breakeven y trailing por ATR
+                # tras avanzar 1R: stop a breakeven y trailing por ATR.
+                # Tras 2R el trailing se estrecha (×0.75) para blindar la
+                # ganancia acumulada sin cortar antes de tiempo el tramo bueno.
                 if pos.best_price >= pos.entry_price + pos.r_dist:
+                    trail = pos.trail_atr
+                    if pos.best_price >= pos.entry_price + 2 * pos.r_dist:
+                        trail *= 0.75
                     new_sl = max(
                         pos.sl,
                         pos.entry_price + 2 * half_spread,
-                        pos.best_price - pos.trail_atr * pos.atr_entry,
+                        pos.best_price - trail * pos.atr_entry,
                     )
                     if new_sl > pos.sl:
                         self._update_stop(pos, new_sl)
@@ -404,10 +602,13 @@ class TradingBot:
                     continue
                 pos.best_price = min(pos.best_price, price)
                 if pos.best_price <= pos.entry_price - pos.r_dist:
+                    trail = pos.trail_atr
+                    if pos.best_price <= pos.entry_price - 2 * pos.r_dist:
+                        trail *= 0.75
                     new_sl = min(
                         pos.sl,
                         pos.entry_price - 2 * half_spread,
-                        pos.best_price + pos.trail_atr * pos.atr_entry,
+                        pos.best_price + trail * pos.atr_entry,
                     )
                     if new_sl < pos.sl:
                         self._update_stop(pos, new_sl)
@@ -427,13 +628,22 @@ class TradingBot:
     # -------------------- búsqueda de entradas --------------------
 
     async def _scan(self) -> None:
+        self._roll_day()
+        paused = self.entries_paused()
         for symbol_id in self.cfg.universe:
             has_pos = symbol_id in self.positions
             if not has_pos and (
-                len(self.positions) >= self.cfg.max_positions
+                paused  # circuit breaker diario: solo se gestionan las abiertas
+                or len(self.positions) >= self.cfg.max_positions
                 or time.time() < self.cooldown_until.get(symbol_id, 0)
             ):
                 continue
+            if not has_pos:
+                # puerta de aprendizaje: símbolos sin ventaja validada o con
+                # veto por rendimiento en vivo no se evalúan siquiera
+                allowed, _why = learning.gate(self.cfg.id, symbol_id)
+                if not allowed:
+                    continue
             sym = SYMBOLS_BY_ID.get(symbol_id)
             if not sym:
                 continue
@@ -444,14 +654,17 @@ class TradingBot:
                 continue
             if signal is None:
                 continue
-            score, prev_score, reasons, atr_val, price, stale = signal
+            score = signal["score"]
+            atr_val, price = signal["atr"], signal["price"]
             threshold, sl_m, tp_m, trail_m = self._exec_params(sym)
 
             if has_pos:
-                # señal claramente contraria a la posición abierta -> cerrar
+                # señal claramente contraria a la posición abierta -> cerrar.
+                # Histéresis a 0.75×umbral: el 0.5 anterior generaba un churn
+                # de salidas prematuras (el mayor coste del scalper en vivo).
                 pos = self.positions[symbol_id]
-                against = (pos.direction == "long" and score <= -0.5 * threshold) or (
-                    pos.direction == "short" and score >= 0.5 * threshold
+                against = (pos.direction == "long" and score <= -0.75 * threshold) or (
+                    pos.direction == "short" and score >= 0.75 * threshold
                 )
                 if against:
                     half_spread = price * self.spread_pct(sym) / 2
@@ -461,18 +674,70 @@ class TradingBot:
 
             if abs(score) < threshold or atr_val <= 0:
                 continue
-            # filtro de coste: sin volatilidad suficiente el spread come el beneficio
-            if atr_val < 1.5 * price * self.spread_pct(sym):
+            # Anti-persecución temporal: si la señal lleva MUCHAS velas
+            # seguidas por encima del umbral, el movimiento ya está maduro
+            # y no merece la pena entrar.  Ventana de 10 velas: si todas
+            # superan el umbral, se descarta; si alguna estaba por debajo
+            # es que el cruce fue reciente y se permite la entrada.
+            prev_scores = signal.get("recent_prev", [signal["prev"]])
+            all_above = all(abs(p) >= threshold for p in prev_scores)
+            # También comprobamos la serie completa de las últimas 10 velas
+            full_series = signal.get("full_series")
+            if full_series and len(full_series) >= 10:
+                last10 = full_series[-10:]
+                all_above = all(abs(s) >= threshold for s in last10)
+            if all_above and len(prev_scores) >= 3:
+                continue
+            # sin vela fresca no se abre (mercado cerrado o feed caído)
+            if signal["stale"]:
+                continue
+            # filtro de coste: sin volatilidad suficiente el spread se come el
+            # beneficio.  El mismo filtro que aplica el backtest de training.py:
+            # lo entrenado tiene que ser exactamente lo operado.
+            if atr_val < 3 * price * self.spread_pct(sym):
+                continue
+            direction = "long" if score > 0 else "short"
+            # veto de aprendizaje por dirección (p. ej. "cortos de MSFT")
+            # y por franja horaria con expectativa negativa demostrada
+            hour_utc = datetime.now(timezone.utc).hour
+            allowed_dir, why_dir = learning.gate(
+                self.cfg.id, symbol_id, direction, hour=hour_utc
+            )
+            if not allowed_dir:
+                log.debug("%s: %s %s vetado: %s", self.cfg.id, symbol_id, direction, why_dir)
+                continue
+            # meta-modelo (meta-labeling): un clasificador online entrenado con
+            # las operaciones reales del bot estima la probabilidad de éxito de
+            # ESTA señal en ESTE contexto; filtra las de baja confianza y
+            # modula el tamaño de las demás
+            feats = learning.meta_features(
+                self.cfg.id, sym.category, direction, hour_utc,
+                signal["confirmations"],
+            )
+            meta_ok, p_win, meta_note = learning.meta_gate(self.cfg.id, feats)
+            if not meta_ok:
+                log.debug("%s: %s %s filtrado por meta-modelo (p=%.2f)",
+                          self.cfg.id, symbol_id, direction, p_win or 0.0)
+                continue
+            # anti-persecución: no comprar techos ni vender suelos estirados
+            ext = signal["extension"]
+            if ext is not None and (
+                (direction == "long" and ext > self.cfg.overext_atr)
+                or (direction == "short" and ext < -self.cfg.overext_atr)
+            ):
+                log.debug("%s: %s sobreextendido (%.1f ATR), no se persigue",
+                          self.cfg.id, symbol_id, ext)
+                continue
+            # exposición correlacionada: misma categoría y dirección = misma apuesta
+            if self._category_exposure(sym.category, direction) >= self.cfg.max_same_category:
                 continue
             self._open(
-                sym, "long" if score > 0 else "short",
-                price, atr_val, score, reasons, sl_m, tp_m, trail_m,
+                sym, direction, price, atr_val, score, signal, sl_m, tp_m, trail_m,
+                p_win=p_win, meta_note=meta_note,
             )
 
-    async def _evaluate(
-        self, sym: Symbol
-    ) -> tuple[float, float, list[str], float, float, bool] | None:
-        """(señal, señal de la vela anterior, motivos, ATR, precio, obsoleto)."""
+    async def _evaluate(self, sym: Symbol) -> dict | None:
+        """Señal combinada + confirmaciones estructuradas + velas de trabajo."""
         c_work, c_trend = await asyncio.gather(
             market_data.get_candles(sym, self.cfg.work_interval),
             market_data.get_candles(sym, self.cfg.trend_interval),
@@ -482,37 +747,74 @@ class TradingBot:
 
         series = score_series(self.cfg.id, c_work, c_trend)
         tech_score, tech_prev = series[-1], series[-2]
-        reasons = last_bar_reasons(self.cfg.id, c_work, c_trend)
+        # scores de las 3 velas previas para la ventana de cruce
+        tech_recent = series[-4:-1] if len(series) >= 4 else series[:-1]
+        # últimas 10 velas para el filtro de madurez
+        tech_last10 = series[-11:-1] if len(series) >= 11 else series[:-1]
+        confs = strategy_confirmations(self.cfg.id, c_work, c_trend)
 
         senti = sentiment_mod.peek_cached(sym.id)
         if senti is None or senti.get("sampleSize", 0) == 0:
             _kick_sentiment_refresh(sym)
             combined, prev = tech_score, tech_prev
-            reasons.append("Sin sentimiento fresco: solo técnico")
+            recent_prev = list(tech_recent)
+            full_series = list(tech_last10)
+            confs.append({
+                "system": "Opinión pública",
+                "detail": "Sin sentimiento fresco: solo técnico",
+                "vote": 0.0,
+            })
         else:
             senti_score = senti["bullishPct"] / 50 - 1  # [0,100] -> [-1,1]
             w_t, w_s = self.cfg.weight_tech, self.cfg.weight_senti
             combined = w_t * tech_score + w_s * senti_score
             prev = w_t * tech_prev + w_s * senti_score
-            reasons.append(
-                f"Opinión pública {senti['bullishPct']}% alcista (n={senti['sampleSize']})"
-            )
+            recent_prev = [w_t * s + w_s * senti_score for s in tech_recent]
+            full_series = [w_t * s + w_s * senti_score for s in tech_last10]
+            confs.append({
+                "system": "Opinión pública",
+                "detail": f"{senti['bullishPct']}% alcista (n={senti['sampleSize']})",
+                "vote": round(senti_score, 2),
+            })
         threshold = self._exec_params(sym)[0]
-        reasons.append(f"Señal combinada {combined:+.2f} (umbral ±{threshold:.2f})")
+        confs.append({
+            "system": "Señal combinada",
+            "detail": f"{combined:+.2f} (umbral ±{threshold:.2f})",
+            "vote": round(combined, 2),
+        })
+        reasons = [
+            f"{c['system']}: {c['detail']}" if c["vote"] == 0
+            else f"{c['system']}: {c['detail']} ({'+' if c['vote'] > 0 else ''}{c['vote']:g})"
+            for c in confs
+        ]
 
         # mercado cerrado / datos viejos: no abrir con la última vela rancia
         work_s = INTERVAL_SECONDS[self.cfg.work_interval]
         stale = time.time() - c_work[-1]["time"] > 3 * work_s + 60
 
         atr_val = atr(c_work, self.cfg.atr_period) or 0.0
-        return combined, prev, reasons, atr_val, c_work[-1]["close"], stale
+        return {
+            "score": combined,
+            "prev": prev,
+            "recent_prev": recent_prev,
+            "full_series": full_series,
+            "reasons": reasons,
+            "confirmations": confs,
+            "atr": atr_val,
+            "price": c_work[-1]["close"],
+            "stale": stale,
+            "candles": c_work,
+            "extension": extension_atr(c_work),
+        }
 
     # -------------------- ejecución simulada --------------------
 
     def _open(
         self, sym: Symbol, direction: str, price: float, atr_val: float,
-        score: float, reasons: list[str], sl_m: float, tp_m: float, trail_m: float,
+        score: float, signal: dict, sl_m: float, tp_m: float, trail_m: float,
+        p_win: float | None = None, meta_note: str | None = None,
     ) -> None:
+        reasons: list[str] = signal["reasons"]
         half_spread = price * self.spread_pct(sym) / 2
         entry = price + half_spread if direction == "long" else price - half_spread
         sl_dist = atr_val * sl_m
@@ -522,23 +824,59 @@ class TradingBot:
         else:
             sl, tp = entry + sl_dist, entry - tp_dist
 
-        # tamaño: riesgo objetivo, limitado por margen y equity máxima por operación
-        qty = (self.balance * self.cfg.risk_pct) / sl_dist
-        qty = min(qty, self.cfg.max_margin * self.cfg.max_leverage / entry)
-        # Tope de nocional: max_equity € por operación
-        qty = min(qty, self.cfg.max_equity / entry)
-        if qty * entry < 0.01:
-            return
+        # tamaño: riesgo objetivo como fracción del balance (capitaliza según
+        # crece la cuenta), a la mitad tras 2 pérdidas seguidas y modulado por
+        # el multiplicador aprendido del símbolo. Sin topes de presupuesto por
+        # operación: el único límite físico es el margen libre × apalancamiento.
+        scale = self.risk_scale()
+        if scale < 1.0:
+            reasons.append(
+                f"Riesgo reducido al {scale * 100:.0f}% tras {self.consec_losses} pérdidas seguidas hoy"
+            )
+        learn_mult, learn_note = learning.size_multiplier(self.cfg.id, sym.id)
+        if learn_note:
+            reasons.append(f"Aprendizaje: {learn_note}")
+        # tamaño por convicción del meta-modelo (Kelly fraccionado sobre la
+        # probabilidad estimada de éxito de la señal)
+        meta_mult = 1.0
+        if p_win is not None:
+            meta_mult = max(0.5, min(1.4, 0.5 + (p_win - 0.35) * 2.5))
+            reasons.append(
+                f"Meta-modelo: p(éxito)={p_win:.0%} → tamaño ×{meta_mult:.2f}"
+                + (f" ({meta_note})" if meta_note else "")
+            )
+        qty = (self.balance * self.cfg.risk_pct * scale * learn_mult * meta_mult) / sl_dist
+        used_margin = sum(
+            p.qty * p.entry_price for p in self.positions.values()
+        ) / self.cfg.max_leverage
+        free_margin = max(self.balance - used_margin, 0.0)
+        qty = min(qty, free_margin * self.cfg.max_leverage / entry)
+        if qty * entry < 1.0:
+            return  # sin margen libre suficiente
+
+        # instantánea del análisis: velas + trazados de los sistemas tal y como
+        # estaban al entrar, para poder redibujar el gráfico de la decisión
+        window = signal["candles"][-SNAPSHOT_BARS:]
+        snapshot = {
+            "interval": self.cfg.work_interval,
+            "score": round(score, 3),
+            "confirmations": signal["confirmations"],
+            "candles": window,
+            "overlays": systems.chart_overlays(
+                window, intraday=self.cfg.work_interval in ("1m", "5m", "15m")
+            ),
+        }
 
         now = int(time.time())
         with _conn() as con:
             cur = con.execute(
                 """INSERT INTO bot_trades
                    (bot, symbol, direction, qty, entry_price, entry_time,
-                    sl, tp, reasons, atr_entry, best_price)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    sl, tp, reasons, atr_entry, best_price, snapshot)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (self.cfg.id, sym.id, direction, qty, entry, now, sl, tp,
-                 json.dumps(reasons, ensure_ascii=False), atr_val, entry),
+                 json.dumps(reasons, ensure_ascii=False), atr_val, entry,
+                 json.dumps(snapshot, ensure_ascii=False)),
             )
             trade_id = cur.lastrowid
         pos = Position(
@@ -549,9 +887,9 @@ class TradingBot:
         )
         self.positions[sym.id] = pos
         log.info(
-            "%s ABRE %s %s qty=%.4f @ %.4f SL=%.4f TP=%.4f margen=%.0f (señal %+.2f)",
+            "%s ABRE %s %s qty=%.4f @ %.4f SL=%.4f TP=%.4f nocional=%.0f margen=%.0f (señal %+.2f)",
             self.cfg.id, direction.upper(), sym.id, qty, entry, sl, tp,
-            qty * entry / self.cfg.max_leverage, score,
+            qty * entry, qty * entry / self.cfg.max_leverage, score,
         )
 
     def _close(self, pos: Position, exit_price: float, reason: str) -> None:
@@ -566,8 +904,28 @@ class TradingBot:
                 (exit_price, now, reason, pnl, pos.id),
             )
         self.positions.pop(pos.symbol, None)
-        self.cooldown_until[pos.symbol] = time.time() + self.cfg.cooldown_seconds
+        # rachas de pérdidas: cooldown escalonado por símbolo (×2 por pérdida
+        # consecutiva, tope ×8) y contador global del día para reducir tamaño.
+        # Tras una GANANCIA el cooldown se reduce a 1/4: no hay motivo para
+        # castigar al bot cuando acierta (más operaciones donde funciona).
+        self._roll_day()
+        if pnl < 0:
+            self.consec_losses += 1
+            self.loss_streak[pos.symbol] = self.loss_streak.get(pos.symbol, 0) + 1
+            mult = min(8, 2 ** self.loss_streak.get(pos.symbol, 0))
+            cooldown = self.cfg.cooldown_seconds * mult
+        else:
+            self.consec_losses = 0
+            self.loss_streak[pos.symbol] = 0
+            cooldown = self.cfg.cooldown_seconds / 4
+        self.cooldown_until[pos.symbol] = time.time() + cooldown
         self._save_state()
+        # cada cierre alimenta el aprendizaje: vetos, tamaños adaptativos y
+        # el meta-modelo online (aprende del resultado de ESTA operación)
+        try:
+            learning.refresh(self.cfg.id)
+        except Exception as exc:
+            log.debug("%s: fallo al refrescar aprendizaje: %s", self.cfg.id, exc)
         log.info(
             "%s CIERRA %s %s @ %.4f (%s) PnL=%+.2f balance=%.2f",
             self.cfg.id, pos.direction.upper(), pos.symbol, exit_price,
@@ -587,9 +945,14 @@ class TradingBot:
         self.positions.clear()
         self.cooldown_until.clear()
         self.balance = self.cfg.initial_balance
+        self.day_start_balance = self.balance
+        self.consec_losses = 0
+        self.loss_streak.clear()
+        learning.reset(self.cfg.id)
         self._save_state()
 
     def status(self) -> dict:
+        self._roll_day()
         unrealized = sum(p.unrealized() for p in self.positions.values())
         with _conn() as con:
             n, wins, losses, realized = con.execute(
@@ -600,6 +963,10 @@ class TradingBot:
                    FROM bot_trades WHERE bot = ? AND status = 'closed'""",
                 (self.cfg.id,),
             ).fetchone()
+        try:
+            learn = learning.summary(self.cfg.id)
+        except Exception:
+            learn = None
         return {
             "id": self.cfg.id,
             "name": self.cfg.name,
@@ -616,15 +983,27 @@ class TradingBot:
                 "winRate": round(wins / n * 100, 1) if n else None,
                 "realizedPnl": round(realized, 2),
             },
+            "risk": {
+                "dailyPnl": round(self.daily_pnl(), 2),
+                "dailyLossLimit": round(
+                    self.cfg.max_daily_loss_pct * self.day_start_balance, 2
+                ),
+                "dailyLossLimitPct": self.cfg.max_daily_loss_pct * 100,
+                "entriesPaused": self.entries_paused(),
+                "consecLosses": self.consec_losses,
+                "riskScale": self.risk_scale(),
+                "maxSameCategory": self.cfg.max_same_category,
+                "overextAtr": self.cfg.overext_atr,
+            },
             "trainedSymbols": sorted(self.trained_params),
+            "learning": learn,
             "config": {
                 "universe": list(self.cfg.universe),
                 "workInterval": self.cfg.work_interval,
                 "trendInterval": self.cfg.trend_interval,
                 "scanSeconds": self.cfg.scan_seconds,
                 "riskPct": self.cfg.risk_pct * 100,
-                "maxMargin": self.cfg.max_margin,
-                "maxEquity": self.cfg.max_equity,
+                "maxLeverage": self.cfg.max_leverage,
                 "slAtr": self.cfg.sl_atr,
                 "tpAtr": self.cfg.tp_atr,
                 "trailAtr": self.cfg.trail_atr,
@@ -655,17 +1034,83 @@ class TradingBot:
         ]
 
 
+def trade_detail(bot_id: str, trade_id: int) -> dict | None:
+    """Operación completa (abierta o cerrada) con su snapshot de análisis:
+    confirmaciones estructuradas, velas del momento de entrada y trazados
+    (S/R, tendencias, Fibonacci, medias, Bollinger) para redibujar el gráfico."""
+    with _conn() as con:
+        r = con.execute(
+            """SELECT id, symbol, direction, qty, entry_price, entry_time,
+                      sl, tp, exit_price, exit_time, exit_reason, pnl, status,
+                      reasons, snapshot
+               FROM bot_trades WHERE bot = ? AND id = ?""",
+            (bot_id, trade_id),
+        ).fetchone()
+    if not r:
+        return None
+    return {
+        "id": r[0], "bot": bot_id, "symbol": r[1], "direction": r[2],
+        "qty": round(r[3], 6), "entryPrice": r[4], "entryTime": r[5],
+        "sl": r[6], "tp": r[7], "exitPrice": r[8], "exitTime": r[9],
+        "exitReason": r[10], "pnl": round(r[11], 2) if r[11] is not None else None,
+        "status": r[12], "reasons": json.loads(r[13]),
+        "snapshot": json.loads(r[14]) if r[14] else None,
+    }
+
+
+def _cum_points(rows: list[tuple]) -> tuple[list[dict], dict]:
+    """(puntos de PnL acumulado, resumen) de filas (exit_time, pnl, symbol, bot).
+
+    Fusiona operaciones que cierran en el mismo segundo: el gráfico exige
+    tiempos estrictamente crecientes."""
+    points: list[dict] = []
+    cum = 0.0
+    wins = losses = 0
+    best = worst = 0.0
+    for ts, pnl, sym, bot in rows:
+        cum += pnl
+        if pnl >= 0:
+            wins += 1
+        else:
+            losses += 1
+        best = max(best, pnl)
+        worst = min(worst, pnl)
+        point = {
+            "ts": ts,
+            "cumPnl": round(cum, 2),
+            "pnl": round(pnl, 2),
+            "symbol": sym,
+            "bot": bot,
+        }
+        if points and points[-1]["ts"] == ts:
+            points[-1] = {**point, "pnl": round(points[-1]["pnl"] + pnl, 2)}
+        else:
+            points.append(point)
+    n = len(rows)
+    summary = {
+        "trades": n,
+        "wins": wins,
+        "losses": losses,
+        "winRate": round(wins / n * 100, 1) if n else None,
+        "pnl": round(cum, 2),
+        "best": round(best, 2),
+        "worst": round(worst, 2),
+    }
+    return points, summary
+
+
 def performance(
     bot_id: str | None = None,
     symbol: str | None = None,
     since: int | None = None,
     until: int | None = None,
+    per_bot: bool = False,
 ) -> dict:
     """Curva de PnL acumulado de operaciones cerradas, con filtros.
 
-    Devuelve un punto por operación (fusionando las que cierran en el mismo
-    segundo, que el gráfico exige tiempos estrictamente crecientes) más un
-    resumen y las listas de valores disponibles para los desplegables.
+    Con `per_bot` añade además una serie acumulada independiente por bot
+    (para el modo "una línea por bot" del gráfico). Siempre incluye la lista
+    de bots registrados para el desplegable de la UI.
     """
     conds = ["status = 'closed'"]
     params: list = []
@@ -694,51 +1139,38 @@ def performance(
             )
         ]
 
-    points: list[dict] = []
-    cum = 0.0
-    wins = losses = 0
-    best = worst = 0.0
-    for ts, pnl, sym, bot in rows:
-        cum += pnl
-        if pnl >= 0:
-            wins += 1
-        else:
-            losses += 1
-        best = max(best, pnl)
-        worst = min(worst, pnl)
-        point = {
-            "ts": ts,
-            "cumPnl": round(cum, 2),
-            "pnl": round(pnl, 2),
-            "symbol": sym,
-            "bot": bot,
-        }
-        if points and points[-1]["ts"] == ts:
-            points[-1] = {**point, "pnl": round(points[-1]["pnl"] + pnl, 2)}
-        else:
-            points.append(point)
-
-    n = len(rows)
-    return {
+    points, summary = _cum_points(rows)
+    out = {
         "points": points,
-        "summary": {
-            "trades": n,
-            "wins": wins,
-            "losses": losses,
-            "winRate": round(wins / n * 100, 1) if n else None,
-            "pnl": round(cum, 2),
-            "best": round(best, 2),
-            "worst": round(worst, 2),
-        },
+        "summary": summary,
         "symbols": symbols,
+        "bots": [
+            {"id": b.cfg.id, "name": b.cfg.name}
+            for b in BOTS.values()
+        ] or [{"id": c.id, "name": c.name} for c in ALL_BOTS],
     }
+    if per_bot:
+        series = []
+        for cfg in ALL_BOTS:
+            bot_rows = [r for r in rows if r[3] == cfg.id]
+            if not bot_rows:
+                continue
+            b_points, b_summary = _cum_points(bot_rows)
+            series.append({
+                "id": cfg.id,
+                "name": cfg.name,
+                "points": b_points,
+                "summary": b_summary,
+            })
+        out["series"] = series
+    return out
 
 
 BOTS: dict[str, TradingBot] = {}
 
 
 def start_all() -> None:
-    for cfg in (SCALPER, SWING):
+    for cfg in ALL_BOTS:
         bot = TradingBot(cfg)
         bot.load_state()
         bot.start_task()
