@@ -1,25 +1,8 @@
-"""Bots de paper trading en tiempo real sobre los precios reales del panel.
+"""Siete bots de paper trading con señales causales y validación obligatoria.
 
-Dos bots operan en paralelo con dinero SIMULADO (no hay bróker conectado):
-
-  - "scalper": operaciones a corto plazo (minutos) sobre velas de 1m con
-    filtro de tendencia en 5m. Foco en XAU/USD y mercados líquidos 24h.
-  - "swing": operaciones a largo plazo (horas/días) sobre velas de 1h con
-    filtro de tendencia diario y más peso de la opinión pública.
-
-La señal por vela viene de `strategy.py` (régimen adaptativo por ADX:
-seguimiento de tendencia cuando el ADX es alto, reversión en rango cuando
-es bajo) y se mezcla con el sentimiento cacheado de las fuentes. Si supera
-el umbral se abre una posición con stop-loss y take-profit por ATR, margen
-limitado por operación y trailing stop que pasa a breakeven al ganar 1R.
-
-Los parámetros de ejecución (umbral, SL, TP, trailing) pueden venir del
-entrenamiento walk-forward (`training.py`), por símbolo: si hay parámetros
-validados en bot_params, sustituyen a los del config.
-
-El sentimiento nunca bloquea al bot: usa `sentiment.peek_cached` y, si no
-hay caché fresca, dispara el refresco en segundo plano y opera solo con la
-parte técnica en ese ciclo. Todo queda en SQLite y sobrevive a reinicios.
+Las posiciones existentes siguen gestionándose. Ningún par sin validación
+vigente ni con veto de aprendizaje abre operaciones nuevas en la cuenta
+principal. El sentimiento se conserva como contexto y en los snapshots.
 """
 
 import asyncio
@@ -39,6 +22,7 @@ from . import opportunities
 from .history import DB_PATH
 from .database import Connection
 from .execution import closed_candles, fresh_signal, valid_tick
+from .training import ENGINE_VERSION
 from .indicators import atr
 from .strategy import confirmations as strategy_confirmations
 from .strategy import extension_atr, score_series
@@ -49,7 +33,7 @@ log = logging.getLogger("bots")
 # Configuración
 # ---------------------------------------------------------------------------
 
-INTERVAL_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
+INTERVAL_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
 
 # Coste de fricción simulado (spread ida+vuelta) por categoría, fracción del precio
 SPREAD_PCT = {
@@ -93,7 +77,7 @@ class BotConfig:
     cooldown_seconds: int        # espera tras cerrar antes de reentrar al símbolo
     focus_threshold_mult: float  # descuento de umbral para el símbolo foco
     initial_balance: float = 10_000.0
-    require_validation: bool = False
+    require_validation: bool = True
     # --- medidas de seguridad (estándar prop-firm) ---
     max_open_risk_pct: float = 0.06  # riesgo inicial agregado por bot
     max_daily_loss_pct: float = 0.05  # pérdida diaria máxima antes de pausar entradas
@@ -673,9 +657,11 @@ class TradingBot:
             pre_mode = "full"
             if not has_pos:
                 # modo de entrada: 'full' opera normal; 'probation' opera a
-                # prueba (tamaño reducido y umbral más alto); solo el veto
-                # horario bloquea del todo (se comprueba con la dirección)
+                # prueba ya no abre entradas; los vetos bloquean la cuenta principal
                 pre_mode, _why = learning.entry_mode(self.cfg.id, symbol_id)
+                if pre_mode == "blocked":
+                    self.diagnostics[symbol_id]["reason"] = _why
+                    continue
                 if pre_mode == "probation" and (
                     len(self.probation_open) >= learning.MAX_PROBATION_POSITIONS
                 ):
@@ -691,6 +677,10 @@ class TradingBot:
                 continue
             if signal is None:
                 self.diagnostics[symbol_id]["reason"] = "Histórico cerrado insuficiente"
+                continue
+            expected_source = self.trained_params.get(symbol_id, {}).get('dataSource')
+            if not has_pos and expected_source and signal['candles'][-1].get('dataSource') != expected_source:
+                self.diagnostics[symbol_id]['reason'] = 'Fuente distinta de la validada; esperando datos MT5'
                 continue
             self.diagnostics[symbol_id].update(reason="Señal insuficiente o filtro de entrada", score=round(signal["score"], 3))
             if signal["stale"]:
@@ -794,6 +784,9 @@ class TradingBot:
                     self.diagnostics[symbol_id]["reason"] = "Spread observado supera el coste del modelo"
                     continue
             tick = await market_data.get_price(sym)
+            if expected_source and tick.get('dataSource') != expected_source:
+                self.diagnostics[symbol_id]['reason'] = 'Cotización de una fuente distinta de la validada'
+                continue
             if not valid_tick(tick, time.time()):
                 self.diagnostics[symbol_id]["reason"] = "Cotización antigua o inválida"
                 continue
@@ -946,6 +939,7 @@ class TradingBot:
         # estaban al entrar, para poder redibujar el gráfico de la decisión
         window = signal["candles"][-SNAPSHOT_BARS:]
         snapshot = {
+            "engineVersion": ENGINE_VERSION,
             "interval": self.cfg.work_interval,
             "score": round(score, 3),
             "confirmations": signal["confirmations"],

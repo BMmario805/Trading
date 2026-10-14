@@ -32,7 +32,7 @@ SYMBOLS: list[Symbol] = [
            ("XAUUSD", "GC_F", "GLD"),
            "gold OR XAUUSD OR XAU",
            ("Gold", "Forex", "Daytrading", "wallstreetbets"),
-           note="Precio: spot Swissquote · Velas: futuros GC ajustados a la base spot",
+           note="Prioriza MT5 demo conectado; sin terminal: Swissquote y velas proxy GC (indicativas)",
            tradingview="XAUUSD"),
     Symbol("PAXG", "Oro 24/7 (PAXG)", "metales", "binance", "PAXGUSDT",
            "PAXG.X", "PAXG OR gold price", ("Gold", "CryptoCurrency"), True,

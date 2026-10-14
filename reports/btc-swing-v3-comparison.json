@@ -1,0 +1,75 @@
+{
+  "bot": "swing",
+  "symbol": "BTC",
+  "evaluatedAt": 1791984356,
+  "firstBar": 1760450400,
+  "lastBar": 1791979200,
+  "bars": 8759,
+  "candleSHA256": "0f7f495ec329acfbc6e2724203c692ec63dd49cba58c5dd152307af19951c68b",
+  "persisted": false,
+  "baselineV2": {
+    "ok": true,
+    "params": {
+      "entryThreshold": 0.75,
+      "slAtr": 2.0,
+      "tpAtr": 4.0,
+      "trailAtr": 2.4
+    },
+    "train": {
+      "expectancy": 37.7996,
+      "trades": 94,
+      "wins": 54,
+      "pnl": 3553.16,
+      "winRate": 57.4,
+      "profitFactor": 1.44,
+      "maxDrawdown": 1781.33
+    },
+    "validation": {
+      "expectancy": 8.8688,
+      "trades": 33,
+      "wins": 15,
+      "pnl": 292.67,
+      "winRate": 45.5,
+      "profitFactor": 1.09,
+      "maxDrawdown": 1624.26
+    },
+    "applied": true,
+    "segments": [
+      {
+        "expectancy": 3.3558,
+        "trades": 20,
+        "wins": 8,
+        "pnl": 67.12,
+        "winRate": 40.0,
+        "profitFactor": 1.03,
+        "maxDrawdown": 1624.26
+      },
+      {
+        "expectancy": 17.3504,
+        "trades": 13,
+        "wins": 7,
+        "pnl": 225.55,
+        "winRate": 53.8,
+        "profitFactor": 1.22,
+        "maxDrawdown": 1012.33
+      }
+    ],
+    "stress": {
+      "expectancy": 0.6765,
+      "trades": 30,
+      "wins": 14,
+      "pnl": 20.3,
+      "winRate": 46.7,
+      "profitFactor": 1.01,
+      "maxDrawdown": 1232.81
+    },
+    "engineVersion": 2,
+    "reason": "Validación y costes reforzados superados",
+    "bars": 8759
+  },
+  "currentV3": {
+    "ok": false,
+    "engineVersion": 3,
+    "reason": "ninguna configuración rentable en el tramo de entrenamiento"
+  }
+}

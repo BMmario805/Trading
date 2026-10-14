@@ -16,6 +16,7 @@ from .mt5_gateway import DemoGateway, DemoOnlyError
 from .strategy import score_series, resample, TREND_STEP, extension_atr
 from . import training
 from . import mt5_performance
+from . import mt5_market
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / '.runtime' / 'mt5-demo.json'
@@ -59,7 +60,7 @@ class DemoEngine:
         self.stopping = False
         self.diagnostics = {}
         self.timeframes = {k: getattr(api, 'TIMEFRAME_' + v) for k, v in
-                           [('1m', 'M1'), ('5m', 'M5'), ('15m', 'M15'), ('1h', 'H1'), ('1d', 'D1')]}
+                           [('1m', 'M1'), ('5m', 'M5'), ('15m', 'M15'), ('1h', 'H1'), ('4h', 'H4'), ('1d', 'D1')]}
 
     def bars(self, symbol, interval, count=500):
         if not self.api.symbol_select(symbol, True):
@@ -71,6 +72,24 @@ class DemoEngine:
                                     low=float(r['low']), close=float(r['close']),
                                     volume=float(r['real_volume'] or r['tick_volume'])) for r in rows],
                               INTERVAL_SECONDS[interval], time.time() + self.clock_skew)
+
+    def market_read(self, kind, interval, count):
+        self.gateway.account()
+        symbol = self.config.get('symbols', {}).get('XAUUSD')
+        if not symbol:
+            return None
+        provenance = dict(provider='mt5', instrument=symbol, account=self.owner)
+        if kind == 'candles':
+            rows = self.bars(symbol, interval, count)
+            # Mismo eje UTC que el resto del panel.
+            offset = round(self.clock_skew / 3600) * 3600
+            return [dict(c, time=int(c['time']-offset), dataSource=provenance) for c in rows]
+        tick = self.gateway.tick(symbol, time.time())
+        mid = (tick.bid+tick.ask)/2
+        daily = self.bars(symbol, '1d', 2)
+        change = (mid/daily[-1]['close']-1)*100 if daily else 0.0
+        return dict(symbol='XAUUSD', price=mid, changePct=round(change, 2),
+                    time=int(tick.time-self.clock_skew), dataSource=provenance)
 
     def update_clock_skew(self):
         """Estima el reloj del servidor con una cotización reciente del bróker."""
@@ -174,14 +193,14 @@ class DemoEngine:
                 result['at'] = int(now)
                 save(self.owner+'params:'+key, result)
             except Exception as exc:
-                save(self.owner+'params:'+key, dict(at=int(now), applied=False, reason=str(exc)))
+                save(self.owner+'params:'+key, dict(at=int(now), engineVersion=training.ENGINE_VERSION, applied=False, reason=str(exc)))
             self.training_job = None
         if now-self.last_train < 300:
             return
         for cfg, symbol in candidates:
             key = cfg.id+'/'+symbol
             previous = read(self.owner+'params:'+key, {})
-            if now-previous.get('at', 0) < 6*3600:
+            if previous.get('engineVersion') == training.ENGINE_VERSION and now-previous.get('at', 0) < 6*3600:
                 continue
             self.last_train = now
             try:
@@ -196,10 +215,11 @@ class DemoEngine:
                     seconds = INTERVAL_SECONDS[cfg.work_interval]
                     return training.optimize(cfg.id, data, scores, atr_series(data, cfg.atr_period), spread,
                                              max(1, cfg.max_hold_seconds//seconds), max(1, cfg.cooldown_seconds//seconds),
-                                             account.equity*self.config['risk_pct'], account.equity)
+                                             account.equity*self.config['risk_pct'], account.equity,
+                                             overext_atr=cfg.overext_atr)
                 self.training_job = (key, self.worker.submit(optimize))
             except Exception as exc:
-                save(self.owner+'params:'+key, dict(at=int(now), applied=False, reason=str(exc)))
+                save(self.owner+'params:'+key, dict(at=int(now), engineVersion=training.ENGINE_VERSION, applied=False, reason=str(exc)))
             break
 
     def sync_performance(self, now):
@@ -273,7 +293,7 @@ class DemoEngine:
                 if self.uncertain(symbol):
                     raise DemoOnlyError('Respuesta de orden incierta: revisar MT5 antes de continuar en este símbolo')
                 params = read(self.owner+'params:'+key, {})
-                p = params.get('params', {}) if params.get('applied') else {}
+                p = params.get('params', {}) if params.get('applied') and params.get('engineVersion') == training.ENGINE_VERSION else {}
                 if bot.require_validation and not p:
                     raise DemoOnlyError('Esperando validación sobre histórico MT5')
                 if len(self.gateway.positions()) >= cfg['max_positions']:
@@ -318,6 +338,9 @@ async def _run(config):
     import MetaTrader5 as api
     engine = DemoEngine(config, api)
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='mt5-terminal')
+    async def market_read(kind, interval, count):
+        return await asyncio.get_running_loop().run_in_executor(executor, engine.market_read, kind, interval, count)
+    mt5_market.set_reader(market_read)
     try:
         while True:
             try:
@@ -327,6 +350,7 @@ async def _run(config):
                 log.warning('MT5 demo: %s', exc)
             await asyncio.sleep(5)
     finally:
+        mt5_market.set_reader(None)
         engine.stopping = True
         engine.worker.shutdown(wait=False, cancel_futures=True)
         executor.shutdown(wait=False, cancel_futures=True)

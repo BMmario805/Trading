@@ -1,5 +1,12 @@
 # 📈 Panel de Trading en Tiempo Real
 
+> **Motor v3 (14-10-2026):** [cambios y comprobaciones](reports/MOTOR-V3.md).
+> Todos los bots exigen validación de esta versión; el modo «a prueba» ya no abre
+> entradas en la cuenta principal. Scalper/swing usan tres bloques 40/40/20 y el
+> backtest aplica el filtro de sobreextensión. XAUUSD prioriza MT5 DEMO conectado.
+> Estas reglas sustituyen las descripciones antiguas de exploración y señales.
+> [Agentes: alta, costes y funcionamiento continuo](reports/AGENTES.md).
+
 > **MetaTrader 5 demo:** [conexión, activación y límites](reports/METATRADER-DEMO.md).
 
 > **Ampliación:** siete bots, diez criptomonedas adicionales y autoentrenamiento por instrumento.

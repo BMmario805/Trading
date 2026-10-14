@@ -1,22 +1,9 @@
-"""Puntuación de estrategia por vela, compartida entre bots en vivo y backtest.
+"""Señales causales compartidas por el vivo y el backtest.
 
-Diseño "adaptive regime" (práctica habitual en sistemas de oro/XAUUSD):
-la señal se calcula como mezcla de dos sub-estrategias ponderadas por el ADX:
-
-  - Régimen de TENDENCIA (ADX alto): seguimiento — cruces de medias, MACD,
-    ruptura de rango, VWAP/Ichimoku y alineación con el marco superior.
-  - Régimen de RANGO (ADX bajo): reversión — RSI en extremos, %B de
-    Bollinger en las bandas y, cuando aparecen, señales de las escuelas
-    clásicas de price action: rebotes en soportes/resistencias, reacción
-    en retrocesos de Fibonacci, patrones de velas japonesas (envolventes,
-    martillo, estrella fugaz) y divergencias de RSI en pivotes.
-
-Los sistemas de evento (S/R, fib, velas, divergencias) solo votan cuando se
-producen: así refuerzan o vetan la señal sin diluirla el resto del tiempo.
-
-Las funciones devuelven la serie completa de puntuaciones en [-1, 1], una
-por vela: el bot en vivo usa el último valor y el backtest recorre toda la
-serie. Así lo que se entrena es EXACTAMENTE lo que se opera.
+Scalper y swing usan tres bloques con pesos 40/40/20: régimen,
+disparador de precio y flujo CMF. Sin disparador no hay entrada.
+Los demás bots mantienen sus escuelas específicas. Las funciones devuelven
+una puntuación en [-1, 1] por vela y solo usan información ya disponible.
 """
 
 from .flow import flow_scores, chaikin_money_flow
@@ -24,6 +11,7 @@ from .flow import flow_scores, chaikin_money_flow
 from .indicators import (
     adx_series,
     atr,
+    atr_series,
     choppiness_series,
     ema,
     macd,
@@ -224,6 +212,12 @@ def extension_atr(c_work: list[dict]) -> float | None:
     return (closes[-1] - e20) / a
 
 
+def extension_series(c_work: list[dict]) -> list[float | None]:
+    closes = [c["close"] for c in c_work]
+    return [(price - mean) / a if mean is not None and a else None
+            for price, mean, a in zip(closes, ema(closes, 20), atr_series(c_work))]
+
+
 def _event_series(c_work: list[dict]) -> list[list[float]]:
     """Series de eventos de price action compartidas por los bots: patrones
     de velas, S/R, Fibonacci, divergencias y los eventos SMC (fair value
@@ -241,160 +235,54 @@ def _event_series(c_work: list[dict]) -> list[list[float]]:
     ]
 
 
-def scalper_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
-    """Serie de señal del scalper: velas 1m + tendencia 5m."""
-    n = len(c_work)
+def factor_series(c_work: list[dict], c_trend: list[dict], step: int) -> list[dict]:
+    """Tres bloques causales; ningún indicador extra añade votos al promedio.
+
+    Un disparador de precio es obligatorio. ADX/CHOP ajustan el régimen,
+    EMA200 y el marco superior su dirección; CMF confirma participación.
+    Los bloques son familias distintas, no independencia estadística probada.
+    """
     closes = [c["close"] for c in c_work]
-    if n < 60:
-        return [0.0] * n
-    e9, e21 = ema(closes, 9), ema(closes, 21)
-    e200 = ema(closes, 200)
-    r = rsi(closes)
-    m_line, m_sig = macd(closes)
-    bo = _rolling_breakout(c_work, 20)
-    htf = _htf_trend_votes(c_work, c_trend, 20, 50, 300)
-    adx = adx_series(c_work)
-    chop = choppiness_series(c_work)
-    pb = pct_b(closes)
-    vw = vwap_votes(c_work)
-    rv = rvol_series(c_work)
-    st = supertrend_votes(c_work)
-    obv = obv_trend_votes(c_work)
-    mom = momentum_votes(c_work)
-    ha = ha_trend_votes(c_work)
-    ka = kama_votes(c_work)
-    vx = vortex_votes(c_work)
-    struct = structure_series(c_work)
-    rib = ribbon_votes(c_work)
-    pull = pullback_votes(c_work)
-    av = anchored_vwap_votes(c_work)
-
-    trend_scores: list[float] = []
+    n = len(closes)
+    slow = ema(closes, 200)
+    htf = _htf_trend_votes(c_work, c_trend, 20, 50, step)
+    adx, chop = adx_series(c_work), choppiness_series(c_work)
+    breakout, pullback = _rolling_breakout(c_work, 20), pullback_votes(c_work)
+    sweep = sweep_series(c_work, find_pivots(c_work))
+    z = zscore_series(closes)
+    money = chaikin_money_flow(c_work)
+    out = []
     for i in range(n):
-        votes: list[float] = []
-        if e9[i] is not None and e21[i] is not None:
-            votes.append(1.0 if e9[i] > e21[i] else -1.0)
-        if e200[i] is not None:  # filtro de régimen: el lado "seguro" del mercado
-            votes.append(1.0 if closes[i] > e200[i] else -1.0)
-        if m_line[i] is not None and m_sig[i] is not None:
-            votes.append(1.0 if m_line[i] > m_sig[i] else -1.0)
-        if r[i] is not None:
-            votes.append(_clip((r[i] - 50) / 50))
-        if bo[i]:
-            votes.append(_breakout_vote_confirmed(bo[i], rv[i]))
-        if vw[i]:  # VWAP de sesión: referencia institucional intradía
-            votes.append(vw[i])
-        if st[i]:  # SuperTrend: stop-and-reverse por volatilidad
-            votes.append(st[i])
-        if obv[i]:  # OBV: el volumen acumulado confirma (o desmiente) el precio
-            votes.append(obv[i])
-        if mom[i]:  # momento normalizado por ATR
-            votes.append(mom[i])
-        if ha[i]:  # racha Heikin-Ashi: tendencia suavizada
-            votes.append(ha[i])
-        if ka[i]:  # KAMA: media adaptativa (filtra el ruido de rango)
-            votes.append(ka[i])
-        if vx[i]:  # Vortex: rotación temprana del flujo direccional
-            votes.append(vx[i])
-        if struct[i]:  # estructura de mercado SMC (BOS/CHoCH)
-            votes.append(struct[i])
-        if rib[i]:  # cinta de EMAs perfectamente ordenada
-            votes.append(rib[i])
-        if pull[i]:  # pullback de continuación a la EMA20
-            votes.append(pull[i])
-        if av[i]:  # VWAP anclado al último giro
-            votes.append(av[i])
-        votes.append(htf[i])
-        trend_scores.append(sum(votes) / len(votes) if votes else 0.0)
+        factors = dict(regime=0.0, trigger=0.0, flow=0.0, score=0.0)
+        if i < 199 or slow[i] is None or adx[i] is None or chop[i] is None:
+            out.append(factors)
+            continue
+        trend_weight = (_clip((adx[i] - ADX_LOW) / (ADX_HIGH - ADX_LOW), 0, 1)
+                        + _clip((CHOP_HIGH - chop[i]) / (CHOP_HIGH - CHOP_LOW), 0, 1)) / 2
+        bias = 1.0 if closes[i] > slow[i] else -1.0 if closes[i] < slow[i] else 0.0
+        if trend_weight >= .5:
+            trigger = breakout[i] or pullback[i]
+            regime = (bias + htf[i]) / 2
+        else:
+            extreme = 1.0 if z[i] is not None and z[i] <= -2 else -1.0 if z[i] is not None and z[i] >= 2 else 0.0
+            trigger = sweep[i] or extreme
+            regime = trigger * (1 - trend_weight)  # confianza de reversión en rango
+        flow = _clip(money[i] * 3) if money[i] is not None else 0.0
+        score = _clip(.4 * regime + .4 * trigger + .2 * flow) if trigger else 0.0
+        # La confirmación no puede invertir la dirección del disparador.
+        if score * trigger <= 0:
+            score = 0.0
+        factors.update(regime=regime, trigger=trigger, flow=flow, score=score)
+        out.append(factors)
+    return out
 
-    events = _event_series(c_work) + [
-        stoch_votes(c_work), williams_votes(c_work), cci_votes(c_work),
-        stochrsi_votes(c_work),
-    ]
-    return _regime_blend(trend_scores, _range_scores(closes, r, pb, events), adx, chop)
+
+def scalper_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
+    return [f["score"] for f in factor_series(c_work, c_trend, 300)]
 
 
 def swing_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
-    """Serie de señal del swing: velas 1h + tendencia diaria."""
-    n = len(c_work)
-    closes = [c["close"] for c in c_work]
-    if n < 60:
-        return [0.0] * n
-    s20, s50 = sma(closes, 20), sma(closes, 50)
-    e200 = ema(closes, 200)
-    r = rsi(closes)
-    m_line, m_sig = macd(closes)
-    bo = _rolling_breakout(c_work, 20)
-    htf = _htf_trend_votes(c_work, c_trend, 20, 50, 86400)
-    adx = adx_series(c_work)
-    chop = choppiness_series(c_work)
-    pb = pct_b(closes)
-    ichi = ichimoku_votes(c_work)
-    rv = rvol_series(c_work)
-    st = supertrend_votes(c_work)
-    dpos = donchian_pos_series(c_work, 20)
-    obv = obv_trend_votes(c_work)
-    ps = psar_votes(c_work)
-    mom = momentum_votes(c_work)
-    ha = ha_trend_votes(c_work)
-    ka = kama_votes(c_work)
-    vx = vortex_votes(c_work)
-    struct = structure_series(c_work)
-    rib = ribbon_votes(c_work)
-    ar = aroon_votes(c_work)
-    pull = pullback_votes(c_work)
-    av = anchored_vwap_votes(c_work)
-
-    trend_scores: list[float] = []
-    for i in range(n):
-        votes: list[float] = []
-        if s20[i] is not None and s50[i] is not None:
-            votes.append(1.0 if s20[i] > s50[i] else -1.0)
-            votes.append(1.0 if closes[i] > s50[i] else -1.0)
-        if e200[i] is not None:  # filtro de régimen: el lado "seguro" del mercado
-            votes.append(1.0 if closes[i] > e200[i] else -1.0)
-        if m_line[i] is not None and m_sig[i] is not None:
-            votes.append(1.0 if m_line[i] > m_sig[i] else -1.0)
-        if r[i] is not None:
-            votes.append(_clip((r[i] - 50) / 50))
-        if bo[i]:
-            votes.append(_breakout_vote_confirmed(bo[i], rv[i]))
-        if ichi[i]:  # posición respecto a la nube de Ichimoku
-            votes.append(ichi[i])
-        if st[i]:  # SuperTrend
-            votes.append(st[i])
-        if dpos[i]:  # posición dentro del canal de Donchian
-            votes.append(dpos[i])
-        if obv[i]:  # flujo de volumen acumulado
-            votes.append(obv[i])
-        if ps[i]:  # Parabolic SAR
-            votes.append(ps[i])
-        if mom[i]:  # momento normalizado por ATR
-            votes.append(mom[i])
-        if ha[i]:  # racha Heikin-Ashi
-            votes.append(ha[i])
-        if ka[i]:  # KAMA adaptativa
-            votes.append(ka[i])
-        if vx[i]:  # Vortex
-            votes.append(vx[i])
-        if struct[i]:  # estructura de mercado (BOS/CHoCH)
-            votes.append(struct[i])
-        if rib[i]:  # cinta de EMAs ordenada
-            votes.append(rib[i])
-        if ar[i]:  # Aroon: tendencia fresca
-            votes.append(ar[i])
-        if pull[i]:  # pullback de continuación
-            votes.append(pull[i])
-        if av[i]:  # VWAP anclado
-            votes.append(av[i])
-        votes.append(htf[i])
-        trend_scores.append(sum(votes) / len(votes) if votes else 0.0)
-
-    events = _event_series(c_work) + [
-        stoch_votes(c_work), mfi_votes(c_work), cci_votes(c_work),
-        williams_votes(c_work), stochrsi_votes(c_work),
-    ]
-    return _regime_blend(trend_scores, _range_scores(closes, r, pb, events), adx, chop)
+    return [f["score"] for f in factor_series(c_work, c_trend, 86400)]
 
 
 # ---------------------------------------------------------------------------
@@ -684,6 +572,15 @@ def confirmations(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[
     informativo). Es lo que ve el usuario al preguntar POR QUÉ se abrió una
     operación, así que cubre todos los sistemas que componen la señal.
     """
+    if bot_id in ("scalper", "swing"):
+        if not c_work:
+            return []
+        factors = factor_series(c_work, c_trend, TREND_STEP[bot_id])[-1]
+        return [
+            {"system": "Régimen", "detail": "Peso 40%: ADX/CHOP, EMA200 y marco superior cerrado", "vote": factors["regime"]},
+            {"system": "Disparador de precio", "detail": "Peso 40%: ruptura/pullback en tendencia; barrido/z-score en rango", "vote": factors["trigger"]},
+            {"system": "Flujo CMF", "detail": "Peso 20%: participación por Chaikin Money Flow; sin volumen, neutro", "vote": factors["flow"]},
+        ]
     if bot_id == "flow":
         money = chaikin_money_flow(c_work)[-1] if c_work else None
         signal = flow_scores(c_work, c_trend)[-1] if c_work else 0.0

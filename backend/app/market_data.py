@@ -6,6 +6,7 @@ import time
 import httpx
 
 from .config import Symbol
+from . import mt5_market
 
 # data-api.binance.vision es el espejo público de solo-datos de Binance,
 # accesible también desde regiones donde api.binance.com está restringido.
@@ -100,6 +101,10 @@ async def _fetch_candles(sym: Symbol, interval: str, limit: int = 400) -> list[d
     b_int, y_int, y_range = INTERVALS[interval]
 
     if sym.source == "swissquote":
+        if sym.id == "XAUUSD":
+            broker_rows = await mt5_market.read('candles', interval, limit)
+            if broker_rows:
+                return broker_rows
         # Sin histórico spot gratuito: velas del futuro proxy reescaladas a la
         # base spot actual, de forma que la última vela enlaza con el tick vivo.
         proxy = SWISSQUOTE_CANDLE_PROXY[sym.source_symbol]
@@ -168,6 +173,10 @@ _proxy_change: dict[str, tuple[float, float]] = {}  # proxy -> (ts, changePct)
 async def get_price(sym: Symbol) -> dict:
     """Último precio + variación diaria (%)."""
     if sym.source == "swissquote":
+        if sym.id == "XAUUSD":
+            broker_tick = await mt5_market.read('price')
+            if broker_tick:
+                return broker_tick
         mid = await _swissquote_mid(sym.source_symbol)
         # la variación % diaria del futuro proxy sirve como aproximación del spot
         proxy = SWISSQUOTE_CANDLE_PROXY[sym.source_symbol]

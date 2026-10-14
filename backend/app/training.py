@@ -9,10 +9,10 @@ aplica al bot en vivo si la validación es rentable — la defensa estándar
 contra el sobreajuste. Los parámetros aplicados se guardan en SQLite
 (tabla bot_params) y el bot los usa por símbolo.
 
-Los costes (spread) se descuentan igual que en vivo. El oro spot no tiene
-histórico gratuito: el scalper entrena XAUUSD con PAXGUSDT de Binance
-(oro tokenizado, mismo subyacente, velas 1m ilimitadas) y el swing con los
-futuros GC=F de Yahoo.
+El spread y la sobreextensión se filtran en todos los tramos. Para XAUUSD
+se priorizan las velas del terminal MT5 DEMO autorizado. Sin terminal se
+usará un proxy PAXG/GC solamente informativo, sin validar el spot.
+No se dispone de tasas históricas de financiación o swaps en el simulador.
 """
 
 import asyncio
@@ -23,12 +23,13 @@ import time
 from itertools import product
 
 from . import market_data
+from . import mt5_market
 from .config import SYMBOLS_BY_ID, Symbol
 from .history import DB_PATH
 from .database import Connection
 from .execution import closed_candles, fresh_signal
 from .indicators import atr_series
-from .strategy import TREND_STEP, resample, score_series
+from .strategy import TREND_STEP, resample, score_series, extension_series
 
 log = logging.getLogger("training")
 
@@ -50,7 +51,7 @@ MIN_TRAIN_TRADES = {
     "flow": 10, "scalper": 20, "swing": 8, "trend": 6, "meanrev": 8, "orb": 10, "squeeze": 8,
 }
 MIN_VALIDATION_TRADES = 8
-ENGINE_VERSION = 2
+ENGINE_VERSION = 3
 
 # Segundos por vela de cada intervalo de trabajo
 WORK_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
@@ -137,7 +138,8 @@ def due_symbols(bot_id: str, universe: tuple[str, ...], hours: float, now: float
             continue
         last = max(stamp, attempt) if version == ENGINE_VERSION or ok and attempt else 0
         if symbol not in saved or version != ENGINE_VERSION:
-            if not attempt or now - attempt >= (hours * 3600 if ok else 3600):
+            if ((version != ENGINE_VERSION and symbol in saved)
+                    or not attempt or now - attempt >= (hours * 3600 if ok else 3600)):
                 due.append((0, symbol))
         elif now - last >= hours * 3600:
             due.append((last, symbol))
@@ -190,6 +192,10 @@ async def _yahoo_history(source_symbol: str, interval: str) -> list[dict]:
 
 
 async def fetch_history(bot_id: str, sym: Symbol, interval: str) -> list[dict]:
+    if sym.id == "XAUUSD":
+        broker_rows = await mt5_market.read('candles', interval, 100_000)
+        if broker_rows:
+            return broker_rows
     source, source_symbol = train_source(sym, interval)
     if source == "binance":
         return await _binance_history(
@@ -218,6 +224,8 @@ def simulate(
     notional_cap: float,
     start: int,
     end: int,
+    extensions: list[float | None] | None = None,
+    overext_atr: float = float("inf"),
 ) -> dict:
     """Backtest de una configuración sobre candles[start:end]. Sin capitalizar
     (tamaño fijo por operación) para que las métricas sean comparables.
@@ -306,6 +314,9 @@ def simulate(
         # filtro de coste: sin volatilidad suficiente el spread se come el beneficio
         if a < 3 * c["close"] * spread_pct:
             continue
+        ext = extensions[i] if extensions is not None else None
+        if ext is not None and ext * (1 if s > 0 else -1) > overext_atr:
+            continue
         # Señal conocida al cierre; ejecución en la siguiente apertura.
         if i + 1 >= end:
             continue
@@ -351,7 +362,9 @@ def optimize(
     cooldown_bars: int,
     risk_amount: float,
     notional_cap: float,
+    overext_atr: float = float("inf"),
 ) -> dict:
+    extensions = extension_series(candles)
     split = int(len(candles) * TRAIN_SPLIT)
     min_trades = MIN_TRAIN_TRADES.get(bot_id, 8)
 
@@ -367,6 +380,7 @@ def optimize(
             candles, scores, atrs, spread_pct, th, sl, tp, tr,
             max_hold_bars, cooldown_bars, risk_amount, notional_cap,
             0, split,
+            extensions, overext_atr,
         )
         if m["trades"] < min_trades:
             continue
@@ -379,23 +393,26 @@ def optimize(
             best_score, best_cfg, best_train = score, (th, sl, tp, tr), m
 
     if best_cfg is None:
-        return {"ok": False, "reason": "ninguna configuración rentable en el tramo de entrenamiento"}
+        return {"ok": False, "engineVersion": ENGINE_VERSION, "reason": "ninguna configuración rentable en el tramo de entrenamiento"}
 
     th, sl, tp, tr = best_cfg
     val = simulate(
         candles, scores, atrs, spread_pct, th, sl, tp, tr,
         max_hold_bars, cooldown_bars, risk_amount, notional_cap,
         min(split + EMBARGO_BARS, len(candles)), len(candles),
+        extensions, overext_atr,
     )
     val_start = min(split + EMBARGO_BARS, len(candles))
     middle = (val_start + len(candles)) // 2
     segments = [simulate(
         candles, scores, atrs, spread_pct, th, sl, tp, tr,
         max_hold_bars, cooldown_bars, risk_amount, notional_cap, lo, hi,
+        extensions, overext_atr,
     ) for lo, hi in ((val_start, middle), (middle, len(candles)))]
     stress = simulate(
         candles, scores, atrs, spread_pct * 2, th, sl, tp, tr,
         max_hold_bars, cooldown_bars, risk_amount, notional_cap, val_start, len(candles),
+        extensions, overext_atr,
     )
     accepted = (val["pnl"] > 0 and val["trades"] >= MIN_VALIDATION_TRADES
                 and all(m["pnl"] > 0 and m["trades"] >= 2 for m in segments)
@@ -448,12 +465,15 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
             cfg.id, c_work, scores, atrs, spread, max_hold_bars, cooldown_bars,
             risk_amount=cfg.initial_balance * cfg.risk_pct,
             notional_cap=cfg.initial_balance * cfg.max_leverage,
+            overext_atr=cfg.overext_atr,
         )
 
     result = await asyncio.to_thread(_run)
     result["symbol"] = sym.id
-    result["source"] = dict(zip(("provider", "symbol"), train_source(sym, cfg.work_interval)))
-    result["proxy"] = sym.source == "swissquote"
+    result["source"] = c_work[-1].get("dataSource") or dict(zip(("provider", "symbol"), train_source(sym, cfg.work_interval)))
+    result["proxy"] = sym.source == "swissquote" and result["source"]["provider"] != 'mt5'
+    if result.get('params') and result['source']['provider'] == 'mt5':
+        result['params']['dataSource'] = result['source']
     if result["proxy"]:
         result["applied"] = False
         result["reason"] = "Histórico proxy: resultado informativo, no valida el instrumento spot"

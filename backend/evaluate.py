@@ -33,11 +33,14 @@ async def evaluate(bot_id, symbol, output):
                 bot_id, data, scores, atr_series(data, cfg.atr_period), bots.SPREAD_PCT[sym.category],
                 max(1, cfg.max_hold_seconds // seconds), max(1, cfg.cooldown_seconds // seconds),
                 cfg.initial_balance * cfg.risk_pct, cfg.initial_balance * cfg.max_leverage,
+                overext_atr=cfg.overext_atr,
             )
         result = await asyncio.to_thread(run)
         result.update(bot=bot_id, symbol=symbol, firstBar=data[0]['time'], lastBar=data[-1]['time'],
                       evaluatedAt=int(time.time()), source=training.train_source(sym, cfg.work_interval),
                       proxy=sym.source == 'swissquote', persisted=False)
+        if data[-1].get('dataSource'):
+            result.update(source=data[-1]['dataSource'], proxy=False)
         if result['proxy']:
             result.update(applied=False, reason='Histórico proxy; no valida el instrumento spot')
         output.parent.mkdir(parents=True, exist_ok=True)

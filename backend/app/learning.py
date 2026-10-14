@@ -10,7 +10,7 @@ para no "aprender" del ruido:
    FALLADO usando parámetros por defecto. Regla:
      - validado   -> se opera a tamaño completo
      - rechazado  -> NO se opera (hasta que un reentrenamiento lo valide)
-     - sin datos  -> se explora a mitad de tamaño
+     - sin datos  -> NO se opera hasta validar
 
 2. Bloqueos por rendimiento en vivo. Con muestra suficiente en la ventana
    reciente, un símbolo (o una dirección concreta de un símbolo, p. ej.
@@ -69,12 +69,9 @@ BLOCK_EXPECTANCY_R = -0.15
 MIN_TRADES_HOUR = 10
 BLOCK_HOUR_EXPECTANCY_R = -0.25
 
-# --- Modo "a prueba" (probation) ---
-# Un símbolo rechazado por la validación o vetado por rendimiento ya no queda
-# bloqueado para siempre: puede operar A PRUEBA con tamaño muy reducido,
-# umbral más exigente y el visto bueno del meta-modelo. Así genera datos
-# frescos con riesgo mínimo y se gana la reentrada operando, no esperando.
-PROBATION_SIZE = 0.35          # fracción del tamaño normal en modo a prueba
+# Constantes conservadas para leer operaciones antiguas "a prueba".
+# Las entradas actuales se bloquean; un futuro libro shadow deberá ser separado.
+PROBATION_SIZE = 0.0           # la cuenta principal no financia exploración
 PROBATION_THRESHOLD_MULT = 1.15  # umbral de entrada más exigente
 PROBATION_META_P = 0.50        # p(éxito) mínima del meta-modelo (si es maduro)
 MAX_PROBATION_POSITIONS = 2    # posiciones a prueba simultáneas por bot
@@ -228,7 +225,7 @@ def meta_features(
 
 
 def _new_model() -> dict:
-    return {"w": {}, "n": 0, "lastTradeId": 0, "updatedAt": 0}
+    return {"w": {}, "n": 0, "lastTradeId": 0, "updatedAt": 0, "engineVersion": training.ENGINE_VERSION}
 
 
 def _load_model(bot_id: str) -> dict:
@@ -239,6 +236,8 @@ def _load_model(bot_id: str) -> dict:
             "SELECT model FROM bot_model WHERE bot = ?", (bot_id,)
         ).fetchone()
     _models[bot_id] = json.loads(row[0]) if row else _new_model()
+    if _models[bot_id].get('engineVersion') != training.ENGINE_VERSION:
+        _models[bot_id] = _new_model()
     return _models[bot_id]
 
 
@@ -297,6 +296,8 @@ def _trade_features(bot_id: str, row: tuple) -> dict[str, float] | None:
     try:
         snap = json.loads(snapshot_json)
     except (TypeError, ValueError):
+        return None
+    if snap.get('engineVersion') != training.ENGINE_VERSION:
         return None
     confs = snap.get("confirmations") or []
     sym = SYMBOLS_BY_ID.get(symbol)
@@ -531,13 +532,9 @@ def edge_status(bot_id: str, symbol: str) -> str:
 def entry_mode(
     bot_id: str, symbol: str, direction: str | None = None, hour: int | None = None
 ) -> tuple[str, str | None]:
-    """Modo de entrada para un símbolo: 'full' | 'probation' | 'blocked'.
+    """Cuenta principal: solo ventaja vigente y sin vetos permite entrar.
 
-    - 'full': ventaja validada y sin vetos -> tamaño completo.
-    - 'probation': sin ventaja validada o con veto de rendimiento -> puede
-      operar a prueba (tamaño PROBATION_SIZE, umbral ×PROBATION_THRESHOLD_MULT
-      y aprobación del meta-modelo). La reentrada se gana operando.
-    - 'blocked': veto horario (duro: a esa hora no se opera).
+    La exploración queda desactivada hasta disponer de un libro shadow separado.
     """
     if hour is not None:
         policy = _policies.get(bot_id) or load(bot_id)
@@ -545,14 +542,14 @@ def entry_mode(
             if hb["hour"] == hour:
                 return "blocked", f"veto horario: {hb['reason']}"
     mode, why = "full", None
-    if edge_status(bot_id, symbol) == "rejected":
-        mode = "probation"
+    if edge_status(bot_id, symbol) != "validated":
+        mode = "blocked"
         why = "sin ventaja validada en el último entrenamiento"
     for b in _active_blocks(bot_id):
         if b["symbol"] != symbol:
             continue
         if b["direction"] is None or b["direction"] == direction:
-            mode = "probation"
+            mode = "blocked"
             why = f"veto de aprendizaje: {b['reason']}"
             break
     return mode, why
@@ -561,7 +558,7 @@ def entry_mode(
 def gate(
     bot_id: str, symbol: str, direction: str | None = None, hour: int | None = None
 ) -> tuple[bool, str | None]:
-    """Compatibilidad: True salvo bloqueo duro (veto horario)."""
+    """True solamente si la entrada está autorizada por la política."""
     mode, why = entry_mode(bot_id, symbol, direction, hour)
     return mode != "blocked", why
 
