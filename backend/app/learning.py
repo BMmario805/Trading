@@ -50,6 +50,7 @@ import time
 from . import training
 from .config import SYMBOLS_BY_ID
 from .history import DB_PATH
+from .database import Connection
 
 log = logging.getLogger("learning")
 
@@ -68,6 +69,16 @@ BLOCK_EXPECTANCY_R = -0.15
 MIN_TRADES_HOUR = 10
 BLOCK_HOUR_EXPECTANCY_R = -0.25
 
+# --- Modo "a prueba" (probation) ---
+# Un símbolo rechazado por la validación o vetado por rendimiento ya no queda
+# bloqueado para siempre: puede operar A PRUEBA con tamaño muy reducido,
+# umbral más exigente y el visto bueno del meta-modelo. Así genera datos
+# frescos con riesgo mínimo y se gana la reentrada operando, no esperando.
+PROBATION_SIZE = 0.35          # fracción del tamaño normal en modo a prueba
+PROBATION_THRESHOLD_MULT = 1.15  # umbral de entrada más exigente
+PROBATION_META_P = 0.50        # p(éxito) mínima del meta-modelo (si es maduro)
+MAX_PROBATION_POSITIONS = 2    # posiciones a prueba simultáneas por bot
+
 # --- Meta-modelo (regresión logística online) ---
 META_MIN_SAMPLES = 30     # madurez mínima antes de que pueda vetar señales
 META_GATE_P = 0.35        # probabilidad de éxito mínima para dejar pasar
@@ -77,7 +88,7 @@ META_BOOTSTRAP_EPOCHS = 3 # pasadas extra al aprender el historial de golpe
 
 # Cada cuántas horas se reentrena cada bot (walk-forward automático)
 RETRAIN_HOURS = {
-    "scalper": 4, "orb": 6, "squeeze": 6,
+    "scalper": 4, "orb": 6, "squeeze": 6, "flow": 6,
     "swing": 12, "trend": 12, "meanrev": 12,
 }
 DEFAULT_RETRAIN_HOURS = 8
@@ -91,7 +102,7 @@ _scheduler_task: asyncio.Task | None = None
 
 
 def _conn() -> sqlite3.Connection:
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, factory=Connection)
     con.execute(
         """CREATE TABLE IF NOT EXISTS bot_learning (
             bot TEXT PRIMARY KEY,
@@ -125,7 +136,7 @@ def analyze(bot_id: str, window_days: int = WINDOW_DAYS) -> dict:
     with _conn() as con:
         rows = con.execute(
             """SELECT symbol, direction, qty, entry_price, sl, pnl,
-                      entry_time, exit_reason
+                      entry_time, exit_reason, initial_risk_dist
                FROM bot_trades
                WHERE bot = ? AND status = 'closed' AND pnl IS NOT NULL
                  AND exit_time >= ?""",
@@ -139,8 +150,8 @@ def analyze(bot_id: str, window_days: int = WINDOW_DAYS) -> dict:
     by_dir: dict[tuple[str, str], dict] = {}
     by_hour: dict[int, dict] = {}
     by_exit: dict[str, dict] = {}
-    for sym, direction, qty, entry, sl, pnl, entry_time, exit_reason in rows:
-        risk = abs(entry - sl) * qty
+    for sym, direction, qty, entry, sl, pnl, entry_time, exit_reason, initial_dist in rows:
+        risk = (initial_dist if initial_dist is not None else abs(entry - sl)) * qty
         r_mult = pnl / risk if risk > 0 else 0.0
         for bucket in (
             by_symbol.setdefault(sym, _bucket()),
@@ -517,23 +528,42 @@ def edge_status(bot_id: str, symbol: str) -> str:
     return _edges.get(bot_id, {}).get(symbol, "unknown")
 
 
-def gate(
+def entry_mode(
     bot_id: str, symbol: str, direction: str | None = None, hour: int | None = None
-) -> tuple[bool, str | None]:
-    """¿Puede el bot abrir en este símbolo (dirección y hora)? -> (sí/no, motivo)."""
-    if edge_status(bot_id, symbol) == "rejected":
-        return False, "sin ventaja validada en el último entrenamiento"
-    for b in _active_blocks(bot_id):
-        if b["symbol"] != symbol:
-            continue
-        if b["direction"] is None or b["direction"] == direction:
-            return False, f"veto de aprendizaje: {b['reason']}"
+) -> tuple[str, str | None]:
+    """Modo de entrada para un símbolo: 'full' | 'probation' | 'blocked'.
+
+    - 'full': ventaja validada y sin vetos -> tamaño completo.
+    - 'probation': sin ventaja validada o con veto de rendimiento -> puede
+      operar a prueba (tamaño PROBATION_SIZE, umbral ×PROBATION_THRESHOLD_MULT
+      y aprobación del meta-modelo). La reentrada se gana operando.
+    - 'blocked': veto horario (duro: a esa hora no se opera).
+    """
     if hour is not None:
         policy = _policies.get(bot_id) or load(bot_id)
         for hb in policy.get("hourBlocks", []):
             if hb["hour"] == hour:
-                return False, f"veto horario: {hb['reason']}"
-    return True, None
+                return "blocked", f"veto horario: {hb['reason']}"
+    mode, why = "full", None
+    if edge_status(bot_id, symbol) == "rejected":
+        mode = "probation"
+        why = "sin ventaja validada en el último entrenamiento"
+    for b in _active_blocks(bot_id):
+        if b["symbol"] != symbol:
+            continue
+        if b["direction"] is None or b["direction"] == direction:
+            mode = "probation"
+            why = f"veto de aprendizaje: {b['reason']}"
+            break
+    return mode, why
+
+
+def gate(
+    bot_id: str, symbol: str, direction: str | None = None, hour: int | None = None
+) -> tuple[bool, str | None]:
+    """Compatibilidad: True salvo bloqueo duro (veto horario)."""
+    mode, why = entry_mode(bot_id, symbol, direction, hour)
+    return mode != "blocked", why
 
 
 def size_multiplier(bot_id: str, symbol: str) -> tuple[float, str | None]:
@@ -555,7 +585,12 @@ def summary(bot_id: str) -> dict:
     edges = _edges.get(bot_id, {})
     trained_at = policy.get("lastTrainedAt")
     hours = RETRAIN_HOURS.get(bot_id, DEFAULT_RETRAIN_HOURS)
+    from .bots import ALL_BOTS
+    cfg = next((cfg for cfg in ALL_BOTS if cfg.id == bot_id), None)
+    pending = training.due_symbols(bot_id, cfg.universe, hours) if cfg else []
     return {
+        "autoTrainPending": pending,
+        "autoTrainBatchSize": 3,
         "blocks": [
             {k: b.get(k) for k in ("symbol", "direction", "reason")}
             for b in _active_blocks(bot_id)
@@ -600,19 +635,17 @@ async def _scheduler_loop() -> None:
             for bot_id, bot in bots.BOTS.items():
                 if training.is_running(bot_id):
                     continue
-                last = training.last_trained_at(bot_id)
-                status = training.training_status(bot_id)
-                # si el último intento acabó sin guardar nada, no insistir en bucle
-                last = max(last or 0, status.get("finishedAt") or 0)
                 hours = RETRAIN_HOURS.get(bot_id, DEFAULT_RETRAIN_HOURS)
-                if now - last >= hours * 3600:
-                    candidates.append((last, bot_id, bot))
-            candidates.sort()  # el más desactualizado primero
-            for _, bot_id, bot in candidates:
+                pending = training.due_symbols(bot_id, bot.cfg.universe, hours, now)
+                if pending:
+                    last = training.training_status(bot_id).get("finishedAt") or 0
+                    candidates.append((last, bot_id, bot, pending))
+            candidates.sort(key=lambda item: (item[0], item[1]))
+            for _, bot_id, bot, pending in candidates:
                 if _trainings_running() >= MAX_CONCURRENT_TRAININGS:
                     break
-                log.info("reentrenamiento automático de %s", bot_id)
-                training.start_training(bot)
+                log.info("autoentrenamiento %s: %s", bot_id, pending[:3])
+                training.start_training(bot, pending[:3])
         except Exception as exc:
             log.warning("planificador de entrenamiento: %s", exc)
         await asyncio.sleep(SCHEDULER_TICK)

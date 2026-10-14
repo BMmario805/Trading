@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "params": {
+    "entryThreshold": 0.75,
+    "slAtr": 2.0,
+    "tpAtr": 4.0,
+    "trailAtr": 2.4
+  },
+  "train": {
+    "expectancy": 20.8468,
+    "trades": 53,
+    "wins": 32,
+    "pnl": 1104.88,
+    "winRate": 60.4,
+    "profitFactor": 1.54,
+    "maxDrawdown": 321.73
+  },
+  "validation": {
+    "expectancy": -83.3919,
+    "trades": 17,
+    "wins": 2,
+    "pnl": -1417.66,
+    "winRate": 11.8,
+    "profitFactor": 0.03,
+    "maxDrawdown": 1417.66
+  },
+  "applied": false,
+  "segments": [
+    {
+      "expectancy": -91.4742,
+      "trades": 10,
+      "wins": 1,
+      "pnl": -914.74,
+      "winRate": 10.0,
+      "profitFactor": 0.01,
+      "maxDrawdown": 914.74
+    },
+    {
+      "expectancy": -71.8457,
+      "trades": 7,
+      "wins": 1,
+      "pnl": -502.92,
+      "winRate": 14.3,
+      "profitFactor": 0.08,
+      "maxDrawdown": 545.27
+    }
+  ],
+  "stress": {
+    "expectancy": null,
+    "trades": 0,
+    "wins": 0,
+    "pnl": 0.0,
+    "winRate": null,
+    "profitFactor": null,
+    "maxDrawdown": 0.0
+  },
+  "engineVersion": 2,
+  "reason": "Muestra, consistencia temporal o costes insuficientes",
+  "bars": 4681,
+  "bot": "orb",
+  "symbol": "SPY",
+  "firstBar": 1781271000,
+  "lastBar": 1788897600,
+  "evaluatedAt": 1788945950,
+  "source": [
+    "yahoo",
+    "SPY"
+  ],
+  "proxy": false,
+  "persisted": false
+}

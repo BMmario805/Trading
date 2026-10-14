@@ -63,12 +63,14 @@ body {
 /* ---------- main ---------- */
 .main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   padding: 14px 18px;
   gap: 12px;
 }
+.main > * { flex-shrink: 0; min-width: 0; }
 .header {
   display: flex;
   justify-content: space-between;
@@ -529,9 +531,36 @@ body {
 .perf-chart {
   position: relative;
   height: 260px;
+  min-width: 0;
+  flex: none;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
+}
+.perf-chart-canvas { position: absolute; inset: 0; min-width: 0; }
+
+/* MT5: tamaños independientes del contenido de los canvas y del laboratorio. */
+.mt5-panel { min-width: 0; }
+.mt5-panel > details { margin: 12px 0; }
+.mt5-panel summary { cursor: pointer; }
+.mt5-panel details ul { max-height: 240px; overflow: auto; overflow-wrap: anywhere; }
+.mt5-performance { min-width: 0; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+.mt5-account-stats { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); margin-bottom: 14px; }
+.mt5-account-stats > div { padding: 12px; gap: 4px; }
+.mt5-account-stats small { color: var(--muted); }
+.mt5-bots-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; align-items: start; }
+.mt5-bot-card { min-width: 0; border: 1px solid var(--border); background: var(--bg-3); border-radius: 8px; padding: 14px; }
+.mt5-bot-card h4 { margin: 0 0 10px; }
+.mt5-bot-card > strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.mt5-bot-card p { margin: 8px 0 0; }
+.mt5-panel .perf-filters, .mt5-panel .perf-dates, .mt5-panel .perf-presets { flex-wrap: wrap; min-width: 0; }
+.mt5-panel .perf-filters select, .mt5-panel .perf-dates input { max-width: 100%; min-width: 0; }
+@media (max-width: 700px) {
+  .watchlist { width: 120px; }
+  .main { padding: 10px; }
+  .mt5-panel { padding: 12px; }
+  .mt5-panel .perf-panel { padding: 10px; }
+  .mt5-panel .bot-stats { grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr)); }
 }
 .perf-empty {
   position: absolute;
@@ -746,4 +775,3 @@ body {
   margin-right: 5px;
   vertical-align: middle;
 }
-

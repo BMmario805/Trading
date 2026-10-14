@@ -13,6 +13,8 @@ from .hub import hub
 from .indicators import technical_analysis
 from . import sentiment as sentiment_mod
 from . import tradingview
+from . import mt5_demo
+from . import mt5_performance
 from .sentiment import get_opinions, get_sentiment
 
 logging.basicConfig(level=logging.INFO)
@@ -22,7 +24,9 @@ logging.basicConfig(level=logging.INFO)
 async def lifespan(_: FastAPI):
     bots.start_all()
     learning.start_scheduler()   # reentrenamiento walk-forward automático
+    mt5_demo.start()
     yield
+    await mt5_demo.stop()
     await learning.stop_scheduler()
     await training.stop_all()
     await bots.stop_all()
@@ -32,6 +36,35 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Trading Dashboard API", lifespan=lifespan)
+
+
+@app.get('/api/mt5')
+async def mt5_status():
+    return dict(mt5_demo.STATE)
+
+
+@app.get('/api/mt5/performance')
+async def mt5_performance_api(bot: str | None = None, symbol: str | None = None,
+                              from_ts: int | None = Query(None, alias='from'),
+                              to_ts: int | None = Query(None, alias='to'), perBot: bool = False):
+    if not mt5_demo.CONFIG_PATH.exists():
+        raise HTTPException(404, 'Cuenta MT5 no configurada')
+    import json
+    cfg = json.loads(mt5_demo.CONFIG_PATH.read_text(encoding='utf-8'))
+    owner = f"{cfg['server']}:{cfg['login']}:"
+    bot_names = [dict(id=c.id, name=c.name, magic=mt5_demo.MAGICS[c.id]) for c in bots.ALL_BOTS]
+    return mt5_performance.performance(owner, bot_names, bot, symbol, from_ts, to_ts, perBot)
+
+
+@app.post('/api/mt5/{action}')
+async def mt5_control(action: str):
+    if action not in ('start', 'stop'):
+        raise HTTPException(400, 'Acción no válida')
+    try:
+        mt5_demo.set_enabled(action == 'start')
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    return {'enabled': action == 'start'}
 
 app.add_middleware(
     CORSMiddleware,
@@ -95,8 +128,19 @@ async def analysis(symbol_id: str, interval: str = "1h"):
     """Análisis técnico + sentimiento combinados en una probabilidad de subida."""
     sym = _symbol(symbol_id)
     candles_data, senti = await asyncio.gather(
-        market_data.get_candles(sym, interval), get_sentiment(sym)
+        market_data.get_candles(sym, interval), get_sentiment(sym),
+        return_exceptions=True,
     )
+    if isinstance(candles_data, Exception):
+        raise HTTPException(502, "No se han podido obtener las velas para el análisis")
+    if isinstance(senti, Exception):
+        logging.getLogger(__name__).warning("Sentimiento no disponible para %s: %s", sym.id, senti)
+        senti = {
+            "symbol": sym.id, "bullishPct": 50, "bearishPct": 50,
+            "label": "no disponible", "sampleSize": 0, "sources": [],
+            "errors": ["Opinión pública temporalmente no disponible"],
+            "updatedAt": None,
+        }
     tech = technical_analysis(candles_data)
 
     # técnico en [-1,1] -> [0,1]; mezcla 60 % técnico / 40 % opinión pública
@@ -264,3 +308,10 @@ async def ws_prices(ws: WebSocket):
         pass
     finally:
         hub.unsubscribe(ws)
+
+
+@app.get("/api/markets/quality")
+async def markets_quality():
+    from . import opportunities
+    data = await opportunities.snapshot()
+    return {"updatedAt": data["at"], "markets": [opportunities.assess(s, data) for s in SYMBOLS if s.source == "binance"]}

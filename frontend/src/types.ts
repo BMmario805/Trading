@@ -240,6 +240,7 @@ export interface BotStatus {
     maxSameCategory: number
     overextAtr: number
   }
+  diagnostics?: Record<string, { reason: string; at: number; score?: number }>
   trainedSymbols: string[]
   learning: BotLearning | null
   config: {
@@ -268,6 +269,7 @@ export interface BotLearning {
   blocks: LearningBlock[]
   sizeMult: Record<string, number>
   edges: Record<string, 'validated' | 'rejected' | 'unknown'>
+  autoTrainPending?: string[]
   autoRetrainHours: number
   lastTrainedAt: number | null
   nextRetrainAt: number | null
@@ -333,6 +335,14 @@ export interface PerfSeries {
 }
 
 export interface BotPerformance {
+  source?: 'mt5' | 'paper'
+  currency?: string | null
+  updatedAt?: number
+  syncError?: string | null
+  cards?: { id: string; name: string; realizedPnl: number; unrealizedPnl: number; totalPnl: number; openPositions: number; closedTrades: number }[]
+  accountHistory?: { ts: number; balance: number; equity: number }[]
+  account?: { balance: number | null; equity: number | null; realizedPnl: number; unrealizedPnl: number; totalPnl: number; netFunding: number; reconciliationDifference?: number | null; historySince: number | null }
+
   points: PerfPoint[]
   summary: PerfSummary
   symbols: string[]

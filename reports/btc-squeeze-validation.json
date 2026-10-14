@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "params": {
+    "entryThreshold": 0.55,
+    "slAtr": 2.0,
+    "tpAtr": 4.0,
+    "trailAtr": 1.2
+  },
+  "train": {
+    "expectancy": 8.2019,
+    "trades": 112,
+    "wins": 57,
+    "pnl": 918.61,
+    "winRate": 50.9,
+    "profitFactor": 1.12,
+    "maxDrawdown": 1583.1
+  },
+  "validation": {
+    "expectancy": -25.4246,
+    "trades": 41,
+    "wins": 17,
+    "pnl": -1042.41,
+    "winRate": 41.5,
+    "profitFactor": 0.69,
+    "maxDrawdown": 1579.16
+  },
+  "applied": false,
+  "segments": [
+    {
+      "expectancy": -40.1103,
+      "trades": 20,
+      "wins": 7,
+      "pnl": -802.21,
+      "winRate": 35.0,
+      "profitFactor": 0.54,
+      "maxDrawdown": 1158.4
+    },
+    {
+      "expectancy": -11.4382,
+      "trades": 21,
+      "wins": 10,
+      "pnl": -240.2,
+      "winRate": 47.6,
+      "profitFactor": 0.85,
+      "maxDrawdown": 969.47
+    }
+  ],
+  "stress": {
+    "expectancy": -49.2091,
+    "trades": 17,
+    "wins": 6,
+    "pnl": -836.56,
+    "winRate": 35.3,
+    "profitFactor": 0.48,
+    "maxDrawdown": 836.56
+  },
+  "engineVersion": 2,
+  "reason": "Muestra, consistencia temporal o costes insuficientes",
+  "bars": 8639,
+  "bot": "squeeze",
+  "symbol": "BTC",
+  "firstBar": 1781170200,
+  "lastBar": 1788944400,
+  "evaluatedAt": 1788945922,
+  "source": [
+    "binance",
+    "BTCUSDT"
+  ],
+  "proxy": false,
+  "persisted": false
+}

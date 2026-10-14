@@ -25,6 +25,8 @@ from itertools import product
 from . import market_data
 from .config import SYMBOLS_BY_ID, Symbol
 from .history import DB_PATH
+from .database import Connection
+from .execution import closed_candles, fresh_signal
 from .indicators import atr_series
 from .strategy import TREND_STEP, resample, score_series
 
@@ -45,9 +47,10 @@ TRAIN_SPLIT = 0.7
 # contamine la validación (purged walk-forward, práctica estándar actual)
 EMBARGO_BARS = 30
 MIN_TRAIN_TRADES = {
-    "scalper": 20, "swing": 8, "trend": 6, "meanrev": 8, "orb": 10, "squeeze": 8,
+    "flow": 10, "scalper": 20, "swing": 8, "trend": 6, "meanrev": 8, "orb": 10, "squeeze": 8,
 }
-MIN_VALIDATION_TRADES = 3
+MIN_VALIDATION_TRADES = 8
+ENGINE_VERSION = 2
 
 # Segundos por vela de cada intervalo de trabajo
 WORK_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
@@ -76,7 +79,7 @@ def train_source(sym: Symbol, interval: str) -> tuple[str, str]:
 
 
 def _conn() -> sqlite3.Connection:
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, factory=Connection)
     con.execute(
         """CREATE TABLE IF NOT EXISTS bot_params (
             bot TEXT NOT NULL,
@@ -88,6 +91,9 @@ def _conn() -> sqlite3.Connection:
             PRIMARY KEY (bot, symbol)
         )"""
     )
+    con.execute("""CREATE TABLE IF NOT EXISTS bot_training_attempts (
+        bot TEXT NOT NULL, symbol TEXT NOT NULL, attempted_at INTEGER NOT NULL,
+        ok INTEGER NOT NULL, PRIMARY KEY (bot, symbol))""")
     return con
 
 
@@ -95,9 +101,10 @@ def load_applied_params() -> dict[tuple[str, str], dict]:
     """Parámetros entrenados y validados, por (bot, símbolo)."""
     with _conn() as con:
         rows = con.execute(
-            "SELECT bot, symbol, params FROM bot_params WHERE applied = 1"
+            "SELECT bot, symbol, params, metrics FROM bot_params WHERE applied = 1"
         ).fetchall()
-    return {(b, s): json.loads(p) for b, s, p in rows}
+    return {(b, s): json.loads(p) for b, s, p, m in rows
+            if json.loads(m).get("engineVersion") == ENGINE_VERSION}
 
 
 def load_results() -> list[dict]:
@@ -108,10 +115,33 @@ def load_results() -> list[dict]:
     return [
         {
             "bot": r[0], "symbol": r[1], "params": json.loads(r[2]),
-            "metrics": json.loads(r[3]), "applied": bool(r[4]), "trainedAt": r[5],
+            "metrics": json.loads(r[3]), "applied": bool(r[4]) and json.loads(r[3]).get("engineVersion") == ENGINE_VERSION, "trainedAt": r[5],
         }
         for r in rows
     ]
+
+
+def due_symbols(bot_id: str, universe: tuple[str, ...], hours: float, now: float | None = None) -> list[str]:
+    """Pendientes por instrumento; un fallo de red tiene backoff de una hora."""
+    now = time.time() if now is None else now
+    with _conn() as con:
+        attempts = {s: (ts, ok) for s, ts, ok in con.execute(
+            'SELECT symbol, attempted_at, ok FROM bot_training_attempts WHERE bot=?', (bot_id,))}
+        saved = {s: (ts, json.loads(m).get('engineVersion')) for s, ts, m in con.execute(
+            'SELECT symbol, trained_at, metrics FROM bot_params WHERE bot=?', (bot_id,))}
+    due = []
+    for symbol in universe:
+        stamp, version = saved.get(symbol, (0, None))
+        attempt, ok = attempts.get(symbol, (0, 1))
+        if not ok and now - attempt < 3600:
+            continue
+        last = max(stamp, attempt) if version == ENGINE_VERSION or ok and attempt else 0
+        if symbol not in saved or version != ENGINE_VERSION:
+            if not attempt or now - attempt >= (hours * 3600 if ok else 3600):
+                due.append((0, symbol))
+        elif now - last >= hours * 3600:
+            due.append((last, symbol))
+    return [symbol for _, symbol in sorted(due)]
 
 
 def last_trained_at(bot_id: str) -> int | None:
@@ -225,6 +255,7 @@ def simulate(
         max_dd = max(max_dd, equity_peak - equity)
         direction = 0
 
+    end = min(end, len(candles))
     for i in range(max(start, 1), end):
         c = candles[i]
         half = c["close"] * spread_pct / 2
@@ -233,7 +264,7 @@ def simulate(
             bars_held += 1
             if direction > 0:
                 if c["low"] <= sl:            # el stop primero: es lo conservador
-                    close(sl - half)
+                    close(min(sl, c["open"]) - half)
                     continue
                 if c["high"] >= tp:
                     close(tp - half)
@@ -245,7 +276,7 @@ def simulate(
                     sl = max(sl, entry + 2 * half, best - tr * atr0)
             else:
                 if c["high"] >= sl:
-                    close(sl + half)
+                    close(max(sl, c["open"]) + half)
                     continue
                 if c["low"] <= tp:
                     close(tp + half)
@@ -270,22 +301,32 @@ def simulate(
             continue
         # solo con señal FRESCA: el cruce del umbral ocurrió en las últimas
         # 3 velas (la misma ventana anti-madurez que aplica el bot en vivo)
-        if all(abs(scores[j]) >= threshold for j in range(max(1, i - 3), i)):
+        if not fresh_signal(s, scores[max(0, i - 3):i], threshold):
             continue
         # filtro de coste: sin volatilidad suficiente el spread se come el beneficio
         if a < 3 * c["close"] * spread_pct:
             continue
+        # Señal conocida al cierre; ejecución en la siguiente apertura.
+        if i + 1 >= end:
+            continue
+        fill = candles[i + 1]["open"]
+        if abs(fill - c["close"]) > a:
+            continue
         direction = 1 if s > 0 else -1
-        entry = c["close"] + half * direction
+        entry = fill + fill * spread_pct / 2 * direction
         atr0 = a
         sl = entry - direction * sl_atr * a
         tp = entry + direction * tp_atr * a
-        qty = min(risk_amount / (sl_atr * a), notional_cap / entry)
+        qty = min(risk_amount / (sl_atr * a + entry * spread_pct / 2), notional_cap / entry)
         best = entry
         bars_held = 0
 
+    if direction:
+        final_price = candles[end - 1]["close"]
+        close(final_price * (1 - direction * spread_pct / 2))
     n = wins + losses
     return {
+        "expectancy": round(pnl / n, 4) if n else None,
         "trades": n,
         "wins": wins,
         "pnl": round(pnl, 2),
@@ -329,7 +370,7 @@ def optimize(
         )
         if m["trades"] < min_trades:
             continue
-        pf = m["profitFactor"] or 0.0
+        pf = m["profitFactor"] if m["profitFactor"] is not None else (3.0 if m["pnl"] > 0 else 0.0)
         # rentabilidad ponderada por consistencia y penalizada por drawdown:
         # entre dos configuraciones con el mismo PnL gana la de curva más suave
         dd_penalty = 1.0 / (1.0 + m["maxDrawdown"] / max(risk_amount * 20, 1e-9))
@@ -346,12 +387,29 @@ def optimize(
         max_hold_bars, cooldown_bars, risk_amount, notional_cap,
         min(split + EMBARGO_BARS, len(candles)), len(candles),
     )
+    val_start = min(split + EMBARGO_BARS, len(candles))
+    middle = (val_start + len(candles)) // 2
+    segments = [simulate(
+        candles, scores, atrs, spread_pct, th, sl, tp, tr,
+        max_hold_bars, cooldown_bars, risk_amount, notional_cap, lo, hi,
+    ) for lo, hi in ((val_start, middle), (middle, len(candles)))]
+    stress = simulate(
+        candles, scores, atrs, spread_pct * 2, th, sl, tp, tr,
+        max_hold_bars, cooldown_bars, risk_amount, notional_cap, val_start, len(candles),
+    )
+    accepted = (val["pnl"] > 0 and val["trades"] >= MIN_VALIDATION_TRADES
+                and all(m["pnl"] > 0 and m["trades"] >= 2 for m in segments)
+                and stress["pnl"] > 0 and stress["trades"] >= MIN_VALIDATION_TRADES)
     return {
         "ok": True,
         "params": {"entryThreshold": th, "slAtr": sl, "tpAtr": tp, "trailAtr": tr},
         "train": best_train,
         "validation": val,
-        "applied": val["pnl"] > 0 and val["trades"] >= MIN_VALIDATION_TRADES,
+        "applied": accepted,
+        "segments": segments,
+        "stress": stress,
+        "engineVersion": ENGINE_VERSION,
+        "reason": "Validación y costes reforzados superados" if accepted else "Muestra, consistencia temporal o costes insuficientes",
         "bars": len(candles),
     }
 
@@ -372,6 +430,7 @@ def is_running(bot_id: str) -> bool:
 async def _train_symbol(bot, sym: Symbol) -> dict:
     cfg = bot.cfg
     c_work = await fetch_history(cfg.id, sym, cfg.work_interval)
+    c_work = closed_candles(c_work, WORK_SECONDS[cfg.work_interval], time.time())
     if len(c_work) < 500:
         return {"symbol": sym.id, "ok": False, "reason": f"histórico insuficiente ({len(c_work)} velas)"}
     trend_step = TREND_STEP.get(cfg.id, 86400)
@@ -393,14 +452,22 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
 
     result = await asyncio.to_thread(_run)
     result["symbol"] = sym.id
-    if result.get("ok"):
-        with _conn() as con:
-            con.execute(
+    result["source"] = dict(zip(("provider", "symbol"), train_source(sym, cfg.work_interval)))
+    result["proxy"] = sym.source == "swissquote"
+    if result["proxy"]:
+        result["applied"] = False
+        result["reason"] = "Histórico proxy: resultado informativo, no valida el instrumento spot"
+    # Un resultado negativo revoca parámetros anteriores; un error de red no.
+    if not result.get("ok"):
+        result.setdefault("params", {})
+        result["applied"] = False
+    with _conn() as con:
+        con.execute(
                 "INSERT OR REPLACE INTO bot_params VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     cfg.id, sym.id,
                     json.dumps(result["params"]),
-                    json.dumps({"train": result["train"], "validation": result["validation"]}),
+                    json.dumps({k: result.get(k) for k in ("train", "validation", "segments", "stress", "engineVersion", "reason", "source", "proxy")}),
                     int(result["applied"]), int(time.time()),
                 ),
             )
@@ -420,6 +487,9 @@ async def _train_bot(bot, symbols: list[str]) -> None:
             except Exception as exc:
                 log.warning("entrenamiento %s/%s falló: %s", bot.cfg.id, symbol_id, exc)
                 result = {"symbol": symbol_id, "ok": False, "reason": str(exc)[:200]}
+            with _conn() as con:
+                con.execute('INSERT OR REPLACE INTO bot_training_attempts VALUES (?, ?, ?, ?)',
+                            (bot.cfg.id, symbol_id, int(time.time()), int(bool(result.get('ok')))))
             status["results"].append(result)
             log.info("entrenado %s/%s: %s", bot.cfg.id, symbol_id,
                      "aplicado" if result.get("applied") else result.get("reason", "no aplicado"))

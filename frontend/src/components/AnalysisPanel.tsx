@@ -3,12 +3,13 @@ import type { Analysis } from '../types'
 interface Props {
   analysis: Analysis | null
   loading: boolean
+  error?: string | null
   onSourceClick: (source: string) => void
 }
 
-export default function AnalysisPanel({ analysis, loading, onSourceClick }: Props) {
+export default function AnalysisPanel({ analysis, loading, error, onSourceClick }: Props) {
   if (loading && !analysis) return <div className="panel">Cargando análisis…</div>
-  if (!analysis) return <div className="panel">Sin datos de análisis.</div>
+  if (!analysis) return <div className="panel" role="status">{error || "Sin datos de análisis."}</div>
 
   const { technical, sentiment, upProbability, verdict } = analysis
   const verdictClass =
@@ -16,6 +17,7 @@ export default function AnalysisPanel({ analysis, loading, onSourceClick }: Prop
 
   return (
     <div className="panels">
+      {error && <p role="status">{error} Se muestran los últimos datos recibidos.</p>}
       <div className="panel">
         <h3>Probabilidad combinada</h3>
         <div className={`verdict ${verdictClass}`}>
@@ -25,8 +27,9 @@ export default function AnalysisPanel({ analysis, loading, onSourceClick }: Prop
           <div className="meter-fill" style={{ width: `${upProbability}%` }} />
         </div>
         <p className="muted small">
-          60% análisis técnico + 40% opinión pública. No es asesoramiento
-          financiero.
+          {sentiment.sampleSize > 0
+            ? '60% análisis técnico + 40% opinión pública.'
+            : 'Solo análisis técnico: opinión pública sin muestra disponible.'} No es asesoramiento financiero.
         </p>
       </div>
 
@@ -47,6 +50,7 @@ export default function AnalysisPanel({ analysis, loading, onSourceClick }: Prop
 
       <div className="panel">
         <h3>Opinión pública</h3>
+        {sentiment.sampleSize > 0 && <>
         <div className="senti-bar">
           <div
             className="senti-bull"
@@ -57,6 +61,7 @@ export default function AnalysisPanel({ analysis, loading, onSourceClick }: Prop
           <span className="up">▲ {sentiment.bullishPct}% alcista</span>
           <span className="down">{sentiment.bearishPct}% bajista ▼</span>
         </div>
+        </>}
         <p>
           Sentimiento <strong>{sentiment.label}</strong>
           {sentiment.sampleSize > 0 && (

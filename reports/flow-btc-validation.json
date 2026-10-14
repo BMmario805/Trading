@@ -1,0 +1,15 @@
+{
+  "ok": false,
+  "reason": "ninguna configuración rentable en el tramo de entrenamiento",
+  "bot": "flow",
+  "symbol": "BTC",
+  "firstBar": 1781171100,
+  "lastBar": 1788945300,
+  "evaluatedAt": 1788946928,
+  "source": [
+    "binance",
+    "BTCUSDT"
+  ],
+  "proxy": false,
+  "persisted": false
+}

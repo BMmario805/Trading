@@ -139,7 +139,7 @@ function LearningInfo({ learning }: { learning: BotLearning }) {
   const rejected = edges.filter(([, e]) => e === 'rejected').map(([s]) => s)
   const boosted = Object.entries(learning.sizeMult).filter(([, m]) => m > 1)
   const hasContent =
-    learning.blocks.length > 0 || validated.length > 0 || rejected.length > 0
+    learning.blocks.length > 0 || validated.length > 0 || rejected.length > 0 || (learning.autoTrainPending?.length ?? 0) > 0
   if (!hasContent) return null
   return (
     <div className="learning-info">
@@ -155,9 +155,9 @@ function LearningInfo({ learning }: { learning: BotLearning }) {
             {validated.length > 0 && ' · '}
             <span
               className="down"
-              title={`${rejected.join(', ')}: sin ventaja en el último walk-forward; no se operan hasta revalidar`}
+              title={`${rejected.join(', ')}: sin validación vigente; pueden explorar a tamaño reducido`}
             >
-              {rejected.length} sin ventaja (no se operan)
+              {rejected.length} sin validación (modo a prueba)
             </span>
           </>
         )}
@@ -165,6 +165,11 @@ function LearningInfo({ learning }: { learning: BotLearning }) {
           <span>
             {' · tamaño ↑ en '}
             {boosted.map(([s, m]) => `${s} ×${m}`).join(', ')}
+          </span>
+        )}
+        {!!learning.autoTrainPending?.length && (
+          <span title={learning.autoTrainPending.join(', ')}>
+            {' · autoentrenamiento: '}{learning.autoTrainPending.length} mercados pendientes
           </span>
         )}
         {learning.nextRetrainAt && (
@@ -368,6 +373,19 @@ function BotCard({
         </p>
       )}
 
+      {bot.diagnostics && (
+        <details className="small muted">
+          <summary>Diagnóstico de entradas por mercado</summary>
+          <ul>
+            {Object.entries(bot.diagnostics).map(([symbol, d]) => (
+              <li key={symbol}>
+                {symbol}: {d.reason}{d.score != null ? ` (señal ${d.score.toFixed(3)})` : ''}
+                {' · '}{fmtTime(d.at)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <PositionsTable bot={bot} onSelect={setDetailTrade} />
 
       {bot.learning && <LearningInfo learning={bot.learning} />}

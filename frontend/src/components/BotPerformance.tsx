@@ -22,6 +22,7 @@ const BOT_COLORS: Record<string, string> = {
   meanrev: '#b388ff',
   orb: '#26c6da',
   squeeze: '#ec407a',
+  flow: '#26a69a',
 }
 const FALLBACK_COLORS = ['#66bb6a', '#ffa726', '#8d6e63', '#78909c']
 
@@ -37,11 +38,11 @@ const PRESETS = [
 
 type PresetId = (typeof PRESETS)[number]['id'] | 'custom'
 
-const fmtPnl = (v: number) =>
-  `${v >= 0 ? '+' : '-'}$${Math.abs(v).toLocaleString('en-US', {
+const formatPnl = (v: number, currency: string) =>
+  `${v >= 0 ? '+' : '-'}${Math.abs(v).toLocaleString('es-ES', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`
+  })} ${currency}`
 
 /** Epoch (s) del inicio del día local de un <input type="date"> (YYYY-MM-DD). */
 const dateToEpoch = (date: string, endOfDay = false) => {
@@ -50,7 +51,7 @@ const dateToEpoch = (date: string, endOfDay = false) => {
   return Math.floor(t.getTime() / 1000)
 }
 
-export default function BotPerformance() {
+export default function BotPerformance({ source = 'paper' }: { source?: 'paper' | 'mt5' }) {
   const [bot, setBot] = useState('')
   const [symbol, setSymbol] = useState('')
   const [preset, setPreset] = useState<PresetId>('7d')
@@ -58,6 +59,8 @@ export default function BotPerformance() {
   const [toDate, setToDate] = useState('')
   const [perBot, setPerBot] = useState(false)
   const [perf, setPerf] = useState<Perf | null>(null)
+  const [error, setError] = useState(false)
+  const fmtPnl = (v: number) => formatPnl(v, perf?.currency ?? (source === 'paper' ? 'USD' : ''))
 
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -120,25 +123,27 @@ export default function BotPerformance() {
         from,
         to,
         perBot,
+        source,
       })
         .then((p) => {
-          if (!cancelled) setPerf(p)
+          if (!cancelled) { setPerf(p); setError(false) }
         })
-        .catch((e) => console.error('performance', e))
+        .catch(() => { if (!cancelled) setError(true) })
     }
     load()
-    const id = window.setInterval(load, REFRESH_MS)
+    const id = window.setInterval(load, source === 'mt5' ? 10_000 : REFRESH_MS)
     return () => {
       cancelled = true
       window.clearInterval(id)
     }
-  }, [bot, symbol, preset, fromDate, toDate, perBot])
+  }, [bot, symbol, preset, fromDate, toDate, perBot, source])
 
   // pintar la curva total o una línea por bot
   useEffect(() => {
     const chart = chartRef.current
     const baseline = baselineRef.current
     if (!perf || !chart || !baseline) return
+    baseline.applyOptions({ priceFormat: { type: 'custom', formatter: (v: number) => fmtPnl(v) } })
     for (const s of linesRef.current) {
       try {
         chart.removeSeries(s)
@@ -175,10 +180,10 @@ export default function BotPerformance() {
   return (
     <div className="panel perf-panel">
       <div className="perf-head">
-        <h3>📊 Rendimiento de los bots</h3>
+        <h3>📊 {source === 'mt5' ? 'Rendimiento MT5 · cuenta y bots' : 'Rendimiento de simulación local'}</h3>
         <div className="perf-filters">
           <select value={bot} onChange={(e) => setBot(e.target.value)}>
-            <option value="">Todos los bots</option>
+            <option value="">{source === 'mt5' ? 'Cuenta completa' : 'Todos los bots'}</option>
             {(perf?.bots ?? []).map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
@@ -235,14 +240,15 @@ export default function BotPerformance() {
         </div>
       </div>
 
+      {(error || perf?.syncError) && <p role="status">No se ha podido actualizar el rendimiento. Se muestran los últimos datos sincronizados.</p>}
       {s && (
         <div className="bot-stats perf-stats">
           <div>
-            <small className="muted">PnL realizado</small>
+            <small className="muted">{source === 'mt5' ? 'PnL neto contabilizado' : 'PnL realizado'}</small>
             <strong className={s.pnl >= 0 ? 'up' : 'down'}>{fmtPnl(s.pnl)}</strong>
           </div>
           <div>
-            <small className="muted">Operaciones</small>
+            <small className="muted">Posiciones cerradas</small>
             <strong>{s.trades}</strong>
           </div>
           <div>
@@ -279,7 +285,8 @@ export default function BotPerformance() {
         </div>
       )}
 
-      <div className="perf-chart" ref={containerRef}>
+      <div className="perf-chart">
+        <div className="perf-chart-canvas" ref={containerRef} />
         {perf &&
           (perBot ? (perf.series ?? []).length === 0 : perf.points.length === 0) && (
             <p className="muted small perf-empty">
@@ -289,8 +296,9 @@ export default function BotPerformance() {
           )}
       </div>
       <p className="muted small">
-        PnL acumulado de operaciones cerradas (un punto por operación) · se
-        actualiza cada 30 s.
+        {source === 'mt5'
+          ? 'Historial MT5: resultado, comisiones, swaps y tasas. Incluye cierres parciales y costes de apertura; excluye aportaciones y retiradas. Actualización cada 10 s. El acierto cuenta posiciones completamente cerradas.'
+          : 'PnL acumulado de operaciones cerradas · actualización cada 30 s.'}
       </p>
     </div>
   )

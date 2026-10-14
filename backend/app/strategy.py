@@ -19,6 +19,8 @@ por vela: el bot en vivo usa el último valor y el backtest recorre toda la
 serie. Así lo que se entrena es EXACTAMENTE lo que se opera.
 """
 
+from .flow import flow_scores, chaikin_money_flow
+
 from .indicators import (
     adx_series,
     atr,
@@ -31,6 +33,8 @@ from .indicators import (
     zscore_series,
 )
 from .systems import (
+    anchored_vwap_votes,
+    aroon_votes,
     bbw_expansion_series,
     cci_trend_votes,
     cci_votes,
@@ -48,13 +52,17 @@ from .systems import (
     momentum_votes,
     obv_trend_votes,
     opening_range_series,
+    order_block_series,
     pattern_series,
     psar_votes,
+    pullback_votes,
+    ribbon_votes,
     rvol_series,
     squeeze_release_series,
     squeeze_state,
     sr_bounce_series,
     stoch_votes,
+    stochrsi_votes,
     structure_series,
     supertrend_votes,
     sweep_series,
@@ -73,6 +81,7 @@ TREND_STEP = {
     "trend": 86400,      # 1d
     "meanrev": 86400,    # 1d
     "orb": 900,          # 15m
+    "flow": 3600,
     "squeeze": 3600,     # 1h
 }
 
@@ -228,6 +237,7 @@ def _event_series(c_work: list[dict]) -> list[list[float]]:
         divergence_series(c_work, pivots),
         fvg_series(c_work),
         sweep_series(c_work, pivots),
+        order_block_series(c_work),
     ]
 
 
@@ -255,6 +265,9 @@ def scalper_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
     ka = kama_votes(c_work)
     vx = vortex_votes(c_work)
     struct = structure_series(c_work)
+    rib = ribbon_votes(c_work)
+    pull = pullback_votes(c_work)
+    av = anchored_vwap_votes(c_work)
 
     trend_scores: list[float] = []
     for i in range(n):
@@ -285,11 +298,18 @@ def scalper_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
             votes.append(vx[i])
         if struct[i]:  # estructura de mercado SMC (BOS/CHoCH)
             votes.append(struct[i])
+        if rib[i]:  # cinta de EMAs perfectamente ordenada
+            votes.append(rib[i])
+        if pull[i]:  # pullback de continuación a la EMA20
+            votes.append(pull[i])
+        if av[i]:  # VWAP anclado al último giro
+            votes.append(av[i])
         votes.append(htf[i])
         trend_scores.append(sum(votes) / len(votes) if votes else 0.0)
 
     events = _event_series(c_work) + [
         stoch_votes(c_work), williams_votes(c_work), cci_votes(c_work),
+        stochrsi_votes(c_work),
     ]
     return _regime_blend(trend_scores, _range_scores(closes, r, pb, events), adx, chop)
 
@@ -320,6 +340,10 @@ def swing_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
     ka = kama_votes(c_work)
     vx = vortex_votes(c_work)
     struct = structure_series(c_work)
+    rib = ribbon_votes(c_work)
+    ar = aroon_votes(c_work)
+    pull = pullback_votes(c_work)
+    av = anchored_vwap_votes(c_work)
 
     trend_scores: list[float] = []
     for i in range(n):
@@ -355,12 +379,20 @@ def swing_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
             votes.append(vx[i])
         if struct[i]:  # estructura de mercado (BOS/CHoCH)
             votes.append(struct[i])
+        if rib[i]:  # cinta de EMAs ordenada
+            votes.append(rib[i])
+        if ar[i]:  # Aroon: tendencia fresca
+            votes.append(ar[i])
+        if pull[i]:  # pullback de continuación
+            votes.append(pull[i])
+        if av[i]:  # VWAP anclado
+            votes.append(av[i])
         votes.append(htf[i])
         trend_scores.append(sum(votes) / len(votes) if votes else 0.0)
 
     events = _event_series(c_work) + [
         stoch_votes(c_work), mfi_votes(c_work), cci_votes(c_work),
-        williams_votes(c_work),
+        williams_votes(c_work), stochrsi_votes(c_work),
     ]
     return _regime_blend(trend_scores, _range_scores(closes, r, pb, events), adx, chop)
 
@@ -394,6 +426,10 @@ def trend_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
     ka = kama_votes(c_work)
     vx = vortex_votes(c_work)
     struct = structure_series(c_work)
+    rib = ribbon_votes(c_work)
+    ar = aroon_votes(c_work)
+    pull = pullback_votes(c_work)
+    av = anchored_vwap_votes(c_work)
 
     out: list[float] = []
     for i in range(n):
@@ -423,6 +459,14 @@ def trend_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
             votes.append(vx[i])
         if struct[i]:  # estructura BOS/CHoCH: el esqueleto de la tendencia
             votes.append(struct[i])
+        if rib[i]:  # cinta de EMAs ordenada
+            votes.append(rib[i])
+        if ar[i]:  # Aroon: la tendencia sigue fresca
+            votes.append(ar[i])
+        if pull[i]:  # pullback: reengancharse a la tendencia sin esperar ruptura
+            votes.append(pull[i])
+        if av[i]:  # VWAP anclado al último giro
+            votes.append(av[i])
         votes.append(htf[i])
         base = sum(votes) / len(votes) if votes else 0.0
         # sin tendencia (ADX bajo) el seguidor de tendencia no tiene ventaja
@@ -456,6 +500,8 @@ def meanrev_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
     cv = cci_votes(c_work)
     zs = zscore_series(closes)
     swp = sweep_series(c_work)
+    obk = order_block_series(c_work)
+    srv = stochrsi_votes(c_work)
 
     out: list[float] = []
     for i in range(n):
@@ -476,6 +522,8 @@ def meanrev_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
                 score = -0.35  # presión de salida (no abre cortos)
             if score > 0 and swp[i] > 0:  # barrido de liquidez: suelo con rechazo
                 score += 0.15
+            if score > 0 and obk[i] > 0:  # reacción en order block de demanda
+                score += 0.1
         else:
             if v2 >= 85:  # euforia en tendencia bajista -> venta
                 score = -(0.55 + 0.45 * (v2 - 85) / 15)
@@ -485,6 +533,8 @@ def meanrev_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
                 score = 0.35
             if score < 0 and swp[i] < 0:  # barrido de máximos con rechazo
                 score -= 0.15
+            if score < 0 and obk[i] < 0:  # reacción en order block de oferta
+                score -= 0.1
         # confirmación de osciladores en la misma dirección (%B, estocástico,
         # Williams %R y CCI): cuantos más extremos coinciden, más convicción
         if score >= 0.5:
@@ -496,6 +546,8 @@ def meanrev_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
                 score += 0.05
             if cv[i] > 0:
                 score += 0.05
+            if srv[i] > 0:
+                score += 0.05
         elif score <= -0.5:
             if pb[i] is not None and pb[i] >= 0.95:
                 score -= 0.1
@@ -504,6 +556,8 @@ def meanrev_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
             if wv[i] < 0:
                 score -= 0.05
             if cv[i] < 0:
+                score -= 0.05
+            if srv[i] < 0:
                 score -= 0.05
         out.append(_clip(score))
     return out
@@ -525,6 +579,7 @@ def orb_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
     rv = rvol_series(c_work)
     htf = _htf_trend_votes(c_work, c_trend, 9, 21, 900)
     vw = vwap_votes(c_work)
+    av = anchored_vwap_votes(c_work)
 
     out: list[float] = []
     for i in range(n):
@@ -538,6 +593,8 @@ def orb_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
             s += 0.15 * htf[i]
         if vw[i]:  # el lado del VWAP: la referencia institucional de la sesión
             s += 0.1 * vw[i]
+        if av[i]:  # VWAP anclado al último giro
+            s += 0.08 * av[i]
         out.append(_clip(s))
     return out
 
@@ -564,6 +621,7 @@ def squeeze_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
     kb = keltner_break_votes(c_work)
     mom = momentum_votes(c_work)
     vx = vortex_votes(c_work)
+    ar = aroon_votes(c_work)
 
     out: list[float] = []
     for i in range(n):
@@ -592,6 +650,8 @@ def squeeze_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
             agree += 0.08
         if vx[i] == v:  # el Vortex rota en la misma dirección
             agree += 0.08
+        if ar[i] == v:  # Aroon: la tendencia que nace es fresca
+            agree += 0.06
         base = 0.42 if weak else 0.5
         out.append(_clip(v * (base + agree)))
     return out
@@ -604,6 +664,7 @@ SCORE_FNS = {
     "meanrev": meanrev_scores,
     "orb": orb_scores,
     "squeeze": squeeze_scores,
+    "flow": flow_scores,
 }
 
 
@@ -623,6 +684,13 @@ def confirmations(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[
     informativo). Es lo que ve el usuario al preguntar POR QUÉ se abrió una
     operación, así que cubre todos los sistemas que componen la señal.
     """
+    if bot_id == "flow":
+        money = chaikin_money_flow(c_work)[-1] if c_work else None
+        signal = flow_scores(c_work, c_trend)[-1] if c_work else 0.0
+        return [
+            {"system": "Chaikin Money Flow (20)", "detail": f"CMF {money:+.3f}" if money is not None else "Sin volumen suficiente", "vote": round(money or 0, 3)},
+            {"system": "Flujo y continuación", "detail": "EMA20/50, marco 1h cerrado, volumen relativo y ruptura/pullback", "vote": round(signal, 3)},
+        ]
     closes = [c["close"] for c in c_work]
     if len(closes) < 60:
         return [{"system": "Datos", "detail": "datos insuficientes", "vote": 0.0}]
@@ -787,6 +855,26 @@ def confirmations(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[
     if struct:
         add("Estructura (SMC)", f"Estructura de mercado {'alcista (BOS)' if struct > 0 else 'bajista (BOS)'}", struct)
 
+    rib = ribbon_votes(c_work)[-1]
+    if rib:
+        add("Cinta EMAs", f"Cinta 8/13/21/34/55 ordenada {'al alza' if rib > 0 else 'a la baja'}", rib)
+
+    ar = aroon_votes(c_work)[-1]
+    if ar:
+        add("Aroon", f"Tendencia {'alcista' if ar > 0 else 'bajista'} fresca (Aroon)", ar)
+
+    pull = pullback_votes(c_work)[-1]
+    if pull:
+        add("Pullback", f"Retroceso a la EMA20 con cierre a favor ({'alcista' if pull > 0 else 'bajista'})", pull)
+
+    av = anchored_vwap_votes(c_work)[-1]
+    if av:
+        add("VWAP anclado", f"Precio {'sobre' if av > 0 else 'bajo'} el VWAP del último giro", av)
+
+    srv = stochrsi_votes(c_work)[-1]
+    if srv:
+        add("StochRSI", f"RSI estocástico en {'sobreventa' if srv > 0 else 'sobrecompra'}", srv)
+
     p_votes, p_names = pattern_series(c_work)
     if p_names[-1]:
         add("Velas japonesas", f"Patrón: {p_names[-1]}", p_votes[-1])
@@ -809,6 +897,10 @@ def confirmations(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[
     if swp:
         kind = "mínimos barridos con rechazo (trampa bajista)" if swp > 0 else "máximos barridos con rechazo (trampa alcista)"
         add("Barrido de liquidez", kind, swp)
+    obk = order_block_series(c_work)[-1]
+    if obk:
+        side = "order block de demanda" if obk > 0 else "order block de oferta"
+        add("Order Block", f"Reacción en {side} (SMC)", obk)
 
     step = TREND_STEP.get(bot_id, 86400)
     htf = _htf_trend_votes(c_work[-1:], c_trend, 20, 50, step)[0]

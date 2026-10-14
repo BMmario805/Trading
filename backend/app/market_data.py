@@ -93,7 +93,7 @@ async def _yahoo_candles(source_symbol: str, y_int: str, y_range: str, limit: in
     return candles[-limit:]
 
 
-async def get_candles(sym: Symbol, interval: str, limit: int = 400) -> list[dict]:
+async def _fetch_candles(sym: Symbol, interval: str, limit: int = 400) -> list[dict]:
     """Devuelve velas normalizadas: time (epoch s, UTC), open, high, low, close, volume."""
     if interval not in INTERVALS:
         raise ValueError(f"Intervalo no soportado: {interval}")
@@ -140,6 +140,25 @@ async def get_candles(sym: Symbol, interval: str, limit: int = 400) -> list[dict
         ]
 
     return await _yahoo_candles(sym.source_symbol, y_int, y_range, limit)
+
+
+# Peticiones compartidas por los bots que usan el mismo instrumento y marco.
+_candle_cache: dict[tuple, tuple[float, list[dict]]] = {}
+_candle_locks: dict[tuple, asyncio.Lock] = {}
+
+
+async def get_candles(sym: Symbol, interval: str, limit: int = 400) -> list[dict]:
+    key = (sym.id, interval, limit)
+    async with _candle_locks.setdefault(key, asyncio.Lock()):
+        cached = _candle_cache.get(key)
+        if cached and time.time() - cached[0] < 10:
+            return [dict(c) for c in cached[1]]
+        rows = await _fetch_candles(sym, interval, limit)
+        _candle_cache[key] = (time.time(), rows)
+        if len(_candle_cache) > 256:
+            oldest = min(_candle_cache, key=lambda k: _candle_cache[k][0])
+            _candle_cache.pop(oldest, None)
+        return [dict(c) for c in rows]
 
 
 # cache de variación diaria del proxy para no llamar a Yahoo cada 2 s
@@ -195,5 +214,5 @@ async def get_price(sym: Symbol) -> dict:
         "symbol": sym.id,
         "price": price,
         "changePct": round(change, 2),
-        "time": int(time.time()),
+        "time": int(meta.get("regularMarketTime") or 0),
     }

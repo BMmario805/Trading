@@ -6,6 +6,7 @@ import AnalysisPanel from './components/AnalysisPanel'
 import SentimentHistory from './components/SentimentHistory'
 import OpinionsModal from './components/OpinionsModal'
 import BotsPanel from './components/BotsPanel'
+import MetaTraderPanel from './components/MetaTraderPanel'
 import {
   INTERVALS,
   type Analysis,
@@ -24,6 +25,7 @@ export default function App() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [opinionsSource, setOpinionsSource] = useState<string | null>(null)
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const socketRef = useRef<PriceSocket | null>(null)
@@ -62,14 +64,17 @@ export default function App() {
       setLoadingAnalysis(true)
       fetchAnalysis(selected, interval)
         .then((a) => {
-          if (!cancelled) setAnalysis(a)
+          if (!cancelled) { setAnalysis(a); setAnalysisError(null) }
         })
-        .catch((e) => console.error('analysis', e))
+        .catch(() => {
+          if (!cancelled) setAnalysisError('No se ha podido actualizar el análisis. Se reintentará automáticamente.')
+        })
         .finally(() => {
           if (!cancelled) setLoadingAnalysis(false)
         })
     }
     setAnalysis(null)
+    setAnalysisError(null)
     load()
     const id = window.setInterval(load, ANALYSIS_REFRESH_MS)
     return () => {
@@ -129,10 +134,15 @@ export default function App() {
         <AnalysisPanel
           analysis={analysis}
           loading={loadingAnalysis}
+          error={analysisError}
           onSourceClick={setOpinionsSource}
         />
         <SentimentHistory symbol={selected} />
-        <BotsPanel />
+        <MetaTraderPanel />
+        <details className="panel">
+          <summary>Laboratorio de paper trading · simulación independiente de MT5</summary>
+          <BotsPanel />
+        </details>
         {opinionsSource && (
           <OpinionsModal
             symbol={selected}

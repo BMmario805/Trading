@@ -1054,3 +1054,194 @@ def indicator_panel(candles: list[dict]) -> dict:
         "roc": _line_points(candles, roc(closes)),
         "atr": _line_points(candles, atr_series(candles)),
     }
+
+
+# ---------------------------------------------------------------------------
+# Herramientas adicionales: order blocks (SMC), VWAP anclado, cinta de EMAs,
+# Aroon, StochRSI y pullbacks de continuación de tendencia
+# ---------------------------------------------------------------------------
+
+
+def order_block_series(
+    candles: list[dict], max_zones: int = 10, max_age: int = 150
+) -> list[float]:
+    """Order blocks (SMC): la última vela contraria antes de un desplazamiento
+    impulsivo marca dónde se posicionaron los institucionales.
+
+    Vela de desplazamiento = cuerpo >= 1.2×ATR. El order block alcista es la
+    última vela bajista de las 3 previas; cuando el precio VUELVE a la zona y
+    cierra sosteniéndose (vela a favor), vota ±1. La zona se invalida si el
+    precio la atraviesa por completo.
+    """
+    n = len(candles)
+    out = [0.0] * n
+    if n < 20:
+        return out
+    atrs = atr_series(candles)
+    zones: list[dict] = []  # {lo, hi, dir, born}
+    for i in range(4, n):
+        c = candles[i]
+        # 1) reacción sobre zonas existentes
+        for z in zones:
+            if z["born"] >= i:
+                continue
+            if z["dir"] > 0:
+                if c["low"] <= z["hi"] and c["close"] > z["lo"] and c["close"] > c["open"]:
+                    out[i] = 1.0
+            else:
+                if c["high"] >= z["lo"] and c["close"] < z["hi"] and c["close"] < c["open"]:
+                    out[i] = -1.0
+        # 2) invalidación y caducidad
+        zones = [
+            z for z in zones
+            if not (
+                (z["dir"] > 0 and c["close"] < z["lo"])
+                or (z["dir"] < 0 and c["close"] > z["hi"])
+            )
+            and i - z["born"] <= max_age
+        ]
+        # 3) detección: vela de desplazamiento con order block previo
+        a = atrs[i]
+        if not a:
+            continue
+        body = abs(c["close"] - c["open"])
+        if body < 1.2 * a:
+            continue
+        if c["close"] > c["open"]:  # desplazamiento alcista
+            for j in range(i - 1, max(i - 4, 0), -1):
+                p = candles[j]
+                if p["close"] < p["open"]:
+                    zones.append({"lo": p["low"], "hi": p["high"], "dir": 1, "born": i})
+                    break
+        else:  # desplazamiento bajista
+            for j in range(i - 1, max(i - 4, 0), -1):
+                p = candles[j]
+                if p["close"] > p["open"]:
+                    zones.append({"lo": p["low"], "hi": p["high"], "dir": -1, "born": i})
+                    break
+        if len(zones) > max_zones:
+            zones = zones[-max_zones:]
+    return out
+
+
+def anchored_vwap_votes(
+    candles: list[dict], pivots: list[dict] | None = None, min_bars: int = 5
+) -> list[float]:
+    """VWAP anclado al último pivote confirmado (swing relevante).
+
+    A diferencia del VWAP de sesión, el anclado mide quién controla el
+    mercado DESDE el último giro: cierre por encima = compradores en control.
+    0 sin volumen o con el ancla demasiado reciente.
+    """
+    n = len(candles)
+    out = [0.0] * n
+    if n < 20 or not any(c["volume"] > 0 for c in candles):
+        return out
+    pvs = sorted(pivots or find_pivots(candles), key=lambda p: p["confirm"])
+    anchor = 0
+    pv = vol = 0.0
+    j = 0
+    for i in range(n):
+        new_anchor = anchor
+        while j < len(pvs) and pvs[j]["confirm"] <= i:
+            new_anchor = pvs[j]["i"]
+            j += 1
+        if new_anchor != anchor:
+            anchor = new_anchor
+            pv = vol = 0.0
+            for k in range(anchor, i):
+                ck = candles[k]
+                tp = (ck["high"] + ck["low"] + ck["close"]) / 3
+                pv += tp * ck["volume"]
+                vol += ck["volume"]
+        c = candles[i]
+        tp = (c["high"] + c["low"] + c["close"]) / 3
+        pv += tp * c["volume"]
+        vol += c["volume"]
+        if vol > 0 and i - anchor >= min_bars:
+            av = pv / vol
+            out[i] = 1.0 if c["close"] > av else -1.0
+    return out
+
+
+def ribbon_votes(candles: list[dict]) -> list[float]:
+    """Cinta de EMAs (8/13/21/34/55): ±1 solo con la cinta perfectamente
+    ordenada — el sello de una tendencia sana y sostenida."""
+    closes = [c["close"] for c in candles]
+    emas = [ema(closes, p) for p in (8, 13, 21, 34, 55)]
+    out = [0.0] * len(closes)
+    for i in range(len(closes)):
+        vals = [e[i] for e in emas]
+        if any(v is None for v in vals):
+            continue
+        if all(vals[k] > vals[k + 1] for k in range(4)):
+            out[i] = 1.0
+        elif all(vals[k] < vals[k + 1] for k in range(4)):
+            out[i] = -1.0
+    return out
+
+
+def aroon_votes(candles: list[dict], period: int = 25) -> list[float]:
+    """Aroon (Chande): mide cuánto hace del último máximo/mínimo del tramo.
+    Aroon-up>=70 con Aroon-down<=30 = tendencia alcista fresca (+1); espejo -1."""
+    n = len(candles)
+    out = [0.0] * n
+    for i in range(period, n):
+        window = candles[i - period : i + 1]
+        hi_off = max(range(len(window)), key=lambda k: window[k]["high"])
+        lo_off = min(range(len(window)), key=lambda k: window[k]["low"])
+        up = 100 * hi_off / period
+        down = 100 * lo_off / period
+        if up >= 70 and down <= 30:
+            out[i] = 1.0
+        elif down >= 70 and up <= 30:
+            out[i] = -1.0
+    return out
+
+
+def stochrsi_votes(candles: list[dict], period: int = 14) -> list[float]:
+    """RSI estocástico: posición del RSI dentro de su propio rango reciente.
+    Más sensible que el RSI para los extremos de rango: <=0.1 sobreventa (+1),
+    >=0.9 sobrecompra (-1)."""
+    closes = [c["close"] for c in candles]
+    r = rsi(closes, period)
+    n = len(closes)
+    out = [0.0] * n
+    for i in range(2 * period, n):
+        window = [v for v in r[i - period + 1 : i + 1] if v is not None]
+        if len(window) < period or r[i] is None:
+            continue
+        hi, lo = max(window), min(window)
+        if hi == lo:
+            continue
+        srsi = (r[i] - lo) / (hi - lo)
+        if srsi <= 0.1:
+            out[i] = 1.0
+        elif srsi >= 0.9:
+            out[i] = -1.0
+    return out
+
+
+def pullback_votes(candles: list[dict]) -> list[float]:
+    """Pullback de continuación: en tendencia sana (EMA20>EMA50 con pendiente),
+    un retroceso que toca la EMA20 y cierra a favor es la entrada clásica de
+    continuación — añade entradas DENTRO de la tendencia, no solo en rupturas."""
+    closes = [c["close"] for c in candles]
+    e20, e50 = ema(closes, 20), ema(closes, 50)
+    atrs = atr_series(candles)
+    n = len(candles)
+    out = [0.0] * n
+    for i in range(3, n):
+        a, m20, m50 = atrs[i], e20[i], e50[i]
+        if not a or m20 is None or m50 is None or e50[i - 3] is None:
+            continue
+        c = candles[i]
+        if m20 > m50 and m50 > e50[i - 3]:  # tendencia alcista con pendiente
+            touched = c["low"] <= m20 + 0.25 * a
+            if touched and c["close"] > m20 and c["close"] > c["open"]:
+                out[i] = 1.0
+        elif m20 < m50 and m50 < e50[i - 3]:
+            touched = c["high"] >= m20 - 0.25 * a
+            if touched and c["close"] < m20 and c["close"] < c["open"]:
+                out[i] = -1.0
+    return out

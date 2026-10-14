@@ -21,6 +21,7 @@ from datetime import datetime
 from curl_cffi.requests import AsyncSession
 
 from . import history
+from .news import official_news
 from .config import SENTIMENT_TTL, Symbol
 from .market_data import client
 from .tradingview import classify_trader_text, ideas_source, minds_source
@@ -201,21 +202,15 @@ async def _fear_greed(sym: Symbol) -> dict | None:
     }
 
 
-async def _compute(sym: Symbol) -> dict:
+async def _compute_uncached(sym: Symbol) -> dict:
     """Resultado completo (agregados + items), cacheado SENTIMENT_TTL segundos."""
     now = time.time()
     cached = _cache.get(sym.id)
     if cached and now - cached[0] < SENTIMENT_TTL:
         return cached[1]
 
-    results = await asyncio.gather(
-        _stocktwits(sym),
-        _reddit(sym),
-        _fear_greed(sym),
-        ideas_source(sym),
-        minds_source(sym),
-        return_exceptions=True,
-    )
+    calls = (_stocktwits(sym), _reddit(sym), _fear_greed(sym), ideas_source(sym), minds_source(sym), official_news())
+    results = await asyncio.gather(*(asyncio.wait_for(c, timeout=25) for c in calls), return_exceptions=True)
     sources = [r for r in results if isinstance(r, dict)]
     errors = [type(r).__name__ for r in results if isinstance(r, Exception)]
 
@@ -246,6 +241,14 @@ async def _compute(sym: Symbol) -> dict:
         if total > 0:
             history.record(sym.id, result["bullishPct"], total)
     return result
+
+
+_compute_locks: dict[str, asyncio.Lock] = {}
+
+
+async def _compute(sym: Symbol) -> dict:
+    async with _compute_locks.setdefault(sym.id, asyncio.Lock()):
+        return await _compute_uncached(sym)
 
 
 def peek_cached(symbol_id: str) -> dict | None:

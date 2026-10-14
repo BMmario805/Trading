@@ -108,6 +108,14 @@ SYMBOLS: list[Symbol] = [
            "oil price OR crude WTI", ("oil", "investing", "Daytrading")),
 ]
 
+# Pares spot verificados en exchangeInfo; el filtro de calidad los revalida en vivo.
+EXTRA_CRYPTO = ("BNB", "ADA", "LINK", "AVAX", "LTC", "BCH", "DOT", "NEAR", "SUI", "TRX")
+for ticker, label in zip(EXTRA_CRYPTO, ("BNB", "Cardano", "Chainlink", "Avalanche", "Litecoin",
+                                      "Bitcoin Cash", "Polkadot", "NEAR", "Sui", "TRON")):
+    SYMBOLS.append(Symbol(ticker, label, "cripto", "binance", ticker + "USDT", ticker + ".X",
+                          f"{label} crypto", ("CryptoCurrency", "CryptoMarkets"), True,
+                          tradingview=ticker + "USD"))
+
 SYMBOLS_BY_ID: dict[str, Symbol] = {s.id: s for s in SYMBOLS}
 
 # Segundos entre sondeos de precio en vivo, por fuente

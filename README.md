@@ -1,5 +1,19 @@
 # 📈 Panel de Trading en Tiempo Real
 
+> **MetaTrader 5 demo:** [conexión, activación y límites](reports/METATRADER-DEMO.md).
+
+> **Ampliación:** siete bots, diez criptomonedas adicionales y autoentrenamiento por instrumento.
+> [Detalles y resultados](reports/AMPLIACION.md).
+>
+> **Revisión del motor (2026-09-09):** consulta [la auditoría y las evaluaciones](reports/AUDITORIA.md).
+> Los bots siguen operando con dinero simulado. Ahora usan velas cerradas, cotizaciones
+> recientes, stops con gaps y validación reforzada. Las calibraciones antiguas requieren
+> reentrenamiento. El sentimiento es contextual y el simulador por velas no reproduce
+> todos los filtros de cartera del vivo. Estas precisiones sustituyen las afirmaciones
+> de equivalencia exacta y los umbrales de validación descritos más abajo.
+> Ninguna de las seis combinaciones evaluadas en esta revisión superó la validación.
+
+
 Dashboard de mercados con gráficos en vivo (cripto, acciones, índices, forex y futuros),
 análisis técnico automático y agregación de la opinión pública de traders sobre la
 dirección del precio.
@@ -123,19 +137,31 @@ Además de las escuelas clásicas, el motor de señal incluye:
   ancho de Bollinger despierta desde el cuartil bajo de su propia historia.
 - **Reversión ampliada (meanrev)**: además del RSI(2) de Connors, entra en
   extremos estadísticos de **z-score ±2σ** y suma convicción si hay barrido de
-  liquidez a favor.
+  liquidez u **order block** a favor.
+- **Order blocks (SMC)**: la última vela contraria antes de un desplazamiento
+  impulsivo (cuerpo ≥1,2×ATR); la reacción en la zona vota a favor.
+- **VWAP anclado al último pivote**: mide quién controla el mercado desde el
+  último giro (además del VWAP de sesión intradía).
+- **Cinta de EMAs (8/13/21/34/55)**: vota solo con la cinta perfectamente
+  ordenada — el sello de una tendencia sana.
+- **Aroon (25)**: tendencia fresca (up≥70 y down≤30, o el espejo).
+- **StochRSI**: extremos de rango más sensibles que el RSI para la reversión.
+- **Pullbacks de continuación**: retroceso a la EMA20 en tendencia con
+  pendiente y cierre a favor — añade entradas DENTRO de la tendencia, no solo
+  en rupturas.
 
 ### 🧠 Aprendizaje continuo
 
 Los bots **aprenden de sus operaciones reales** (`learning.py`) con salvaguardas
 de tamaño de muestra para no aprender del ruido:
 
-- **Puerta de ventaja validada**: el análisis de las operaciones en vivo demostró
-  que casi toda la pérdida venía de símbolos cuya validación walk-forward había
-  fallado (operaban con parámetros por defecto). Ahora un símbolo **rechazado
-  por la validación no se opera** hasta que un reentrenamiento lo valide; un
-  símbolo aún sin entrenar se explora a **mitad de tamaño**; uno validado opera
-  a tamaño completo.
+- **Puerta de ventaja validada con modo "a prueba"**: un símbolo validado por
+  el walk-forward opera a tamaño completo; uno sin entrenar explora a mitad de
+  tamaño; y uno **rechazado o vetado ya no queda bloqueado para siempre**:
+  opera **a prueba** con el 35 % del tamaño, umbral ×1,15 y el visto bueno del
+  meta-modelo (p ≥ 50 %), máximo 2 posiciones a prueba simultáneas por bot.
+  Así genera datos frescos con riesgo mínimo y se gana la reentrada operando,
+  no esperando.
 - **Vetos por rendimiento en vivo**: con ≥8 operaciones recientes y expectativa
   < −0,15R el símbolo queda vetado; con ≥6 operaciones, ≤30 % de acierto y PnL
   negativo se veta **solo esa dirección** (p. ej. "cortos de MSFT"). El veto se

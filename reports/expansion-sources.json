@@ -1,0 +1,119 @@
+{
+  "markets": [
+    {
+      "symbol": "BNB",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": true,
+      "spreadPct": 0.001327148819831705,
+      "quoteVolume24h": 107875686.40131,
+      "bid": 753.49,
+      "ask": 753.5,
+      "reason": "Spread y volumen aceptables"
+    },
+    {
+      "symbol": "ADA",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": true,
+      "spreadPct": 0.045777065690084225,
+      "quoteVolume24h": 50017357.51925,
+      "bid": 0.2184,
+      "ask": 0.2185,
+      "reason": "Spread y volumen aceptables"
+    },
+    {
+      "symbol": "LINK",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": true,
+      "spreadPct": 0.008094871898647717,
+      "quoteVolume24h": 27804618.17222,
+      "bid": 12.353,
+      "ask": 12.354,
+      "reason": "Spread y volumen aceptables"
+    },
+    {
+      "symbol": "AVAX",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": true,
+      "spreadPct": 0.012584156546911645,
+      "quoteVolume24h": 27526787.20368,
+      "bid": 7.946,
+      "ask": 7.947,
+      "reason": "Spread y volumen aceptables"
+    },
+    {
+      "symbol": "LTC",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": true,
+      "spreadPct": 0.018438277864856856,
+      "quoteVolume24h": 20803256.63442,
+      "bid": 54.23,
+      "ask": 54.24,
+      "reason": "Spread y volumen aceptables"
+    },
+    {
+      "symbol": "BCH",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": false,
+      "spreadPct": 0.03876720294631624,
+      "quoteVolume24h": 9388128.9478,
+      "bid": 257.9,
+      "ask": 258.0,
+      "reason": "Volumen negociado insuficiente"
+    },
+    {
+      "symbol": "DOT",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": true,
+      "spreadPct": 0.08463817181547946,
+      "quoteVolume24h": 36307942.46653,
+      "bid": 1.181,
+      "ask": 1.182,
+      "reason": "Spread y volumen aceptables"
+    },
+    {
+      "symbol": "NEAR",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": true,
+      "spreadPct": 0.04122861265719785,
+      "quoteVolume24h": 66165170.4842,
+      "bid": 2.425,
+      "ask": 2.426,
+      "reason": "Spread y volumen aceptables"
+    },
+    {
+      "symbol": "SUI",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": true,
+      "spreadPct": 0.012323618214306364,
+      "quoteVolume24h": 60462053.63516,
+      "bid": 0.8114,
+      "ask": 0.8115,
+      "reason": "Spread y volumen aceptables"
+    },
+    {
+      "symbol": "TRX",
+      "source": "Binance Spot",
+      "at": 1788946951,
+      "eligible": true,
+      "spreadPct": 0.029485478401883824,
+      "quoteVolume24h": 29540345.23301,
+      "bid": 0.3391,
+      "ask": 0.3392,
+      "reason": "Spread y volumen aceptables"
+    }
+  ],
+  "news": {
+    "source": "Federal Reserve \u00b7 pol\u00edtica monetaria",
+    "items": 2,
+    "detail": "2 comunicados recientes; contexto sin voto direccional"
+  }
+}

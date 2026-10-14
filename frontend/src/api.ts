@@ -71,6 +71,7 @@ export function fetchBotPerformance(filters: {
   from?: number
   to?: number
   perBot?: boolean
+  source?: 'paper' | 'mt5'
 }): Promise<BotPerformance> {
   const q = new URLSearchParams()
   if (filters.bot) q.set('bot', filters.bot)
@@ -79,7 +80,7 @@ export function fetchBotPerformance(filters: {
   if (filters.to) q.set('to', String(filters.to))
   if (filters.perBot) q.set('perBot', 'true')
   const qs = q.toString()
-  return getJson<BotPerformance>(`/api/bots/performance${qs ? `?${qs}` : ''}`)
+  return getJson<BotPerformance>(`${filters.source === 'mt5' ? '/api/mt5/performance' : '/api/bots/performance'}${qs ? `?${qs}` : ''}`)
 }
 
 /** WebSocket de precios con reconexión y resuscripción automáticas. */
