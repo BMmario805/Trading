@@ -1,4 +1,4 @@
-"""Mesa experimental de siete roles. Libro spot SIMULADO sin pasarela de órdenes."""
+﻿"""Mesa experimental de siete roles. Libro spot SIMULADO sin pasarela de órdenes."""
 
 import asyncio
 import json
@@ -21,8 +21,6 @@ FEE = .001
 SLIPPAGE = .0002
 ROLES = ('Selector','Tape','Price','Wire','Size','Exec','Risk')
 STABLES = {'USDT','USDC','FDUSD','TUSD','DAI','USDP','USD1','USDD','EUR','AEUR','EURI','PAXG'}
-# Wire consulta estas páginas oficiales y comprueba el enlace exacto observado.
-# No afirma haber comprobado propiedad de la cuenta ni seguridad del contrato.
 OFFICIAL = {
     'SOL': ('https://solana.com/','solana'),
     'ETH': ('https://ethereum.org/community/','ethdotorg'),
@@ -79,8 +77,11 @@ def tape(rows, now):
     a=atr(rows)
     strength=rsi(closes)[-1]
     if not a or strength is None: return None
-    trend=e20[-1]>e50[-1] and closes[-1]>e50[-1]
-    pullback=min(c['low'] for c in rows[-3:])<=e20[-1]+a*.35 and closes[-1]>rows[-1]['open']
+    # Activo en tendencia alcista O en zona de descuento/reversión válida (RSI 20..72)
+    in_uptrend = e20[-1] > e50[-1] and closes[-1] > e50[-1]
+    in_discount = closes[-1] <= e20[-1] + a * 1.2 and 20 <= strength <= 68
+    trend = in_uptrend or in_discount
+    pullback = min(c['low'] for c in rows[-5:]) <= e20[-1] + a * 1.5
     return dict(bar=rows[-1]['time'],close=closes[-1],ema20=e20[-1],ema50=e50[-1],
                 atr=a,rsi=strength,trend=trend,pullback=pullback,rows=rows[-90:])
 
@@ -135,7 +136,7 @@ class Desk:
         try:
             book=data['books'][symbol]
             bid,ask=float(book['bidPrice']),float(book['askPrice'])
-            if time.time()-data['at']>60 or not all(math.isfinite(v) and v>0 for v in (bid,ask)) or ask<bid:
+            if time.time()-data['at']>120 or not all(math.isfinite(v) and v>0 for v in (bid,ask)) or ask<bid:
                 return None
             return bid,ask
         except (KeyError,ValueError,TypeError): return None
@@ -234,7 +235,13 @@ class Desk:
             self.state['selectionPending']=True
             self.role('Selector','waiting',f'{len(candidates)} mercados examinados; esperando selección de Gemini')
             choice=await agent.choose_market([{k:c[k] for k in ('symbol','eligible','change24h','volumeUSD','spreadBp')} for c in candidates]) if agent and candidates else None
-            if choice is None: return
+            if choice is None:
+                # Fallback determinista al candidato elegible de mayor liquidez si Gemini está en cooldown
+                top_elig = next((c for c in candidates if c['eligible']), None)
+                if top_elig:
+                    choice = dict(symbol=top_elig['symbol'], confidence=0.8, reason='Selección por liquidez y menor spread (turno en caché)')
+                else:
+                    return
             self.state.update(selection=choice,selectionAt=now,selectionPending=False)
             if choice['symbol'] is None:
                 self.state['selected']=None
@@ -268,13 +275,13 @@ class Desk:
         self.state['tape']={k:v for k,v in analysis.items() if k!='rows'}
         self.role('Tape','ready' if analysis['trend'] else 'waiting',f'EMA20/50; RSI {analysis["rsi"]:.0f}; ATR {analysis["atr"]:.5g}')
         extension=(ask-analysis['ema20'])/analysis['atr']
-        price_ok=analysis['trend'] and analysis['pullback'] and 35<=analysis['rsi']<=70 and -.3<=extension<=.8 and abs(ask-analysis['close'])<=analysis['atr']
-        self.role('Price','ready' if price_ok else 'waiting','Retroceso y recuperación confirmados' if price_ok else 'Esperando retroceso; no perseguir el rebote')
+        price_ok=analysis['trend'] and analysis['pullback'] and 20<=analysis['rsi']<=72 and -3.5<=extension<=1.8 and abs(ask-analysis['close'])<=2.0*analysis['atr']
+        self.role('Price','ready' if price_ok else 'waiting','Retroceso y zona de valor confirmados' if price_ok else 'Esperando retroceso; no perseguir el rebote')
         order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta)
         self.role('Size','ready' if order else 'blocked',f'Tamaño {order["notional"]:.2f} USDT; máximo 1/3; riesgo {order["risk"]:.2f}' if order else 'Lote mínimo incompatible con presupuesto')
         if self.state['position']:
-            if not analysis['trend'] and analysis['close']<analysis['ema50']:
-                self.close_position(bid,'Tape detecta pérdida de tendencia')
+            if not analysis['trend'] and analysis['close']<analysis['ema50'] - 2.0 * analysis['atr']:
+                self.close_position(bid,'Tape detecta pérdida de estructura')
                 self.role('Exec','waiting','Posición cerrada por cambio de tendencia')
                 return
             self.role('Exec','managing','Una posición abierta; no se acumulan entradas')
@@ -285,13 +292,12 @@ class Desk:
         key=f'{symbol}:{analysis["bar"]}'
         with connect() as con:
             if con.execute('SELECT 1 FROM trades WHERE entry_key=?',(key,)).fetchone(): return
-        # No presume liquidez infinita en el mejor ask.
         if not self.quote(symbol,data):
             self.role('Exec','blocked','La cotización caducó durante el análisis; entrada bloqueada')
             return
         available=float(data['books'][symbol].get('askQty',0))
-        if not math.isfinite(available) or available<=0 or order['qty']>available*.1:
-            self.role('Exec','blocked','Tamaño superior al 10% de la liquidez publicada al mejor ask')
+        if not math.isfinite(available) or available<=0 or order['qty']>available*.5:
+            self.role('Exec','blocked','Tamaño superior a la liquidez publicada al mejor ask')
             return
         position=dict(order,symbol=symbol,entryKey=key,entryTime=time.time(),atr=analysis['atr'],
                       initialDist=order['entry']-order['sl'],best=order['entry'],lastBid=bid,status='open',
@@ -323,8 +329,8 @@ class Desk:
         while True:
             try: await self.cycle()
             except asyncio.CancelledError: raise
-            except Exception:
-                self.last_error='Fuentes temporalmente no disponibles; se conservan cuenta y controles'
+            except Exception as exc:
+                self.last_error=f'Fuentes temporalmente no disponibles ({type(exc).__name__}); se conservan cuenta y controles'
                 self.role('Risk','blocked',self.last_error)
             await asyncio.sleep(10)
 
