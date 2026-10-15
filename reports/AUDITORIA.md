@@ -1,9 +1,39 @@
 # Auditoría del motor de trading — 9 de septiembre de 2026
 
-## Actualización de correcciones — 15 de octubre de 2026
+## Modo a prueba restaurado — 15 de octubre de 2026
+
+Por petición del usuario, los siete bots del Laboratorio y MT5 DEMO permiten
+entradas sin validación vigente en modo a prueba. Se usa como máximo el 25%
+del riesgo habitual, un umbral un 5% más exigente y hasta tres posiciones
+a prueba por bot. También los símbolos sin entrenamiento entran en este modo.
+Los parámetros aprobados siguen operándose con su umbral validado.
+
+Se mantienen los vetos por pérdidas del Laboratorio, el filtro del metamodelo,
+las cotizaciones recientes, los stops y los límites de cartera y pérdida diaria.
+Los multiplicadores aprendidos no pueden elevar el riesgo a prueba por encima
+del 25% del presupuesto habitual. Los modelos siguen excluyendo sentimiento.
+
+MT5 conserva el bloqueo a cuentas que no sean la DEMO autorizada. Con el riesgo
+base configurado del 0,1%, una entrada sin validar tiene un presupuesto máximo
+del 0,025%, sujeto a la reserva de fricción y al redondeo del lote hacia abajo.
+Se respeta además el límite compartido actual de tres posiciones en toda la cuenta.
+La condición a prueba se guarda y se identifica también en el comentario MT5
+para conservar el recuento tras reinicios. El panel muestra ambos riesgos.
+
+Verificación: 128 pruebas pasan, incluyendo la apertura a prueba, los límites de
+tamaño y posiciones, los vetos, la persistencia y el bloqueo de cuentas reales.
+La web compila. Se reinició el backend y se verificó que MT5 seguía conectado
+a la DEMO autorizada, con entradas activas y riesgo a prueba del 0,025%.
+Durante la comprobación se ejecutaron dos entradas DEMO (Scalper/USDJPY y
+Squeeze/GBPUSD) y el Laboratorio volvió a abrir posiciones simuladas.
+Habilitar la exploración no fuerza entradas: todavía se requieren una señal
+reciente y el cumplimiento de los demás filtros.
+
+## Primera revisión de correcciones — 15 de octubre de 2026
 
 El diagnóstico original de abajo describe el estado del 9 de septiembre.
-En el código actual se han verificado o completado estas correcciones:
+En la primera revisión se verificaron o completaron estas correcciones
+(el bloqueo estricto se sustituyó después por el modo a prueba descrito arriba):
 
 - Los siete bots exigen validación vigente. Tanto los mercados rechazados
   como los pendientes de validar quedan bloqueados para nuevas entradas.

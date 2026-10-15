@@ -15,13 +15,13 @@ from app.strategy import factor_series, extension_series, extension_atr, resampl
 
 
 class EntryTests(unittest.TestCase):
-    def test_all_bots_require_validation(self):
-        self.assertTrue(all(c.require_validation for c in bots.ALL_BOTS))
+    def test_all_bots_allow_limited_probation(self):
+        self.assertTrue(all(not c.require_validation for c in bots.ALL_BOTS))
 
-    def test_rejected_and_unknown_cannot_enter_with_immature_model(self):
+    def test_rejected_and_unknown_enter_only_in_probation(self):
         for edge in ('rejected', 'unknown'):
             with self.subTest(edge=edge), patch.object(learning, 'edge_status', return_value=edge), patch.object(learning, '_active_blocks', return_value=[]):
-                self.assertEqual(learning.entry_mode('scalper', 'BTC')[0], 'blocked')
+                self.assertEqual(learning.entry_mode('scalper', 'BTC')[0], 'probation')
 
     def test_live_performance_veto_blocks_validated_pair(self):
         blocks = [dict(symbol='BTC', direction='short', reason='Pérdidas')]
@@ -29,11 +29,26 @@ class EntryTests(unittest.TestCase):
             self.assertEqual(learning.entry_mode('swing', 'BTC', 'short')[0], 'blocked')
             self.assertEqual(learning.entry_mode('swing', 'BTC', 'long')[0], 'full')
 
-    def test_scan_does_not_evaluate_unvalidated_pair(self):
-        bot = bots.TradingBot(bots.SCALPER)
+    def test_strict_opt_in_does_not_evaluate_unvalidated_pair(self):
+        bot = bots.TradingBot(replace(bots.SCALPER, require_validation=True))
         with patch.object(bot, '_evaluate', AsyncMock()) as evaluate:
             asyncio.run(bot._scan())
             evaluate.assert_not_awaited()
+
+    def test_unvalidated_pair_is_evaluated_in_probation(self):
+        bot = bots.TradingBot(replace(bots.SCALPER, universe=('BTC',)))
+        with patch.object(learning, 'entry_mode', return_value=('probation', 'Sin validar')), \
+             patch.object(bot, '_evaluate', AsyncMock(return_value=None)) as evaluate:
+            asyncio.run(bot._scan())
+            evaluate.assert_awaited_once()
+
+    def test_losses_and_hour_vetoes_still_block_probation(self):
+        for edge in ('rejected', 'unknown'):
+            with self.subTest(edge=edge), patch.object(learning, 'edge_status', return_value=edge), \
+                 patch.object(learning, '_active_blocks', return_value=[dict(symbol='BTC', direction=None, reason='Pérdidas')]):
+                self.assertEqual(learning.entry_mode('scalper', 'BTC')[0], 'blocked')
+        with patch.dict(learning._policies, {'scalper': dict(hourBlocks=[dict(hour=12, reason='Pérdidas')])}):
+            self.assertEqual(learning.entry_mode('scalper', 'BTC', hour=12)[0], 'blocked')
 
     def test_old_snapshots_do_not_train_new_model(self):
         row = ('BTC', 'long', 1000, json.dumps(dict(confirmations=[dict(system='MACD', vote=1)])))

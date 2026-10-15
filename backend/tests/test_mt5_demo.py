@@ -1,11 +1,12 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
 from app.mt5_gateway import DemoGateway, DemoOnlyError, lot_floor
-from app import mt5_demo
+from app import bots, learning, mt5_demo, training
 
 
 def setup_api():
@@ -109,6 +110,99 @@ class GatewayTests(unittest.TestCase):
 
     def test_lot_rounds_down(self):
         self.assertEqual(lot_floor(.129, .01), .12)
+
+    def test_probation_uses_one_quarter_of_the_risk_budget(self):
+        full, _ = self.entry()
+        probation, _ = self.gateway.prepare_entry('XAUUSD', 1, 2, 2, 3, 1234, 'test', 1000, risk_mult=.25)
+        loss = abs(self.api.order_calc_profit(probation['type'], 'XAUUSD', probation['volume'], probation['price'], probation['sl']))
+        self.assertLessEqual(loss*1.1, self.account.equity*self.config['risk_pct']*.25)
+        self.assertLessEqual(probation['volume'], full['volume']*.25)
+        self.api.order_send.assert_not_called()
+
+    def test_probation_cannot_force_minimum_lot_above_its_reduced_budget(self):
+        self.account.equity = 5000
+        self.entry()
+        with self.assertRaises(DemoOnlyError):
+            self.gateway.prepare_entry('XAUUSD', 1, 2, 2, 3, 1234, 'test', 1000, risk_mult=.25)
+
+    def test_invalid_risk_multiplier_cannot_increase_exposure(self):
+        for mult in (0, -1, 1.01, float('nan'), float('inf')):
+            with self.subTest(mult=mult), self.assertRaises(DemoOnlyError):
+                self.gateway.prepare_entry('XAUUSD', 1, 2, 2, 3, 1234, 'test', 1000, risk_mult=mult)
+
+
+class ProbationEngineTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.db_patch = patch.object(mt5_demo, 'DB_PATH', Path(self.tmp.name)/'test.sqlite')
+        self.db_patch.start()
+        self.addCleanup(self.db_patch.stop)
+        self.state_patch = patch.dict(mt5_demo.STATE, {}, clear=True)
+        self.state_patch.start()
+        self.addCleanup(self.state_patch.stop)
+        self.api, self.config, self.account, _ = setup_api()
+        self.account.balance = self.account.equity
+        self.account.currency = 'USD'
+        self.config.update(terminal='test', enabled=True, max_daily_loss_pct=.02, symbols={'XAUUSD': 'XAUUSD'})
+        self.bot = replace(bots.SCALPER, universe=('XAUUSD',))
+        self.engine = mt5_demo.DemoEngine(self.config, self.api)
+        self.addCleanup(self.engine.worker.shutdown)
+        self.rows = [dict(time=i*60, open=100, high=101, low=99, close=100, volume=10) for i in range(61)]
+
+    def cycle(self, bot=None, score=.8):
+        with patch.object(mt5_demo, 'ALL_BOTS', (bot or self.bot,)), \
+             patch.object(mt5_demo.time, 'time', return_value=3660), \
+             patch.object(self.engine, 'update_clock_skew'), \
+             patch.object(self.engine, 'manage'), patch.object(self.engine, 'sync_performance'), \
+             patch.object(self.engine, 'training'), \
+             patch.object(self.engine, 'bars', return_value=self.rows), \
+             patch.object(mt5_demo, 'score_series', return_value=[0]*60+[score]), \
+             patch.object(mt5_demo, 'extension_atr', return_value=0), \
+             patch.object(mt5_demo, 'atr_series', return_value=[2]*61), \
+             patch.object(self.engine.gateway, 'tick', return_value=NS(bid=100, ask=100.02)), \
+             patch.object(self.engine.gateway, 'prepare_entry', return_value=({}, 2)) as prepare, \
+             patch.object(self.engine, 'submit', return_value=NS(retcode=self.api.TRADE_RETCODE_DONE)) as submit:
+            self.engine.cycle()
+        return prepare, submit
+
+    def test_unvalidated_demo_pair_uses_reduced_risk(self):
+        prepare, submit = self.cycle()
+        prepare.assert_called_once()
+        self.assertEqual(prepare.call_args.kwargs['risk_mult'], .25)
+        self.assertTrue(prepare.call_args.args[6].startswith('cxp-'))
+        submit.assert_called_once()
+        self.assertIn('25%', self.engine.diagnostics['scalper/XAUUSD'])
+
+    def test_validated_demo_pair_uses_normal_budget_and_threshold(self):
+        mt5_demo.save(self.engine.owner+'params:scalper/XAUUSD', dict(
+            applied=True, engineVersion=training.ENGINE_VERSION, params=dict(entryThreshold=.5)))
+        prepare, _ = self.cycle(score=.51)
+        prepare.assert_called_once()
+        self.assertEqual(prepare.call_args.kwargs['risk_mult'], 1)
+
+    def test_probation_requires_five_percent_stronger_signal(self):
+        prepare, submit = self.cycle(score=self.bot.entry_threshold*1.02)
+        prepare.assert_not_called()
+        submit.assert_not_called()
+        self.assertIn('Sin cruce', self.engine.diagnostics['scalper/XAUUSD'])
+
+    def test_strict_opt_in_still_blocks_unvalidated_demo_pair(self):
+        prepare, submit = self.cycle(bot=replace(self.bot, require_validation=True))
+        prepare.assert_not_called()
+        submit.assert_not_called()
+        self.assertIn('Esperando validación', self.engine.diagnostics['scalper/XAUUSD'])
+
+    def test_probation_cap_survives_missing_metadata_after_restart(self):
+        self.config['max_positions'] = 5
+        self.api.positions_get.return_value = tuple(
+            NS(ticket=i, symbol=f'TEST{i}', magic=mt5_demo.MAGICS['scalper'], comment='cxp-scalper-old',
+               type=0, volume=.01, price_open=100, sl=90, tp=120, profit=0)
+            for i in range(3))
+        prepare, submit = self.cycle()
+        prepare.assert_not_called()
+        submit.assert_not_called()
+        self.assertIn('Límite de posiciones a prueba', self.engine.diagnostics['scalper/XAUUSD'])
 
 
 class IntentTests(unittest.TestCase):

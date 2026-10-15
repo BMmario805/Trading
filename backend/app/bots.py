@@ -1,8 +1,8 @@
-"""Siete bots de paper trading con señales causales y validación obligatoria.
+"""Siete bots de paper trading con señales causales y exploración limitada.
 
-Las posiciones existentes siguen gestionándose. Ningún par sin validación
-vigente ni con veto de aprendizaje abre operaciones nuevas en la cuenta
-principal. El sentimiento se conserva como contexto y en los snapshots.
+Los pares sin validación pueden operar a prueba con riesgo reducido; los
+vetos de aprendizaje y los límites de cartera siguen bloqueando entradas.
+El sentimiento se conserva como contexto y en los snapshots.
 """
 
 import asyncio
@@ -77,7 +77,7 @@ class BotConfig:
     cooldown_seconds: int        # espera tras cerrar antes de reentrar al símbolo
     focus_threshold_mult: float  # descuento de umbral para el símbolo foco
     initial_balance: float = 10_000.0
-    require_validation: bool = True
+    require_validation: bool = False
     # --- medidas de seguridad (estándar prop-firm) ---
     max_open_risk_pct: float = 0.06  # riesgo inicial agregado por bot
     max_daily_loss_pct: float = 0.05  # pérdida diaria máxima antes de pausar entradas
@@ -269,7 +269,7 @@ FLOW = replace(SQUEEZE, id="flow", name="Bot Flujo (CMF)",
                horizon="continuación con flujo y tendencia (horas)",
                universe=("BTC", "ETH", "SOL", "XRP") + EXTRA_CRYPTO,
                entry_threshold=.55, risk_pct=.005, max_positions=4,
-               weight_tech=1.0, weight_senti=0.0, sl_atr=2.0, tp_atr=3.0, require_validation=True)
+               weight_tech=1.0, weight_senti=0.0, sl_atr=2.0, tp_atr=3.0)
 ALL_BOTS = (SCALPER, SWING, TREND, MEANREV, ORB, SQUEEZE, FLOW)
 
 # ---------------------------------------------------------------------------
@@ -656,8 +656,8 @@ class TradingBot:
                 continue
             pre_mode = "full"
             if not has_pos:
-                # modo de entrada: 'full' opera normal; 'probation' opera a
-                # prueba ya no abre entradas; los vetos bloquean la cuenta principal
+                # La validación permite tamaño normal; los demás pares operan
+                # a prueba salvo que un veto de aprendizaje los bloquee.
                 pre_mode, _why = learning.entry_mode(self.cfg.id, symbol_id)
                 if pre_mode == "blocked":
                     self.diagnostics[symbol_id]["reason"] = _why
@@ -665,6 +665,7 @@ class TradingBot:
                 if pre_mode == "probation" and (
                     len(self.probation_open) >= learning.MAX_PROBATION_POSITIONS
                 ):
+                    self.diagnostics[symbol_id]["reason"] = "Límite de posiciones a prueba alcanzado"
                     continue
             sym = SYMBOLS_BY_ID.get(symbol_id)
             if not sym:
@@ -725,8 +726,8 @@ class TradingBot:
                 self.diagnostics[symbol_id]["reason"] = "Volatilidad insuficiente para cubrir costes"
                 continue
             direction = "long" if score > 0 else "short"
-            # modo definitivo con dirección y hora: el veto horario bloquea;
-            # el resto de vetos degradan a modo a prueba
+            # Modo definitivo con dirección y hora: los vetos bloquean también
+            # las entradas a prueba.
             hour_utc = datetime.now(timezone.utc).hour
             mode, mode_why = learning.entry_mode(
                 self.cfg.id, symbol_id, direction, hour=hour_utc
@@ -736,6 +737,7 @@ class TradingBot:
                 log.debug("%s: %s %s vetado: %s", self.cfg.id, symbol_id, direction, mode_why)
                 continue
             if mode == "probation" and len(self.probation_open) >= learning.MAX_PROBATION_POSITIONS:
+                self.diagnostics[symbol_id]["reason"] = "Límite de posiciones a prueba alcanzado"
                 continue
             # meta-modelo (meta-labeling): un clasificador online entrenado con
             # las operaciones reales del bot estima la probabilidad de éxito de
@@ -753,6 +755,7 @@ class TradingBot:
                 continue
             if mode == "probation" and p_win is not None and p_win < learning.PROBATION_META_P:
                 # a prueba solo pasan las señales de más convicción
+                self.diagnostics[symbol_id]["reason"] = "Confianza insuficiente del meta-modelo para operar a prueba"
                 log.debug("%s: %s %s a prueba sin convicción (p=%.2f)",
                           self.cfg.id, symbol_id, direction, p_win)
                 continue
@@ -923,7 +926,12 @@ class TradingBot:
             )
         equity = max(0.0, self.balance + sum(p.unrealized() for p in self.positions.values()))
         open_risk = sum(p.qty * p.r_dist for p in self.positions.values())
-        budget = min(equity * self.cfg.risk_pct * scale * learn_mult * meta_mult * prob_mult,
+        size_mult = scale * learn_mult * meta_mult
+        if probation_why:
+            # El aprendizaje puede reducir el riesgo exploratorio, nunca
+            # elevarlo por encima del 25% del presupuesto habitual.
+            size_mult = min(1.0, size_mult) * prob_mult
+        budget = min(equity * self.cfg.risk_pct * size_mult,
                      max(0.0, equity * self.cfg.max_open_risk_pct - open_risk))
         qty = budget / (sl_dist + half_spread)
         used_margin = sum(
@@ -1096,6 +1104,9 @@ class TradingBot:
                 "trendInterval": self.cfg.trend_interval,
                 "scanSeconds": self.cfg.scan_seconds,
                 "riskPct": self.cfg.risk_pct * 100,
+                "requireValidation": self.cfg.require_validation,
+                "probationSizePct": learning.PROBATION_SIZE * 100,
+                "maxProbationPositions": learning.MAX_PROBATION_POSITIONS,
                 "maxLeverage": self.cfg.max_leverage,
                 "slAtr": self.cfg.sl_atr,
                 "tpAtr": self.cfg.tp_atr,

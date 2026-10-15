@@ -17,6 +17,7 @@ from .strategy import score_series, resample, TREND_STEP, extension_atr
 from . import training
 from . import mt5_performance
 from . import mt5_market
+from . import learning
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / '.runtime' / 'mt5-demo.json'
@@ -271,7 +272,9 @@ class DemoEngine:
         STATE.update(configured=True, connected=True, demo=True, server=account.server,
                      currency=account.currency, balance=account.balance, equity=account.equity,
                      enabled=enabled, tradingAllowed=bool(allowed and not daily['paused']), message=message,
-                     riskPct=cfg['risk_pct']*100, maxPositions=cfg['max_positions'], updatedAt=int(now),
+                     riskPct=cfg['risk_pct']*100,
+                     probationRiskPct=cfg['risk_pct']*learning.PROBATION_SIZE*100,
+                     maxPositions=cfg['max_positions'], updatedAt=int(now),
                      positions=[dict(ticket=p.ticket, symbol=p.symbol, bot=next((b for b,m in MAGICS.items() if m==p.magic), 'manual/otro'),
                                      direction='long' if p.type==api.POSITION_TYPE_BUY else 'short', volume=p.volume,
                                      entry=p.price_open, sl=p.sl, tp=p.tp, pnl=p.profit) for p in positions],
@@ -296,14 +299,27 @@ class DemoEngine:
                 p = params.get('params', {}) if params.get('applied') and params.get('engineVersion') == training.ENGINE_VERSION else {}
                 if bot.require_validation and not p:
                     raise DemoOnlyError('Esperando validación sobre histórico MT5')
-                if len(self.gateway.positions()) >= cfg['max_positions']:
+                probation = not bool(p)
+                current_positions = self.gateway.positions()
+                if len(current_positions) >= cfg['max_positions']:
+                    self.diagnostics[key] = 'Límite compartido de posiciones alcanzado'
                     break
+                if probation:
+                    probation_count = sum(
+                        1 for pos in current_positions if pos.magic == MAGICS[bot.id]
+                        and ((read(self.owner+f'position:{pos.ticket}', {}) or {}).get('probation')
+                             or str(getattr(pos, 'comment', '')).startswith('cxp-'))
+                    )
+                    if probation_count >= learning.MAX_PROBATION_POSITIONS:
+                        raise DemoOnlyError('Límite de posiciones a prueba alcanzado')
                 work = self.bars(symbol, bot.work_interval)
                 higher = self.bars(symbol, bot.trend_interval)
                 if len(work) < 60 or now-work[-1]['time'] > 3*INTERVAL_SECONDS[bot.work_interval]+60:
                     raise DemoOnlyError('Velas insuficientes o antiguas')
                 scores = score_series(bot.id, work, higher)
                 threshold = p.get('entryThreshold', bot.entry_threshold)
+                if probation:
+                    threshold *= learning.PROBATION_THRESHOLD_MULT
                 if not fresh_signal(scores[-1], scores[-4:-1], threshold):
                     raise DemoOnlyError('Sin cruce reciente de señal')
                 direction = 1 if scores[-1] > 0 else -1
@@ -317,15 +333,19 @@ class DemoEngine:
                 if abs((tick.ask+tick.bid)/2-work[-1]['close']) > atr:
                     raise DemoOnlyError('Precio alejado de la señal')
                 bar = work[-1]['time']
+                comment = f"{'cxp' if probation else 'cx'}-{bot.id}-{bar}"
                 request, risk = self.gateway.prepare_entry(symbol, direction, atr,
-                    p.get('slAtr', bot.sl_atr), p.get('tpAtr', bot.tp_atr), MAGICS[bot.id], f'cx-{bot.id}-{bar}', time.time())
+                    p.get('slAtr', bot.sl_atr), p.get('tpAtr', bot.tp_atr), MAGICS[bot.id], comment, time.time(),
+                    risk_mult=learning.PROBATION_SIZE if probation else 1.0)
                 result = self.submit(f'entry:{bot.id}:{symbol}:{bar}', symbol, request)
                 if result is not None and result.retcode in (api.TRADE_RETCODE_DONE, api.TRADE_RETCODE_DONE_PARTIAL):
                     for pos in self.gateway.positions():
                         if pos.symbol == symbol and pos.magic == MAGICS[bot.id]:
                             save(self.owner+f'position:{pos.ticket}', dict(risk=risk, atr=atr, best=pos.price_open,
-                                                                      trail=p.get('trailAtr', bot.trail_atr)))
-                    self.diagnostics[key] = 'Orden DEMO ejecutada en MT5'
+                                                                      trail=p.get('trailAtr', bot.trail_atr),
+                                                                      probation=probation))
+                    self.diagnostics[key] = ('Orden DEMO a prueba ejecutada (25% del riesgo habitual)' if probation
+                                             else 'Orden DEMO ejecutada en MT5')
                 else:
                     self.diagnostics[key] = 'Orden ya procesada, rechazada o pendiente de reconciliación'
             except DemoOnlyError as exc:

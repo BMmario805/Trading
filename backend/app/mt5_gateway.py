@@ -50,7 +50,10 @@ class DemoGateway:
             raise DemoOnlyError('Sin cotización reciente del bróker')
         return tick
 
-    def prepare_entry(self, symbol, direction, atr, sl_multiple, tp_multiple, magic, comment, now):
+    def prepare_entry(self, symbol, direction, atr, sl_multiple, tp_multiple, magic, comment, now,
+                      risk_mult=1.0):
+        if not math.isfinite(risk_mult) or not 0 < risk_mult <= 1:
+            raise DemoOnlyError('Multiplicador de riesgo inválido')
         api = self.api
         account, _ = self.account(trading=True)
         positions = self.positions()
@@ -86,7 +89,7 @@ class DemoGateway:
             if loss is None or not math.isfinite(loss):
                 raise DemoOnlyError('Riesgo de cartera desconocido')
             open_risk += max(0, -loss)
-        budget = min(account.equity * self.config['risk_pct'],
+        budget = min(account.equity * self.config['risk_pct'] * risk_mult,
                      account.equity * self.config['max_open_risk_pct'] - open_risk)
         # Reserva del 10% para fricción; los gaps todavía pueden exceder el stop.
         volume = lot_floor(min(info.volume_max, max(0, budget) / (-unit_loss * 1.1)), info.volume_step)

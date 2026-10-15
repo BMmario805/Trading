@@ -249,6 +249,9 @@ export interface BotStatus {
     trendInterval: string
     scanSeconds: number
     riskPct: number
+    requireValidation?: boolean
+    probationSizePct?: number
+    maxProbationPositions?: number
     maxLeverage: number
     slAtr: number
     tpAtr: number

@@ -373,6 +373,9 @@ function BotCard({
         </p>
       )}
 
+      {config.requireValidation === false && config.probationSizePct != null && (
+        <p className="small muted">Mercados sin validar: a prueba, hasta el {config.probationSizePct}% del riesgo habitual y un máximo de {config.maxProbationPositions} posiciones a prueba por bot.</p>
+      )}
       {bot.diagnostics && (
         <details className="small muted">
           <summary>Diagnóstico de entradas por mercado</summary>

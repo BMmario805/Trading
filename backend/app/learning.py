@@ -9,8 +9,9 @@ para no "aprender" del ruido:
    que casi toda la pérdida venía de operar símbolos cuya validación había
    FALLADO usando parámetros por defecto. Regla:
      - validado   -> se opera a tamaño completo
-     - rechazado  -> NO se opera (hasta que un reentrenamiento lo valide)
-     - sin datos  -> NO se opera hasta validar
+     - rechazado  -> se opera a prueba con riesgo reducido
+     - sin datos  -> se opera a prueba con riesgo reducido
+   Los vetos por pérdidas y los límites de cartera siguen bloqueando entradas.
 
 2. Bloqueos por rendimiento en vivo. Con muestra suficiente en la ventana
    reciente, un símbolo (o una dirección concreta de un símbolo, p. ej.
@@ -69,12 +70,10 @@ BLOCK_EXPECTANCY_R = -0.15
 MIN_TRADES_HOUR = 10
 BLOCK_HOUR_EXPECTANCY_R = -0.25
 
-# Constantes conservadas para leer operaciones antiguas "a prueba".
-# Las entradas actuales se bloquean; un futuro libro shadow deberá ser separado.
-PROBATION_SIZE = 0.0           # la cuenta principal no financia exploración
-PROBATION_THRESHOLD_MULT = 1.15  # umbral de entrada más exigente
+PROBATION_SIZE = 0.25         # máximo 25% del riesgo normal en pares sin validar
+PROBATION_THRESHOLD_MULT = 1.05  # umbral de entrada un 5% más exigente
 PROBATION_META_P = 0.50        # p(éxito) mínima del meta-modelo (si es maduro)
-MAX_PROBATION_POSITIONS = 2    # posiciones a prueba simultáneas por bot
+MAX_PROBATION_POSITIONS = 3    # posiciones a prueba simultáneas por bot
 
 # --- Meta-modelo (regresión logística online) ---
 META_MIN_SAMPLES = 30     # madurez mínima antes de que pueda vetar señales
@@ -537,10 +536,7 @@ def edge_status(bot_id: str, symbol: str) -> str:
 def entry_mode(
     bot_id: str, symbol: str, direction: str | None = None, hour: int | None = None
 ) -> tuple[str, str | None]:
-    """Cuenta principal: solo ventaja vigente y sin vetos permite entrar.
-
-    La exploración queda desactivada hasta disponer de un libro shadow separado.
-    """
+    """Sin validar: a prueba; validado: normal. Los vetos bloquean ambos modos."""
     if hour is not None:
         policy = _policies.get(bot_id) or load(bot_id)
         for hb in policy.get("hourBlocks", []):
@@ -548,7 +544,7 @@ def entry_mode(
                 return "blocked", f"veto horario: {hb['reason']}"
     mode, why = "full", None
     if edge_status(bot_id, symbol) != "validated":
-        mode = "blocked"
+        mode = "probation"
         why = "sin ventaja validada en el último entrenamiento"
     for b in _active_blocks(bot_id):
         if b["symbol"] != symbol:
@@ -575,9 +571,6 @@ def size_multiplier(bot_id: str, symbol: str) -> tuple[float, str | None]:
     note = None
     if mult != 1.0:
         note = f"tamaño ×{mult:g} por expectativa en vivo"
-    if edge_status(bot_id, symbol) == "unknown":
-        mult *= 0.5
-        note = "exploración a mitad de tamaño (símbolo aún sin entrenar)"
     return mult, note
 
 

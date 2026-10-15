@@ -191,3 +191,46 @@ class HistoryConnectionTests(TemporaryDatabaseTests):
                 raise RuntimeError('abort')
         with history._conn() as con:
             self.assertEqual(con.execute('SELECT COUNT(*) FROM sentiment_history').fetchone()[0], 0)
+
+
+class ProbationSizingTests(TemporaryDatabaseTests):
+    def open_probation(self, bot, learn_mult=1, p_win=None):
+        with patch.object(learning, 'size_multiplier', return_value=(learn_mult, None)), \
+             patch.object(bots.systems, 'chart_overlays', return_value={}):
+            bot._open(bots.SYMBOLS_BY_ID['BTC'], 'long', 100, 2, .8,
+                      dict(reasons=[], candles=[], confirmations=[]), 2, 4, 1,
+                      p_win=p_win, probation_why='Sin validar')
+        return bot.positions['BTC']
+
+    def test_probation_risk_cannot_be_amplified_above_one_quarter(self):
+        bot = bots.TradingBot(bots.SCALPER)
+        pos = self.open_probation(bot, learn_mult=1.5, p_win=.99)
+        risk_with_spread = pos.qty * (pos.r_dist + 100 * bot.spread_pct(bots.SYMBOLS_BY_ID['BTC']) / 2)
+        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .25)
+
+    def test_loss_streak_can_reduce_probation_risk_further(self):
+        bot = bots.TradingBot(bots.SCALPER)
+        bot.consec_losses = 2
+        pos = self.open_probation(bot)
+        risk_with_spread = pos.qty * (pos.r_dist + .025)
+        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .125)
+
+    def test_restart_preserves_probation_slots(self):
+        bot = bots.TradingBot(bots.SCALPER)
+        self.open_probation(bot)
+        restored = bots.TradingBot(bots.SCALPER)
+        restored.load_state()
+        self.assertIn('BTC', restored.probation_open)
+
+    def test_three_probation_positions_stop_further_exploration(self):
+        bot = bots.TradingBot(replace(bots.SCALPER, universe=('BTC',)))
+        bot.probation_open.update(('ETH', 'SOL', 'XRP'))
+        with patch.object(learning, 'entry_mode', return_value=('probation', 'Sin validar')), \
+             patch.object(bot, '_evaluate', AsyncMock()) as evaluate:
+            asyncio.run(bot._scan())
+            evaluate.assert_not_awaited()
+        self.assertIn('Límite de posiciones a prueba', bot.diagnostics['BTC']['reason'])
+
+    def test_unknown_pair_does_not_apply_a_second_exploration_discount(self):
+        learning._policies['scalper'] = dict(sizeMult={})
+        self.assertEqual(learning.size_multiplier('scalper', 'BTC'), (1.0, None))

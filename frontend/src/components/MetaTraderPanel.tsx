@@ -12,6 +12,7 @@ interface DemoStatus {
   balance?: number
   equity?: number
   riskPct?: number
+  probationRiskPct?: number
   maxPositions?: number
   training?: string | null
   diagnostics?: Record<string, string>
@@ -56,6 +57,7 @@ export default function MetaTraderPanel() {
     {status?.connected && <>
       <p>{status.server} · Balance: <strong>{money(status.balance)}</strong> · Patrimonio: <strong>{money(status.equity)}</strong></p>
       <p className="muted small">Riesgo base {status.riskPct}% por operación · máximo {status.maxPositions} posiciones en la cuenta. Estas operaciones aparecen en MT5 del móvil.</p>
+      {status.probationRiskPct != null && <p className="muted small">Mercados sin validar: a prueba, con riesgo objetivo máximo del {status.probationRiskPct}% por operación.</p>}
       <div className="bot-actions"><button disabled={busy} onClick={control}>{status.enabled ? 'Pausar entradas en MT5' : 'Activar entradas demo'}</button></div>
       <p className="muted small">Al pausar entradas se siguen gestionando los stops de las posiciones de los bots. El paper trading de abajo es independiente.</p>
       {status.training && <p>Autoentrenamiento con datos MT5: {status.training}</p>}
