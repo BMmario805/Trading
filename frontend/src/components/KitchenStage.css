@@ -1,0 +1,134 @@
+.kitchen-stage {
+  --kitchen-ink: #433a2f; position: relative; isolation: isolate; width: 100%; height: 462px; min-width: 0; overflow: hidden;
+  border: 1px solid #e5d6bb; border-radius: 21px; background: #ead8b8; color: var(--kitchen-ink); box-shadow: inset 0 2px 9px #ac8b4d12; font-family: inherit;
+}
+.kitchen-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -2; pointer-events: none; }
+.kitchen-scene-sign {
+  position: absolute; z-index: 2; top: 12px; left: 50%; display: flex; align-items: center; gap: 7px; padding: 7px 12px;
+  transform: translateX(-50%) rotate(-1deg); border: 1px solid #d9c59e; border-radius: 6px; background: #fff8e9; box-shadow: 0 3px 0 #c6ae872b;
+  white-space: nowrap; color: #735e40; font-size: 8px; font-weight: 900; letter-spacing: 1.4px; line-height: 1;
+}
+.kitchen-sign-light { width: 5px; height: 5px; border-radius: 50%; background: #c4b491; }
+.kitchen-sign-light.is-on { background: #6c9b69; box-shadow: 0 0 0 3px #88ad7826; animation: kitchen-sign-pulse 3s ease-in-out infinite; }
+.kitchen-sign-star { color: #e3aa4b; font-size: 12px; margin-left: 3px; }
+.kitchen-stations { position: absolute; inset: 44px 9px 38px; }
+.kitchen-stage .kitchen-station {
+  position: absolute; top: 0; left: 0; display: flex; flex-direction: column; align-items: center; justify-content: end; width: 25%; height: 48%;
+  margin: 0; padding: 0; border: 0; border-radius: 22px; background: transparent; box-shadow: none; color: var(--kitchen-ink); cursor: pointer;
+  -webkit-tap-highlight-color: transparent; transition: filter .2s ease, transform .2s ease;
+}
+.kitchen-stage .kitchen-station:hover { background: transparent; filter: drop-shadow(0 5px 5px #76573022); transform: translateY(-3px); }
+.kitchen-stage .kitchen-station:active { transform: translateY(0) scale(.98); }
+.kitchen-stage .kitchen-station:focus-visible { outline: 2px solid #b9613d; outline-offset: -4px; background: #fff7df4a; }
+.kitchen-stage .kitchen-station-tape { left: 25%; }
+.kitchen-stage .kitchen-station-price { left: 50%; }
+.kitchen-stage .kitchen-station-wire { left: 75%; }
+.kitchen-stage .kitchen-station-size { left: 12.5%; top: 53%; }
+.kitchen-stage .kitchen-station-exec { left: 37.5%; top: 53%; }
+.kitchen-stage .kitchen-station-risk { left: 62.5%; top: 53%; }
+.kitchen-station-art { display: block; flex: 1; width: 100%; height: 0; min-height: 0; overflow: visible; pointer-events: none; }
+.kitchen-station-state {
+  position: absolute; top: 1px; right: 5%; z-index: 1; display: inline-flex; align-items: center; gap: 4px; max-width: 97%; padding: 4px 6px;
+  border: 1px solid #e6dac2; border-radius: 6px 6px 6px 0; background: #fffaf0; color: #8a7a60; box-shadow: 0 2px 0 #9b7a4510;
+  font-size: 8px; font-weight: 700; line-height: 1.1; white-space: nowrap; transition: background .25s ease, color .25s ease;
+}
+.kitchen-station-state i { flex-shrink: 0; width: 4px; height: 4px; border-radius: 50%; background: #b9ae95; }
+.kitchen-station.is-working .kitchen-station-state { border-color: #b3c5a7; background: #edf3df; color: #58734d; }
+.kitchen-station.is-working .kitchen-station-state i { background: #78945a; box-shadow: 0 0 0 2px #78945a13; }
+.kitchen-station.is-blocked .kitchen-station-state { border-color: #e4c5b2; background: #f9e9dd; color: #a56a48; }
+.kitchen-station.is-blocked .kitchen-station-state i { background: #c99470; }
+.kitchen-station-label {
+  position: relative; display: flex; align-items: baseline; justify-content: center; flex-shrink: 0; gap: 5px; min-height: 23px; padding: 3px 8px;
+  border: 1px solid transparent; border-radius: 6px; background: #fff6e1a8; color: #766548; line-height: 1.2; transition: border-color .2s ease, background .2s ease;
+}
+.kitchen-station-label b { color: #463c2f; font-size: 11px; font-weight: 850; letter-spacing: -.1px; }
+.kitchen-station-label > span { font-size: 8px; white-space: nowrap; }
+.kitchen-station.is-chosen .kitchen-station-label { border-color: #c49a6a; background: #fff9e9; box-shadow: 0 2px 0 #c8ac7c45; }
+.kitchen-selected-ring { opacity: 0; transition: opacity .2s ease; }
+.kitchen-station.is-chosen .kitchen-selected-ring { opacity: .65; }
+.kitchen-work-spark { opacity: 0; }
+.kitchen-pass { position: absolute; z-index: -1; top: 51.2%; left: 4%; right: 4%; display: flex; align-items: center; gap: 8px; color: #a18459; opacity: .78; pointer-events: none; }
+.kitchen-pass-caption { flex-shrink: 0; font-size: 6px; font-weight: 800; letter-spacing: 1.5px; }
+.kitchen-pass-arrow { font-size: 17px; line-height: 1; color: #c29a5d; }
+.kitchen-pass-line { position: relative; height: 3px; flex: 1; overflow: hidden; border-radius: 5px; background: #c7ad7e6b; box-shadow: 0 1px 0 #ffefce; }
+.kitchen-pass-line::after { position: absolute; top: 0; left: -30%; width: 30%; height: 100%; border-radius: inherit; background: #fff5ce; content: ''; }
+.kitchen-is-open .kitchen-pass-line::after { animation: kitchen-pass-travel 5s linear infinite; }
+.kitchen-market-badge {
+  position: absolute; bottom: 9px; left: 50%; display: flex; align-items: center; gap: 7px; max-width: calc(100% - 24px); padding: 6px 12px;
+  transform: translateX(-50%); border: 1px solid #d0bc94; border-radius: 8px; background: #fbf5e5; box-shadow: 0 3px 0 #ae936224; white-space: nowrap;
+}
+.kitchen-market-badge > span:nth-child(2) { display: flex; align-items: baseline; gap: 7px; }
+.kitchen-market-badge small { color: #9c8866; font-size: 6px; font-weight: 800; letter-spacing: .9px; }
+.kitchen-market-badge b { color: #5b4b35; font-size: 10px; font-weight: 850; }
+.kitchen-market-icon { display: grid; place-items: center; width: 17px; height: 17px; border-radius: 5px; background: #e8dcc0; color: #8f754d; font-size: 12px; }
+.kitchen-market-badge.has-position { border-color: #b1c0a3; background: #f2f7e6; }
+.kitchen-market-badge.has-position .kitchen-market-icon { background: #dce8cd; color: #66835b; }
+.kitchen-market-pulse { width: 5px; height: 5px; margin-left: 3px; border-radius: 50%; background: #7b9a63; animation: kitchen-sign-pulse 2s ease-in-out infinite; }
+
+/* Each station has a different kitchen gesture. Motion follows its real motor state. */
+.kitchen-head, .kitchen-arm, .kitchen-utensil, .kitchen-cloche, .kitchen-scale-needle, .kitchen-flame, .kitchen-chef-eyes { transform-box: fill-box; transform-origin: center; }
+.kitchen-is-open .kitchen-chef-eyes { animation: kitchen-blink 7s ease-in-out var(--chef-delay) infinite; }
+.kitchen-station.is-working .kitchen-head { animation: kitchen-head-bob 2.8s ease-in-out var(--chef-delay) infinite; }
+.kitchen-station.is-working .kitchen-arm-left { animation: kitchen-arm-prep 1.6s ease-in-out var(--chef-delay) infinite; transform-origin: 25% 10%; }
+.kitchen-station.is-working .kitchen-arm-right { animation: kitchen-arm-prep 1.6s ease-in-out calc(var(--chef-delay) - .8s) infinite reverse; transform-origin: 85% 10%; }
+.kitchen-station.is-working .kitchen-work-spark { animation: kitchen-spark 3s ease-in-out var(--chef-delay) infinite; }
+.kitchen-station.is-working .kitchen-utensil { animation: kitchen-utensil 1.6s ease-in-out var(--chef-delay) infinite; }
+.kitchen-station-selector.is-working .kitchen-ingredient { animation: kitchen-ingredient-hop 2.4s ease-in-out var(--chef-delay) infinite; }
+.kitchen-station-tape.is-working .kitchen-utensil { animation: kitchen-chop 1.05s ease-in-out infinite; transform-origin: 85% 20%; }
+.kitchen-station-tape.is-working .kitchen-chopped { animation: kitchen-chopped 1.05s ease-in-out infinite; }
+.kitchen-station-price.is-working .kitchen-utensil { animation: kitchen-stir 1.7s ease-in-out infinite; transform-origin: 50% 80%; }
+.kitchen-station-wire.is-working .kitchen-utensil { animation: kitchen-inspect 3s ease-in-out infinite; }
+.kitchen-station-size.is-working .kitchen-scale-needle { animation: kitchen-scale 2.8s ease-in-out infinite; transform-origin: left bottom; }
+.kitchen-station-exec.is-working .kitchen-cloche { animation: kitchen-serve 4s ease-in-out infinite; }
+.kitchen-station-risk.is-working .kitchen-flame { animation: kitchen-flicker .9s ease-in-out infinite alternate; transform-origin: center bottom; }
+.kitchen-steam { opacity: .2; }
+.kitchen-station.is-working .kitchen-steam { animation: kitchen-steam 2.5s ease-in-out var(--chef-delay) infinite; }
+.kitchen-is-paused *, .kitchen-is-paused *::after, .kitchen-is-paused *::before { animation-play-state: paused !important; }
+.kitchen-motion-off *, .kitchen-motion-off *::after, .kitchen-motion-off *::before { animation: none !important; transition: none !important; }
+.kitchen-motion-off .kitchen-station.is-working .kitchen-work-spark { opacity: .6; }
+.kitchen-motion-off .kitchen-station.is-working .kitchen-steam { opacity: .7; }
+@keyframes kitchen-head-bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(2px) rotate(2deg); } }
+@keyframes kitchen-arm-prep { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(6deg) translateY(-2px); } }
+@keyframes kitchen-utensil { 0%, 100% { transform: translate(0,0) rotate(-4deg); } 50% { transform: translate(1px,-3px) rotate(5deg); } }
+@keyframes kitchen-chop { 0%, 100% { transform: rotate(0); } 48% { transform: translateY(-9px) rotate(-15deg); } 65% { transform: translateY(1px) rotate(2deg); } }
+@keyframes kitchen-chopped { 0%, 50%, 100% { transform: translateY(0); } 70% { transform: translateY(-2px); } }
+@keyframes kitchen-stir { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } }
+@keyframes kitchen-inspect { 0%, 100% { transform: translate(0,0) rotate(0); } 45% { transform: translate(-12px,-3px) rotate(7deg); } 70% { transform: translate(-6px,1px) rotate(-5deg); } }
+@keyframes kitchen-scale { 0%, 100% { transform: rotate(-15deg); } 30%, 70% { transform: rotate(15deg); } 50% { transform: rotate(4deg); } }
+@keyframes kitchen-serve { 0%, 15%, 100% { transform: translateY(0); } 35%, 65% { transform: translateY(-8px) rotate(-3deg); } 80% { transform: translateY(-2px); } }
+@keyframes kitchen-flicker { 0% { transform: scale(.9,1); opacity: .85; } 100% { transform: scale(1.1,.85); opacity: 1; } }
+@keyframes kitchen-ingredient-hop { 0%, 15%, 55%, 100% { transform: translateY(0); } 35% { transform: translateY(-4px); } }
+@keyframes kitchen-steam { 0%, 100% { transform: translateY(2px); opacity: .25; } 55% { transform: translateY(-5px); opacity: .85; } }
+@keyframes kitchen-blink { 0%, 43%, 47%, 100% { transform: scaleY(1); } 45% { transform: scaleY(.12); } }
+@keyframes kitchen-spark { 0%, 20%, 85%, 100% { opacity: 0; transform: translateY(2px); } 45%, 60% { opacity: .7; transform: translateY(-3px); } }
+@keyframes kitchen-sign-pulse { 0%, 100% { box-shadow: 0 0 0 2px #88ad781a; } 50% { box-shadow: 0 0 0 4px #88ad7826; } }
+@keyframes kitchen-pass-travel { from { left: -30%; } to { left: 110%; } }
+@media (min-width: 1550px) { .kitchen-stage { height: 510px; } .kitchen-station-label b { font-size: 12px; } .kitchen-station-label > span, .kitchen-station-state { font-size: 9px; } }
+@media (max-width: 1050px) and (min-width: 701px) { .kitchen-stage { height: 425px; } .kitchen-station-label { gap: 3px; padding-left: 4px; padding-right: 4px; } .kitchen-station-label > span { font-size: 7px; } }
+@media (max-width: 700px) {
+  .kitchen-stage { height: 660px; border-radius: 17px; }
+  .kitchen-stations { inset: 47px 9px 43px; }
+  .kitchen-stage .kitchen-station { width: 50%; height: 24%; }
+  .kitchen-stage .kitchen-station-selector { left: 0; top: 0; }
+  .kitchen-stage .kitchen-station-tape { left: 50%; top: 0; }
+  .kitchen-stage .kitchen-station-price { left: 0; top: 25%; }
+  .kitchen-stage .kitchen-station-wire { left: 50%; top: 25%; }
+  .kitchen-stage .kitchen-station-size { left: 0; top: 50%; }
+  .kitchen-stage .kitchen-station-exec { left: 50%; top: 50%; }
+  .kitchen-stage .kitchen-station-risk { left: 25%; top: 75%; }
+  .kitchen-station-label { gap: 4px; min-height: 22px; padding: 3px 5px; }
+  .kitchen-station-label b { font-size: 10px; }
+  .kitchen-station-label > span { font-size: 7px; }
+  .kitchen-station-state { top: 0; right: 5%; font-size: 7px; padding: 3px 5px; }
+  .kitchen-pass { top: 74%; }
+  .kitchen-pass-caption { font-size: 5px; letter-spacing: 1px; }
+  .kitchen-market-badge { bottom: 10px; padding: 6px 9px; }
+  .kitchen-market-badge > span:nth-child(2) { gap: 5px; }
+  .kitchen-market-badge small { font-size: 5px; }
+  .kitchen-market-badge b { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kitchen-stage *, .kitchen-stage *::after, .kitchen-stage *::before { animation: none !important; transition: none !important; }
+  .kitchen-stage .kitchen-work-spark { opacity: 0; }
+  .kitchen-stage .is-working .kitchen-steam { opacity: .65; }
+}

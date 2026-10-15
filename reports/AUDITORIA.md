@@ -1,5 +1,27 @@
 # Auditoría del motor de trading — 9 de septiembre de 2026
 
+## Perfil temporal de mayor frecuencia — 15 de octubre de 2026
+
+Scalper y Squeeze usan un umbral base de 0,15 y hasta seis posiciones totales.
+Los parámetros entrenados o ajustados manualmente por mercado siguen teniendo
+prioridad. Se conservan el riesgo objetivo por entrada, el límite agregado del
+6%, los frenos diarios, los vetos y el máximo de cinco posiciones a prueba.
+Flujo mantiene su configuración propia. MT5 conserva su límite compartido.
+
+En Mesa Siete, Tape admite medias separadas hasta 0,5 ATR en sentido adverso y
+amplía la zona de descuento. Price admite retroceso o impulso ascendente reciente,
+RSI de 15 a 80 y extensión entre -4 y +2,25 ATR, conservando el máximo de 2 ATR
+entre la cotización y el cierre de señal. La mesa sigue siendo spot simulado,
+con una posición simultánea, exposición máxima de un tercio y riesgo objetivo
+del 1%, comisión, deslizamiento, Wire y los demás controles existentes.
+
+Verificación: 147 pruebas pasan, incluidas nuevas entradas de rebote e impulso
+y rechazos por RSI extremo, extensión, desviación de precio y falta de setup.
+Se actualizó una prueba antigua de salida que ya fallaba en HEAD: el código
+exige pérdida de estructura bajo EMA50 menos 2 ATR, no una caída menor. La
+regla de salida se conserva y ahora se prueban ambos casos explícitamente.
+Estos ajustes amplían las condiciones de entrada; no demuestran mayor rentabilidad.
+
 ## Reloj MT5, recarga y umbrales manuales — 15 de octubre de 2026
 
 La estimación del reloj selecciona los símbolos del terminal y usa el mayor

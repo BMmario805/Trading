@@ -88,6 +88,10 @@ export default function App() {
 
   useEffect(() => setOpinionsSource(null), [selected])
 
+  useEffect(() => {
+    document.title = view === 'desk' ? 'Mesa Siete · La cocina del mercado' : 'Mercados y laboratorio · Mesa Siete'
+  }, [view])
+
   const current = useMemo(
     () => symbols.find((s) => s.id === selected),
     [symbols, selected],
@@ -96,7 +100,11 @@ export default function App() {
 
   return (
     <div className={`layout app-${view}`}>
-      <nav className="workspace-switch" aria-label="Vista del proyecto"><button className={view === 'desk' ? 'active' : ''} onClick={() => setView('desk')}>Mesa Siete</button><button className={view === 'markets' ? 'active' : ''} onClick={() => setView('markets')}>Mercados y laboratorio</button></nav>
+      <nav className="workspace-switch" aria-label="Vista del proyecto">
+        <button className={view === 'desk' ? 'active' : ''} aria-pressed={view === 'desk'} onClick={() => setView('desk')}><span aria-hidden="true">♨</span> Mesa Siete</button>
+        <button className={view === 'markets' ? 'active' : ''} aria-pressed={view === 'markets'} onClick={() => setView('markets')}>Mercados y laboratorio</button>
+        {view === 'desk' && <span className="workspace-kitchen-tag">LA COCINA DEL MERCADO <i aria-hidden="true" /></span>}
+      </nav>
       {view === 'desk' ? <DeskPanel /> : <>
       <Watchlist
         symbols={symbols}

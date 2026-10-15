@@ -23,7 +23,31 @@ def connection():
         positions TEXT, PRIMARY KEY(owner, ts))''')
     con.execute('''CREATE TABLE IF NOT EXISTS mt5_sync (
         owner TEXT PRIMARY KEY, updated_at INTEGER, last_full INTEGER, error TEXT)''')
+    con.execute('''CREATE TABLE IF NOT EXISTS mt5_sessions (
+        owner TEXT PRIMARY KEY, payload TEXT NOT NULL)''')
     return con
+
+
+def session(owner):
+    with connection() as con:
+        row=con.execute('SELECT payload FROM mt5_sessions WHERE owner=?',(owner,)).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def capital(owner, account, positions):
+    settings=session(owner)
+    if settings is None:
+        return None
+    if account.currency!=settings['currency']:
+        raise ValueError('La divisa del presupuesto virtual no coincide con la cuenta demo')
+    with connection() as con:
+        rows=con.execute('SELECT kind,profit,commission,swap,fee FROM mt5_deals WHERE owner=? AND ts>=?',
+                         (owner,settings['cutoffMsc'])).fetchall()
+    realized=sum(sum(r[1:]) for r in rows if r[0] not in TRANSFERS)
+    balance=settings['initial']+realized
+    floating=sum(p.profit+p.swap for p in positions)
+    return dict(initial=settings['initial'],balance=balance,equity=balance+floating,
+                currency=settings['currency'],startedAt=settings['startedAt'])
 
 
 def sync_info(owner):
@@ -44,6 +68,9 @@ def ingest(owner, account, positions, deals, now, full=False):
     if deals is None or positions is None:
         raise ValueError('Sin respuesta válida de MT5')
     info = sync_info(owner)
+    settings=session(owner)
+    if settings:
+        deals=[d for d in deals if int(getattr(d,'time_msc',d.time*1000))>=settings['cutoffMsc']]
     with connection() as con:
         con.executemany('INSERT OR REPLACE INTO mt5_deals VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', [
             (owner, int(d.ticket), int(getattr(d, 'time_msc', d.time*1000)), int(d.position_id), int(d.magic),
@@ -51,8 +78,13 @@ def ingest(owner, account, positions, deals, now, full=False):
              float(d.swap), float(getattr(d, 'fee', 0))) for d in deals])
         pos = [dict(ticket=p.ticket, identifier=p.identifier, magic=p.magic, symbol=p.symbol,
                     profit=p.profit, swap=p.swap, volume=p.volume) for p in positions]
+        virtual=None
+        if settings:
+            rows=con.execute('SELECT kind,profit,commission,swap,fee FROM mt5_deals WHERE owner=? AND ts>=?',(owner,settings['cutoffMsc'])).fetchall()
+            balance=settings['initial']+sum(sum(r[1:]) for r in rows if r[0] not in TRANSFERS)
+            virtual=(balance,balance+sum(p.profit+p.swap for p in positions),0)
         con.execute('INSERT OR REPLACE INTO mt5_snapshots VALUES (?,?,?,?,?,?,?)',
-                    (owner, int(now)//10*10, account.balance, account.equity, account.credit,
+                    (owner, int(now)//10*10, *(virtual or (account.balance,account.equity,account.credit)),
                      account.currency, json.dumps(pos)))
         con.execute('INSERT OR REPLACE INTO mt5_sync VALUES (?,?,?,?)',
                     (owner, int(now), int(now) if full else info['lastFull'], None))
@@ -162,7 +194,7 @@ def performance(owner, bots, bot=None, symbol=None, since=None, until=None, per_
                    balance=latest['balance'] if latest else None, equity=latest['equity'] if latest else None,
                    realizedPnl=round(sum(realized.values()), 2), unrealizedPnl=round(account_float, 2),
                    totalPnl=round(sum(realized.values())+account_float, 2), netFunding=round(cash_flows, 2),
-                   reconciliationDifference=round(latest['balance']+latest['credit']-cash_flows-sum(realized.values()), 2) if latest else None,
+                   reconciliationDifference=round(latest['balance']+latest['credit']-(session(owner) or {}).get('initial',0)-cash_flows-sum(realized.values()), 2) if latest else None,
                    historySince=snapshots[0]['ts'] if snapshots else None))
     if per_bot:
         out['series'] = [dict(id=key, name=name, **result(key)) for key,name in names.items() if not bot or key==bot]

@@ -1,9 +1,10 @@
 ﻿"""Mesa experimental de siete roles. Libro spot SIMULADO sin pasarela de órdenes."""
 
 import asyncio
+from collections import Counter
+from contextlib import closing
 import json
 import math
-import re
 import sqlite3
 import time
 from decimal import Decimal, ROUND_DOWN
@@ -20,16 +21,29 @@ INITIAL = 1000.0
 FEE = .001
 SLIPPAGE = .0002
 ROLES = ('Selector','Tape','Price','Wire','Size','Exec','Risk')
-STABLES = {'USDT','USDC','FDUSD','TUSD','DAI','USDP','USD1','USDD','EUR','AEUR','EURI','PAXG'}
-OFFICIAL = {
-    'SOL': ('https://solana.com/','solana'),
-    'ETH': ('https://ethereum.org/community/','ethdotorg'),
-    'LINK': ('https://chain.link/community','chainlink'),
-    'SUI': ('https://www.sui.io/community','SuiNetwork'),
-    'BNB': ('https://www.bnbchain.org/en','BNBCHAIN'),
-    'AVAX': ('https://www.avax.network/','avax'),
-    'DOGE': ('https://dogecoin.com/','dogecoin'),
-}
+# Perfil temporal de entradas más frecuentes; no cambia tamaño, stops ni límites diarios.
+ENTRY_RSI_MIN = 15
+ENTRY_RSI_MAX = 80
+ENTRY_EXTENSION_MIN = -4.0
+ENTRY_EXTENSION_MAX = 2.25
+STABLES = {'USDT','USDC','FDUSD','TUSD','DAI','USDP','USD1','USDD','EUR','AEUR','EURI'}
+# Nombres completos de productos apalancados legacy, no un filtro por sufijo:
+# JUP (Jupiter), por ejemplo, es un activo spot ordinario.
+LEVERAGED_BASES = {
+    asset+suffix for asset in ('BTC','ETH','BNB','XRP','ADA','DOT','LINK','LTC','BCH',
+                              'EOS','TRX','XLM','UNI','SUSHI','YFI','1INCH','AAVE','SXP','FIL','XTZ')
+    for suffix in ('UP','DOWN')
+} | {asset+suffix for asset in ('BTC','ETH','EOS','XRP','BNB','TRX') for suffix in ('BULL','BEAR')}
+SCAN_BATCH_SIZE = 10
+SELECTION_INTERVAL = 6*3600  # Gemini propone prioridades; el escaneo no espera este turno.
+
+
+def fresh_snapshot(data):
+    try:
+        age=time.time()-float(data['at'])
+        return math.isfinite(age) and -5<=age<=120
+    except (KeyError,ValueError,TypeError):
+        return False
 
 
 def connect():
@@ -48,24 +62,29 @@ def universe(data):
     candidates=[]
     for symbol,meta in data['metadata'].items():
         base=meta.get('baseAsset','')
-        if meta.get('quoteAsset')!='USDT' or base in STABLES or base.endswith(('UP','DOWN','BULL','BEAR')):
+        if not isinstance(base,str) or not base or symbol!=base+'USDT':
+            continue
+        if meta.get('quoteAsset')!='USDT' or base in STABLES or base in LEVERAGED_BASES:
             continue
         if meta.get('status')!='TRADING' or not meta.get('isSpotTradingAllowed'):
             continue
         sym=Symbol(base,base,'cripto','binance',symbol)
         quality=opportunities.assess(sym,data)
         ticker=data['tickers'].get(symbol,{})
+        eligible=quality['eligible'] and fresh_snapshot(data)
+        reason=quality['reason'] if fresh_snapshot(data) else 'Cotización antigua o fecha inválida'
         try:
             change=float(ticker['priceChangePercent'])
-            if not math.isfinite(change): continue
+            if not math.isfinite(change): raise ValueError('Variación inválida')
         except (KeyError,ValueError,TypeError):
-            continue
-        identity_ref=base in OFFICIAL
-        candidates.append(dict(symbol=symbol,base=base,eligible=quality['eligible'] and identity_ref,
+            change=0.0
+            eligible=False
+            reason='Sin variación de mercado válida'
+        candidates.append(dict(symbol=symbol,base=base,eligible=eligible,
                                change24h=round(change,2),volumeUSD=round(quality.get('quoteVolume24h',0)),
                                spreadBp=round(quality.get('spreadPct',100)*100,2),
-                               reason=quality['reason'] if not quality['eligible'] or identity_ref else 'Sin referencia oficial para Wire'))
-    return sorted(candidates,key=lambda c:(-c['volumeUSD'],c['symbol']))[:81]
+                               reason=reason,qualityReason=reason,status='pending' if eligible else 'filtered'))
+    return sorted(candidates,key=lambda c:(-c['volumeUSD'],c['symbol']))
 
 
 def tape(rows, now):
@@ -77,13 +96,14 @@ def tape(rows, now):
     a=atr(rows)
     strength=rsi(closes)[-1]
     if not a or strength is None: return None
-    # Activo en tendencia alcista O en zona de descuento/reversión válida (RSI 20..72)
-    in_uptrend = e20[-1] > e50[-1] and closes[-1] > e50[-1]
-    in_discount = closes[-1] <= e20[-1] + a * 1.2 and 20 <= strength <= 68
+    # Se admite proximidad entre medias, además de descuento/reversión.
+    in_uptrend = e20[-1] >= e50[-1] - a * .5 and closes[-1] >= e50[-1] - a * .5
+    in_discount = closes[-1] <= e20[-1] + a * 1.5 and ENTRY_RSI_MIN <= strength <= 75
     trend = in_uptrend or in_discount
-    pullback = min(c['low'] for c in rows[-5:]) <= e20[-1] + a * 1.5
+    pullback = min(c['low'] for c in rows[-5:]) <= e20[-1] + a * 1.75
+    momentum = closes[-1] > closes[-2] and closes[-1] >= e20[-1]
     return dict(bar=rows[-1]['time'],close=closes[-1],ema20=e20[-1],ema50=e50[-1],
-                atr=a,rsi=strength,trend=trend,pullback=pullback,rows=rows[-90:])
+                atr=a,rsi=strength,trend=trend,pullback=pullback,momentum=momentum,rows=rows[-90:])
 
 
 def size_order(equity, cash, ask, a, info):
@@ -108,24 +128,63 @@ class Desk:
     def __init__(self):
         with connect() as con:
             row=con.execute("SELECT payload FROM state WHERE key='desk'").fetchone()
-        self.state=json.loads(row[0]) if row else dict(cash=INITIAL,enabled=True,position=None,
+        self.state=json.loads(row[0]) if row else dict(initial=INITIAL,cash=INITIAL,enabled=True,position=None,
             selected=None,selectionAt=0,selection=None,candidates=[],benchmark=None,startedAt=time.time(),
             day=int(time.time()//86400),dayEquity=INITIAL,dailyStopped=False,roles={},lastScan=0)
         self.task=None
         self.lock=asyncio.Lock()
-        self.wire_cache={}
         self.last_data=None
         self.chart=[]
         self.last_curve=0
         self.last_error=None
         self.save()
 
+    @property
+    def initial(self):
+        return self.state.get('initial',INITIAL)
+
+    async def reset(self):
+        """Nueva sesión paper financiada con 100 EUR; conserva el libro anterior."""
+        async with self.lock:
+            data=await opportunities.snapshot()
+            quote=self.quote('EURUSDT',data)
+            meta=data.get('metadata',{}).get('EURUSDT',{})
+            if not quote or meta.get('status')!='TRADING' or not meta.get('isSpotTradingAllowed'):
+                raise ValueError('No hay cambio EUR/USDT fresco; se conserva la sesión actual')
+            # Se simula vender EUR al bid, incluyendo el coste y deslizamiento habituales.
+            rate=quote[0]*(1-SLIPPAGE)*(1-FEE)
+            initial=100.0*rate
+            now=time.time()
+            archive=DB_PATH.with_name(f'desk-session-{time.time_ns()}.sqlite')
+            with connect() as con:
+                with closing(sqlite3.connect(archive)) as backup:
+                    con.backup(backup)
+                state=dict(initial=initial,cash=initial,enabled=True,position=None,
+                    selected=None,selectionAt=0,selection=None,candidates=[],benchmark=None,
+                    startedAt=now,day=int(now//86400),dayEquity=initial,dailyStopped=False,
+                    roles={},lastScan=0,funding=dict(currency='EUR',amount=100.0,
+                    netQuotePerEuro=rate,bid=quote[0],at=data['at'],source='Binance EURUSDT',
+                    fee=FEE,slippage=SLIPPAGE),previousSession=archive.name)
+                con.execute('DELETE FROM events')
+                con.execute('DELETE FROM trades')
+                con.execute('DELETE FROM equity')
+                con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(state),))
+                con.execute('INSERT INTO equity VALUES (?,?,?)',(int(now),initial,initial))
+            self.state=state
+            self.last_data=data
+            self.chart=[]
+            self.last_curve=now
+            self.last_error=None
+            self.role('Risk','ready','Nueva sesión desde 100 EUR; tamaño proporcional al capital, riesgo objetivo 1%')
+            self.save()
+        return self.public()
+
     def save(self):
         with connect() as con:
             con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
 
-    def role(self,name,status,detail):
-        value=dict(status=status,detail=detail,at=time.time(),provider='Gemini' if name=='Selector' else 'Reglas deterministas')
+    def role(self,name,status,detail,provider=None):
+        value=dict(status=status,detail=detail,at=time.time(),provider=provider or ('Gemini' if name=='Selector' else 'Reglas deterministas'))
         previous=self.state['roles'].get(name,{})
         self.state['roles'][name]=value
         if previous.get('status')!=status or previous.get('detail')!=detail:
@@ -136,7 +195,7 @@ class Desk:
         try:
             book=data['books'][symbol]
             bid,ask=float(book['bidPrice']),float(book['askPrice'])
-            if time.time()-data['at']>120 or not all(math.isfinite(v) and v>0 for v in (bid,ask)) or ask<bid:
+            if not fresh_snapshot(data) or not all(math.isfinite(v) and v>0 for v in (bid,ask)) or ask<bid:
                 return None
             return bid,ask
         except (KeyError,ValueError,TypeError): return None
@@ -147,31 +206,21 @@ class Desk:
 
     def hold_equity(self):
         b=self.state['benchmark']
-        return b['qty']*b['lastBid']*(1-SLIPPAGE)*(1-FEE) if b else INITIAL
+        return b['qty']*b['lastBid']*(1-SLIPPAGE)*(1-FEE) if b else self.initial
 
-    async def wire(self,base):
-        cached=self.wire_cache.get(base)
-        if cached and time.time()-cached[0]<3600: return cached[1]
-        official=OFFICIAL.get(base)
-        if not official:
-            result=dict(ok=False,detail='Sin referencia oficial registrada; no se presume autenticidad',url=None)
-        else:
-            url,handle=official
-            try:
-                response=await market_data.client().get(url,follow_redirects=True)
-                response.raise_for_status()
-                from urllib.parse import urlparse
-                if (urlparse(str(response.url)).hostname or '').removeprefix('www.')!=(urlparse(url).hostname or '').removeprefix('www.'):
-                    raise ValueError('Redirección a otro dominio')
-                page=response.text.replace('\\/','/')
-                handles=re.findall(r'''https?://(?:www\.)?(?:x\.com|twitter\.com)/([A-Za-z0-9_]+)(?=[/?#"'\s<]|$)''',page)
-                ok=handle.casefold() in {h.casefold() for h in handles}
-                result=dict(ok=ok,url=url,handle=handle,checkedAt=time.time(),
-                            detail=f'@{handle} enlazada desde el sitio oficial' if ok else 'No se encontró el enlace oficial esperado; entrada bloqueada')
-            except Exception:
-                result=dict(ok=False,url=url,detail='No se pudo consultar la referencia oficial; entrada bloqueada')
-        self.wire_cache[base]=(time.time(),result)
-        return result
+    async def wire(self,symbol,data):
+        """Corrobora el instrumento y su fuente; no certifica redes sociales."""
+        meta=data.get('metadata',{}).get(symbol,{})
+        base=meta.get('baseAsset','')
+        listed=(bool(base) and symbol==base+'USDT' and meta.get('symbol',symbol)==symbol
+                and meta.get('quoteAsset')=='USDT' and meta.get('status')=='TRADING'
+                and bool(meta.get('isSpotTradingAllowed')))
+        ok=listed and self.quote(symbol,data) is not None
+        return dict(ok=ok,symbol=symbol,source='Binance Spot',checkedAt=time.time(),
+                    url='https://www.binance.com/en/trade/'+base+'_USDT' if listed else None,
+                    socialChecked=False,socialDetail='Web y redes sociales del proyecto no verificadas',
+                    detail=(f'{symbol}: listado spot y cotización bid/ask fresca corroborados; redes sociales no verificadas'
+                            if ok else 'Instrumento spot o cotización fresca no corroborados; entrada bloqueada'))
 
     def close_position(self,bid,reason):
         p=self.state['position']
@@ -228,75 +277,155 @@ class Desk:
     async def scan(self,data):
         now=time.time()
         candidates=universe(data)
+        previous={c['symbol']:c for c in self.state['candidates']}
+        for candidate in candidates:
+            old=previous.get(candidate['symbol'],{})
+            if candidate['eligible'] and old.get('eligible') and old.get('checkedAt'):
+                candidate.update({k:old[k] for k in ('status','reason','checkedAt') if k in old})
         self.state['candidates']=candidates
-        agent=gemini_agent.AGENT
-        reselect=self.state['enabled'] and not self.state['position'] and (not self.state['selected'] or now-self.state['selectionAt']>=6*3600)
-        if reselect:
-            self.state['selectionPending']=True
-            self.role('Selector','waiting',f'{len(candidates)} mercados examinados; esperando selección de Gemini')
-            choice=await agent.choose_market([{k:c[k] for k in ('symbol','eligible','change24h','volumeUSD','spreadBp')} for c in candidates]) if agent and candidates else None
-            if choice is None:
-                # Fallback determinista al candidato elegible de mayor liquidez si Gemini está en cooldown
-                top_elig = next((c for c in candidates if c['eligible']), None)
-                if top_elig:
-                    choice = dict(symbol=top_elig['symbol'], confidence=0.8, reason='Selección por liquidez y menor spread (turno en caché)')
-                else:
-                    return
-            self.state.update(selection=choice,selectionAt=now,selectionPending=False)
-            if choice['symbol'] is None:
-                self.state['selected']=None
-                self.role('Selector','waiting',f'Elegido efectivo: {choice["reason"]}')
+        self.state['scanReviewed']=0
+        position=self.state['position']
+        if position:
+            # Una posición conserva su símbolo, controles y contabilidad hasta el cierre.
+            self.state['selected']=position['symbol']
+            candidate=next((c for c in candidates if c['symbol']==position['symbol']),None)
+            if candidate is None:
+                self.role('Exec','blocked','El mercado de la posición no está disponible; se mantiene su control de riesgo')
                 return
-            self.state['selected']=choice['symbol']
-            self.role('Selector','selected',f'{choice["symbol"]}: {choice["reason"]}')
-            self.save()
-        symbol=self.state['selected']
-        if not symbol: return
+            try:
+                await self.review_candidate(candidate,data)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.evaluated(candidate,'error',f'Análisis de la posición temporalmente no disponible ({type(exc).__name__}); se conservan stop y objetivo')
+                self.role('Exec','waiting',candidate['reason'])
+            self.state['scanReviewed']=1
+            return
+        if not self.state['enabled'] or self.state['dailyStopped']:
+            return
+        eligible=[c for c in candidates if c['eligible']]
+        if not eligible:
+            self.state['selected']=None
+            self.state['selectionPending']=False
+            self.role('Selector','waiting','Ningún mercado pasa los controles de cotización, spread y volumen',provider='Reglas deterministas')
+            return
+        cursor=int(self.state.get('scanCursor',0))%len(eligible)
+        rotated=eligible[cursor:]+eligible[:cursor]
+        batch=rotated[:SCAN_BATCH_SIZE]
+        agent=gemini_agent.AGENT
+        choice=None
+        if agent and (not self.state.get('selection') or now-self.state.get('selectionAt',0)>=SELECTION_INTERVAL):
+            self.state['selectionPending']=True
+            self.role('Selector','waiting',f'{len(candidates)} mercados examinados; Gemini prioriza un lote de {len(batch)}')
+            try:
+                # El universo completo permanece público, pero nunca se envían cientos de filas al modelo.
+                choice=await agent.choose_market([{k:c[k] for k in ('symbol','eligible','change24h','volumeUSD','spreadBp')} for c in batch])
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                choice=None  # Una fuente auxiliar no debe detener el resto del escaneo.
+            finally:
+                self.state['selectionPending']=False
+            self.state['selectionAt']=now
+        if choice and choice.get('symbol') in {c['symbol'] for c in batch}:
+            batch.sort(key=lambda c:c['symbol']!=choice['symbol'])
+        else:
+            choice=None
+        for candidate in batch:
+            self.state['scanReviewed']+=1
+            # Persistir el avance incluso si una entrada o un error termina esta vuelta.
+            self.state['scanCursor']=(cursor+self.state['scanReviewed'])%len(eligible)
+            if self.state['selected']!=candidate['symbol']:
+                self.chart=[]
+                self.state.pop('tape',None)
+                self.state.pop('wire',None)
+            self.state['selected']=candidate['symbol']
+            selected_by_ai=choice is not None and candidate['symbol']==choice['symbol']
+            selection=dict(choice,source='gemini') if selected_by_ai else dict(
+                symbol=candidate['symbol'],source='rules',reason='Revisión rotativa por liquidez; sin estimación de confianza')
+            self.state['selection']=selection
+            self.role('Selector','selected',f'{candidate["symbol"]}: {selection["reason"]}',
+                      provider='Gemini' if selected_by_ai else 'Reglas deterministas')
+            try:
+                await self.review_candidate(candidate,data)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.evaluated(candidate,'error',f'Análisis temporalmente no disponible ({type(exc).__name__}); se continúa con otros mercados')
+                self.role('Exec','waiting',candidate['reason'])
+            if self.state['position']:
+                break
+
+    def evaluated(self,candidate,status,reason):
+        candidate.update(status=status,reason=reason,checkedAt=time.time())
+
+    async def review_candidate(self,candidate,data):
+        symbol=candidate['symbol']
         meta=data['metadata'].get(symbol,{})
         base=meta.get('baseAsset','')
         quality=opportunities.assess(Symbol(base,base,'cripto','binance',symbol),data)
         if not quality['eligible']:
+            self.evaluated(candidate,'blocked',quality['reason'])
             self.role('Exec','blocked',quality['reason'])
             return
         q=self.quote(symbol,data)
-        if not q: return
+        if not q:
+            self.evaluated(candidate,'blocked','Sin cotización bid/ask fresca y válida')
+            self.role('Exec','blocked',candidate['reason'])
+            return
         bid,ask=q
-        identity=await self.wire(base)
+        identity=await self.wire(symbol,data)
         self.state['wire']=identity
         self.role('Wire','corroborated' if identity['ok'] else 'blocked',identity['detail'])
+        if not identity['ok']:
+            self.evaluated(candidate,'blocked',identity['detail'])
+            self.role('Exec','blocked',identity['detail'])
+            return
         if identity['ok'] and self.state['benchmark'] is None:
-            self.state['benchmark']=dict(symbol=symbol,qty=INITIAL/(ask*(1+SLIPPAGE)*(1+FEE)),lastBid=bid,startedAt=now)
+            self.state['benchmark']=dict(symbol=symbol,qty=self.initial/(ask*(1+SLIPPAGE)*(1+FEE)),lastBid=bid,startedAt=time.time())
         sym=Symbol(base,base,'cripto','binance',symbol)
         analysis=tape(await market_data.get_candles(sym,'15m',250),time.time())
         if analysis is None:
+            self.evaluated(candidate,'blocked','Velas cerradas insuficientes o antiguas')
             self.role('Tape','blocked','Velas cerradas insuficientes o antiguas')
             return
         self.chart=analysis['rows']
         self.state['tape']={k:v for k,v in analysis.items() if k!='rows'}
         self.role('Tape','ready' if analysis['trend'] else 'waiting',f'EMA20/50; RSI {analysis["rsi"]:.0f}; ATR {analysis["atr"]:.5g}')
         extension=(ask-analysis['ema20'])/analysis['atr']
-        price_ok=analysis['trend'] and analysis['pullback'] and 20<=analysis['rsi']<=72 and -3.5<=extension<=1.8 and abs(ask-analysis['close'])<=2.0*analysis['atr']
-        self.role('Price','ready' if price_ok else 'waiting','Retroceso y zona de valor confirmados' if price_ok else 'Esperando retroceso; no perseguir el rebote')
+        setup_ok=analysis['pullback'] or analysis.get('momentum',False)
+        price_ok=(analysis['trend'] and setup_ok and ENTRY_RSI_MIN<=analysis['rsi']<=ENTRY_RSI_MAX
+                  and ENTRY_EXTENSION_MIN<=extension<=ENTRY_EXTENSION_MAX
+                  and abs(ask-analysis['close'])<=2.0*analysis['atr'])
+        self.role('Price','ready' if price_ok else 'waiting',
+                  'Retroceso o impulso moderado confirmado' if price_ok else 'Esperando señal dentro del rango de RSI y extensión permitido')
         order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta)
         self.role('Size','ready' if order else 'blocked',f'Tamaño {order["notional"]:.2f} USDT; máximo 1/3; riesgo {order["risk"]:.2f}' if order else 'Lote mínimo incompatible con presupuesto')
         if self.state['position']:
             if not analysis['trend'] and analysis['close']<analysis['ema50'] - 2.0 * analysis['atr']:
                 self.close_position(bid,'Tape detecta pérdida de estructura')
+                self.evaluated(candidate,'waiting','Posición cerrada por pérdida de estructura')
                 self.role('Exec','waiting','Posición cerrada por cambio de tendencia')
                 return
             self.role('Exec','managing','Una posición abierta; no se acumulan entradas')
+            self.evaluated(candidate,'managing','Posición abierta: se mantiene su gestión de riesgo')
             return
         if not self.state['enabled'] or self.state['dailyStopped'] or not price_ok or not identity['ok'] or not order:
+            self.evaluated(candidate,'waiting','Sin señal de Price' if not price_ok else 'Lote mínimo incompatible con presupuesto' if not order else 'Entradas pausadas por control de riesgo')
             self.role('Exec','waiting','Esperando aprobación de Price, Wire, Size y Risk')
             return
         key=f'{symbol}:{analysis["bar"]}'
         with connect() as con:
-            if con.execute('SELECT 1 FROM trades WHERE entry_key=?',(key,)).fetchone(): return
+            if con.execute('SELECT 1 FROM trades WHERE entry_key=?',(key,)).fetchone():
+                self.evaluated(candidate,'waiting','Esta vela ya produjo una operación; no se duplica')
+                return
         if not self.quote(symbol,data):
+            self.evaluated(candidate,'blocked','La cotización caducó durante el análisis; entrada bloqueada')
             self.role('Exec','blocked','La cotización caducó durante el análisis; entrada bloqueada')
             return
         available=float(data['books'][symbol].get('askQty',0))
         if not math.isfinite(available) or available<=0 or order['qty']>available*.5:
+            self.evaluated(candidate,'blocked','Tamaño superior a la liquidez publicada al mejor ask')
             self.role('Exec','blocked','Tamaño superior a la liquidez publicada al mejor ask')
             return
         position=dict(order,symbol=symbol,entryKey=key,entryTime=time.time(),atr=analysis['atr'],
@@ -308,6 +437,7 @@ class Desk:
             con.execute('INSERT INTO trades(entry_key,payload) VALUES (?,?)',(key,json.dumps(position)))
             con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
         self.role('Exec','executed',f'Compra SIMULADA de {base}; comisión y deslizamiento incluidos')
+        self.evaluated(candidate,'executed','Operación simulada abierta; stop, objetivo, comisión y deslizamiento aplicados')
         self.role('Risk','managing','Stop y objetivo establecidos al abrir')
 
     async def cycle(self):
@@ -354,11 +484,19 @@ class Desk:
             count,wins,pnl=con.execute('''SELECT COUNT(*),COALESCE(SUM(json_extract(payload,'$.pnl')>0),0),COALESCE(SUM(json_extract(payload,'$.pnl')),0)
                 FROM trades WHERE json_extract(payload,'$.status')='closed' ''').fetchone()
         candidates=[dict(c,selected=c['symbol']==self.state['selected']) for c in self.state['candidates']]
-        return dict(mode='paper',experimental=True,enabled=self.state['enabled'],initial=INITIAL,
+        filtered=sum(not c['eligible'] for c in candidates)
+        eligible=len(candidates)-filtered
+        reasons=Counter(c.get('qualityReason',c['reason']) for c in candidates if not c['eligible'])
+        return dict(mode='paper',experimental=True,enabled=self.state['enabled'],initial=self.initial,
+                    funding=self.state.get('funding'),startedAt=self.state['startedAt'],
                     equity=round(self.equity(),2),cash=round(self.state['cash'],2),benchmark=round(self.hold_equity(),2),
                     selected=self.state['selected'],selection=self.state['selection'],candidates=candidates,
                     benchmarkSymbol=(self.state['benchmark'] or {}).get('symbol'),
-                    examined=len(candidates),discarded=sum(not c['selected'] for c in candidates),
+                    examined=len(candidates),eligible=eligible,filtered=filtered,discarded=filtered,
+                    notSelected=sum(c['eligible'] and not c['selected'] for c in candidates),
+                    filterReasons=[dict(reason=reason,count=count) for reason,count in reasons.most_common()],
+                    scope='Binance Spot · USDT',scanBatchSize=SCAN_BATCH_SIZE,
+                    scanReviewed=self.state.get('scanReviewed',0),maxPositions=1,
                     roles=[dict(name=r,**self.state['roles'].get(r,dict(status='waiting',detail='Pendiente',provider='Gemini' if r=='Selector' else 'Reglas deterministas'))) for r in ROLES],
                     position=self.state['position'],trades=trades,events=events,curve=curve,candles=self.chart,
                     stats=dict(closed=count,wins=wins,pnl=round(pnl,2)),

@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import closing
 import json
 import math
 import tempfile
@@ -19,6 +20,15 @@ def data():
         tickers={'SOLUSDT':dict(quoteVolume='50000000',priceChangePercent='2')})
 
 
+def add_markets(snapshot,bases):
+    for base in bases:
+        symbol=base+'USDT'
+        snapshot['metadata'][symbol]=dict(snapshot['metadata']['SOLUSDT'],baseAsset=base,symbol=symbol)
+        snapshot['books'][symbol]=dict(snapshot['books']['SOLUSDT'])
+        snapshot['tickers'][symbol]=dict(quoteVolume='20000000',priceChangePercent='1')
+    return snapshot
+
+
 class SizingTests(unittest.TestCase):
     def test_size_caps_exposure_cash_and_initial_risk(self):
         for a in (.05,2,20):
@@ -32,17 +42,28 @@ class SizingTests(unittest.TestCase):
     def test_minimum_lot_is_never_forced(self):
         self.assertIsNone(desk.size_order(1,1,100,2,data()['metadata']['SOLUSDT']))
 
-    def test_unknown_identity_is_filtered_and_pool_capped(self):
-        d=data()
-        for i in range(100):
-            key=f'COIN{i}USDT'
-            d['metadata'][key]=dict(baseAsset=f'COIN{i}',quoteAsset='USDT',status='TRADING',isSpotTradingAllowed=True)
-            d['tickers'][key]=dict(quoteVolume='20000000',priceChangePercent='1')
-            d['books'][key]=dict(bidPrice='100',askPrice='100.01')
+    def test_all_liquid_spot_markets_are_available_without_a_social_whitelist_or_81_cap(self):
+        d=add_markets(data(),['BTC','PAXG','JUP']+[f'COIN{i}' for i in range(100)])
         rows=desk.universe(d)
-        self.assertEqual(len(rows),81)
-        self.assertEqual(sum(c['eligible'] for c in rows),1)
+        self.assertEqual(len(rows),104)
+        self.assertTrue(all(c['eligible'] for c in rows))
+        self.assertTrue({'BTCUSDT','PAXGUSDT','JUPUSDT','COIN0USDT'}.issubset({c['symbol'] for c in rows}))
         self.assertEqual(rows[0]['symbol'],'SOLUSDT')
+
+    def test_malformed_quotes_timestamps_and_change_cannot_be_eligible(self):
+        for field,value in [('bidPrice','NaN'),('askPrice','0')]:
+            d=data();d['books']['SOLUSDT'][field]=value
+            self.assertFalse(desk.universe(d)[0]['eligible'])
+        for at in (time.time()-121,time.time()+1000,float('nan'),'bad'):
+            d=data();d['at']=at
+            self.assertFalse(desk.universe(d)[0]['eligible'])
+        d=data();d['tickers']['SOLUSDT']['priceChangePercent']='NaN'
+        self.assertFalse(desk.universe(d)[0]['eligible'])
+
+    def test_stables_leveraged_tokens_and_nonspot_markets_stay_out(self):
+        d=add_markets(data(),['USDC','BTCUP','BTC'])
+        d['metadata']['BTCUSDT']['isSpotTradingAllowed']=False
+        self.assertEqual([c['symbol'] for c in desk.universe(d)],['SOLUSDT'])
 
     def test_tape_excludes_open_and_future_candles(self):
         now=100000
@@ -50,6 +71,17 @@ class SizingTests(unittest.TestCase):
         base=desk.tape(rows,now)
         extra=dict(time=now,open=1,high=99999,low=1,close=9999,volume=100)
         self.assertEqual(base,desk.tape(rows+[extra],now))
+
+    def test_tape_accepts_nearby_moving_averages_during_a_moderate_impulse(self):
+        now=100000
+        rows=[dict(time=now-900*(80-i),open=99,high=101,low=98,close=99,volume=100) for i in range(80)]
+        rows[-1].update(close=100)
+        with patch.object(desk,'ema',side_effect=[[100]*80,[100.5]*80]), \
+             patch.object(desk,'atr',return_value=2), patch.object(desk,'rsi',return_value=[78]*80):
+            analysis=desk.tape(rows,now)
+        self.assertLess(analysis['ema20'],analysis['ema50'])
+        self.assertTrue(analysis['trend'])
+        self.assertTrue(analysis['momentum'])
 
 
 class DeskTests(unittest.IsolatedAsyncioTestCase):
@@ -69,6 +101,51 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
     async def entry(self,identity=True):
         with patch.object(self.engine,'wire',AsyncMock(return_value=dict(ok=identity,detail='Referencia probada',url='https://solana.com/'))),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
             await self.engine.scan(data())
+
+    def funding_data(self):
+        snapshot=add_markets(data(),['EUR'])
+        snapshot['books']['EURUSDT'].update(bidPrice='1.12',askPrice='1.121')
+        return snapshot
+
+    async def test_reset_archives_previous_book_and_persists_100_euro_session(self):
+        await self.entry()
+        self.assertIsNotNone(self.engine.state['position'])
+        with patch.object(desk.opportunities,'snapshot',AsyncMock(return_value=self.funding_data())):
+            result=await self.engine.reset()
+        initial=100*1.12*(1-desk.SLIPPAGE)*(1-desk.FEE)
+        self.assertAlmostEqual(result['initial'],initial)
+        self.assertEqual(result['funding']['amount'],100)
+        self.assertEqual(result['cash'],round(initial,2))
+        self.assertTrue(result['enabled'])
+        self.assertIsNone(result['position'])
+        self.assertEqual(result['stats']['closed'],0)
+        self.assertEqual(result['trades'],[])
+        self.assertEqual(len(result['curve']),1)
+        archive=desk.DB_PATH.with_name(self.engine.state['previousSession'])
+        import sqlite3
+        with closing(sqlite3.connect(archive)) as con:
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM trades').fetchone()[0],1)
+            saved=json.loads(con.execute("SELECT payload FROM state WHERE key='desk'").fetchone()[0])
+            self.assertIsNotNone(saved['position'])
+        restored=desk.Desk()
+        self.assertAlmostEqual(restored.initial,initial)
+        self.assertAlmostEqual(restored.hold_equity(),initial)
+        order=desk.size_order(initial,initial,100,2,data()['metadata']['SOLUSDT'])
+        self.assertIsNotNone(order)
+        self.assertLessEqual(order['risk'],initial*.01)
+        self.assertLessEqual(order['notional'],initial/3)
+        with patch.object(restored,'wire',AsyncMock(return_value=dict(ok=True,detail='Validado'))),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
+            await restored.scan(data())
+        self.assertAlmostEqual(restored.state['benchmark']['qty'],initial/(100*(1+desk.SLIPPAGE)*(1+desk.FEE)))
+
+    async def test_reset_without_fresh_conversion_preserves_existing_session(self):
+        original=json.dumps(self.engine.state)
+        for snapshot in (data(),dict(self.funding_data(),at=time.time()-121)):
+            with patch.object(desk.opportunities,'snapshot',AsyncMock(return_value=snapshot)):
+                with self.assertRaises(ValueError):
+                    await self.engine.reset()
+            self.assertEqual(json.dumps(self.engine.state),original)
+        self.assertFalse(list(desk.DB_PATH.parent.glob('desk-session-*.sqlite')))
 
     async def test_wire_veto_cannot_be_overridden_by_price(self):
         await self.entry(False)
@@ -118,12 +195,46 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.engine.state['position'])
         self.assertFalse(self.engine.state['enabled'])
 
-    async def test_loss_of_trend_closes_open_position(self):
+    async def test_loss_of_structure_closes_open_position(self):
+        await self.entry()
+        self.analysis.update(trend=False,close=94)
+        await self.entry()
+        self.assertIsNone(self.engine.state['position'])
+        self.assertEqual(self.engine.public()['trades'][0]['exitReason'],'Tape detecta pérdida de estructura')
+
+    async def test_small_trend_dip_keeps_existing_structure_exit_rule(self):
         await self.entry()
         self.analysis.update(trend=False,close=98)
         await self.entry()
+        self.assertIsNotNone(self.engine.state['position'])
+
+    async def test_low_rsi_rebound_can_enter(self):
+        self.analysis['rsi']=18
+        await self.entry()
+        self.assertIsNotNone(self.engine.state['position'])
+
+    async def test_moderate_impulse_can_enter_without_a_pullback(self):
+        self.analysis.update(rsi=78,pullback=False,momentum=True,ema20=96)
+        await self.entry()
+        self.assertIsNotNone(self.engine.state['position'])
+        self.assertEqual(self.engine.state['roles']['Price']['status'],'ready')
+
+    async def test_extreme_rsi_still_blocks_entry(self):
+        for strength in (10,90):
+            with self.subTest(rsi=strength):
+                self.analysis['rsi']=strength
+                await self.entry()
+                self.assertIsNone(self.engine.state['position'])
+
+    async def test_missing_pullback_and_impulse_still_blocks_entry(self):
+        self.analysis.update(pullback=False,momentum=False)
+        await self.entry()
         self.assertIsNone(self.engine.state['position'])
-        self.assertEqual(self.engine.public()['trades'][0]['exitReason'],'Tape detecta pérdida de tendencia')
+
+    async def test_quote_too_far_from_signal_still_blocks_entry(self):
+        self.analysis['close']=95
+        await self.entry()
+        self.assertIsNone(self.engine.state['position'])
 
     async def test_paused_desk_does_not_reselect_or_spend_tokens(self):
         self.engine.state.update(enabled=False,selectionAt=0)
@@ -142,6 +253,19 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         agent.choose_market.assert_not_awaited()
         self.assertIsNotNone(self.engine.state['position'])
 
+    async def test_position_analysis_error_preserves_position_risk_and_selection_without_rotation(self):
+        await self.entry()
+        position=dict(self.engine.state['position'])
+        selection=dict(self.engine.state['selection'])
+        agent=AsyncMock()
+        with patch.object(desk.gemini_agent,'AGENT',agent),patch.object(desk.market_data,'get_candles',AsyncMock(side_effect=ValueError('temporary'))):
+            await self.engine.scan(add_markets(data(),['BTC']))
+        agent.choose_market.assert_not_awaited()
+        self.assertEqual(self.engine.state['position'],position)
+        self.assertEqual(self.engine.state['selected'],position['symbol'])
+        self.assertEqual(self.engine.state['selection'],selection)
+        self.assertEqual(self.engine.state['candidates'][0]['status'],'error')
+
     async def test_chasing_and_insufficient_liquidity_block_entry(self):
         self.analysis['ema20']=95
         await self.entry()
@@ -158,13 +282,109 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.control('start')
         self.assertFalse(self.engine.state['enabled'])
 
-    async def test_wire_requires_exact_handle_on_official_site(self):
-        client=httpx.AsyncClient(transport=httpx.MockTransport(lambda r:httpx.Response(200,text='<a href="https://x.com/solana-scams">Fake</a>')))
-        try:
-            with patch.object(desk.market_data,'client',return_value=client):
-                result=await self.engine.wire('SOL')
-            self.assertFalse(result['ok'])
-        finally: await client.aclose()
+    async def test_wire_checks_exact_spot_market_and_fresh_book_without_claiming_social_identity(self):
+        d=add_markets(data(),['BTC','PAXG','UNKNOWN'])
+        for symbol in ('BTCUSDT','PAXGUSDT','UNKNOWNUSDT'):
+            result=await self.engine.wire(symbol,d)
+            self.assertTrue(result['ok'])
+            self.assertFalse(result['socialChecked'])
+            self.assertIn('no verificadas',result['socialDetail'])
+        d['metadata']['BTCUSDT']['symbol']='OTHERUSDT'
+        self.assertFalse((await self.engine.wire('BTCUSDT',d))['ok'])
+        d['metadata']['BTCUSDT']['symbol']='BTCUSDT'
+        d['at']-=121
+        self.assertFalse((await self.engine.wire('BTCUSDT',d))['ok'])
+        self.assertFalse((await self.engine.wire('FAKEUSDT',d))['ok'])
+
+    async def test_unknown_but_listed_liquid_market_can_enter_using_real_wire_checks(self):
+        d=add_markets(data(),['UNKNOWN'])
+        d['tickers']['SOLUSDT']['quoteVolume']='1'
+        with patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
+            await self.engine.scan(d)
+        self.assertEqual(self.engine.state['position']['symbol'],'UNKNOWNUSDT')
+        self.assertFalse(self.engine.state['position']['evidence']['wire']['socialChecked'])
+
+    async def test_public_counts_distinguish_filtered_from_valid_unselected_markets(self):
+        d=add_markets(data(),['BTC','PAXG','UNKNOWN'])
+        d['tickers']['BTCUSDT']['quoteVolume']='1'
+        self.engine.state['candidates']=desk.universe(d)
+        public=self.engine.public()
+        self.assertEqual(public['examined'],4)
+        self.assertEqual(public['eligible'],3)
+        self.assertEqual(public['filtered'],1)
+        self.assertEqual(public['notSelected'],2)
+        self.assertEqual(public['discarded'],public['filtered'])
+        self.assertEqual(public['examined'],public['eligible']+public['filtered'])
+        self.assertEqual(sum(c['count'] for c in public['filterReasons']),public['filtered'])
+
+    async def test_scan_continues_to_second_market_when_first_has_no_signal(self):
+        d=add_markets(data(),['BTC'])
+        waiting=dict(self.analysis,trend=False)
+        with patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',side_effect=[waiting,self.analysis]):
+            await self.engine.scan(d)
+        self.assertEqual(self.engine.state['position']['symbol'],'BTCUSDT')
+        self.assertEqual(self.engine.state['scanReviewed'],2)
+        states={c['symbol']:c['status'] for c in self.engine.state['candidates']}
+        self.assertEqual(states,{'SOLUSDT':'waiting','BTCUSDT':'executed'})
+
+    async def test_fallback_trade_evidence_belongs_to_actual_symbol_not_previous_gemini_pick(self):
+        agent=AsyncMock()
+        agent.choose_market.return_value=dict(symbol='SOLUSDT',reason='Prioridad del modelo',confidence=.7)
+        with patch.object(desk.gemini_agent,'AGENT',agent),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',side_effect=[dict(self.analysis,trend=False),self.analysis]):
+            await self.engine.scan(add_markets(data(),['BTC']))
+        evidence=self.engine.state['position']['evidence']['selection']
+        self.assertEqual(evidence['symbol'],'BTCUSDT')
+        self.assertEqual(evidence['source'],'rules')
+        self.assertNotIn('confidence',evidence)
+
+    async def test_one_market_data_failure_does_not_abort_other_candidates(self):
+        d=add_markets(data(),['BTC'])
+        with patch.object(desk.market_data,'get_candles',AsyncMock(side_effect=[ValueError('bad data'),[]])),patch.object(desk,'tape',return_value=self.analysis):
+            await self.engine.scan(d)
+        self.assertEqual(self.engine.state['position']['symbol'],'BTCUSDT')
+        self.assertEqual(self.engine.state['candidates'][0]['status'],'error')
+
+    async def test_rotation_is_bounded_and_reaches_markets_beyond_first_batch(self):
+        d=add_markets(data(),[f'COIN{i:02}' for i in range(25)])
+        reviewed=[]
+        async def candles(symbol,*args):
+            reviewed.append(symbol.source_symbol)
+            return []
+        with patch.object(desk.market_data,'get_candles',side_effect=candles),patch.object(desk,'tape',return_value=dict(self.analysis,trend=False)),patch.object(desk.gemini_agent,'AGENT',None):
+            for _ in range(3):
+                before=len(reviewed)
+                await self.engine.scan(d)
+                self.assertEqual(len(reviewed)-before,desk.SCAN_BATCH_SIZE)
+                self.assertLessEqual(self.engine.state['scanReviewed'],12)
+        self.assertEqual(len(set(reviewed)),26)
+        self.assertIsNone(self.engine.state['position'])
+
+    async def test_gemini_only_receives_bounded_eligible_shortlist_and_no_fake_fallback_confidence(self):
+        d=add_markets(data(),[f'COIN{i}' for i in range(120)])
+        d['tickers']['COIN0USDT']['quoteVolume']='1'
+        agent=AsyncMock()
+        agent.choose_market.return_value=None
+        with patch.object(desk.gemini_agent,'AGENT',agent),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=dict(self.analysis,trend=False)):
+            await self.engine.scan(d)
+            await self.engine.scan(d)
+        agent.choose_market.assert_awaited_once()
+        shortlist=agent.choose_market.call_args.args[0]
+        self.assertLessEqual(len(shortlist),50)
+        self.assertLess(len(json.dumps(shortlist).encode()),12000)
+        self.assertTrue(all(c['eligible'] for c in shortlist))
+        self.assertNotIn('confidence',self.engine.state['selection'])
+        self.assertEqual(self.engine.state['roles']['Selector']['provider'],'Reglas deterministas')
+
+    async def test_stale_or_malformed_market_never_opens_a_trade(self):
+        for field,value in [('bidPrice','nan'),('askPrice','-1'),('askQty','nan')]:
+            d=data();d['books']['SOLUSDT'][field]=value
+            with patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
+                await self.engine.scan(d)
+            self.assertIsNone(self.engine.state['position'])
+        d=data();d['at']-=121
+        with patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
+            await self.engine.scan(d)
+        self.assertIsNone(self.engine.state['position'])
 
 
 class SelectorTests(unittest.IsolatedAsyncioTestCase):

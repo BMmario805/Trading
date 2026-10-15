@@ -17,6 +17,7 @@ from . import gemini_agent
 from . import desk
 from . import mt5_demo
 from . import mt5_performance
+from . import open_positions
 from .sentiment import get_opinions, get_sentiment
 
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +49,21 @@ app = FastAPI(title="Trading Dashboard API", lifespan=lifespan)
 @app.get('/api/desk')
 async def desk_status():
     return desk.DESK.public() if desk.DESK else {'mode':'paper','enabled':False}
+
+
+@app.get('/api/positions/open')
+async def open_positions_status():
+    return open_positions.snapshot()
+
+
+@app.post('/api/desk/reset')
+async def reset_desk():
+    if desk.DESK is None:
+        raise HTTPException(503,'Mesa no iniciada')
+    try:
+        return await desk.DESK.reset()
+    except ValueError as exc:
+        raise HTTPException(503,str(exc)) from exc
 
 
 @app.post('/api/desk/{action}')

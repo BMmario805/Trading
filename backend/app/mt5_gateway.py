@@ -51,12 +51,22 @@ class DemoGateway:
         return tick
 
     def prepare_entry(self, symbol, direction, atr, sl_multiple, tp_multiple, magic, comment, now,
-                      risk_mult=1.0):
+                      risk_mult=1.0, virtual_equity=None):
         if not math.isfinite(risk_mult) or not 0 < risk_mult <= 1:
             raise DemoOnlyError('Multiplicador de riesgo inválido')
         api = self.api
         account, _ = self.account(trading=True)
         positions = self.positions()
+        equity=account.equity
+        margin_free=account.margin_free
+        if virtual_equity is not None:
+            if not math.isfinite(virtual_equity) or virtual_equity<=0:
+                raise DemoOnlyError('Presupuesto virtual agotado o inválido')
+            equity=min(equity,virtual_equity)
+            margins=[api.order_calc_margin(p.type,p.symbol,p.volume,p.price_open) for p in positions]
+            if any(m is None or not math.isfinite(m) or m<0 for m in margins):
+                raise DemoOnlyError('Margen de cartera virtual desconocido')
+            margin_free=min(margin_free,max(0,equity-sum(margins)))
         if len(positions) >= self.config['max_positions'] or any(p.symbol == symbol for p in positions):
             raise DemoOnlyError('Límite compartido de posiciones o símbolo ya abierto')
         if not api.symbol_select(symbol, True):
@@ -89,14 +99,14 @@ class DemoGateway:
             if loss is None or not math.isfinite(loss):
                 raise DemoOnlyError('Riesgo de cartera desconocido')
             open_risk += max(0, -loss)
-        budget = min(account.equity * self.config['risk_pct'] * risk_mult,
-                     account.equity * self.config['max_open_risk_pct'] - open_risk)
+        budget = min(equity * self.config['risk_pct'] * risk_mult,
+                     equity * self.config['max_open_risk_pct'] - open_risk)
         # Reserva del 10% para fricción; los gaps todavía pueden exceder el stop.
         volume = lot_floor(min(info.volume_max, max(0, budget) / (-unit_loss * 1.1)), info.volume_step)
         if volume < info.volume_min:
             raise DemoOnlyError('El lote mínimo excede el presupuesto de riesgo')
         margin = api.order_calc_margin(kind, symbol, volume, price)
-        if margin is None or not math.isfinite(margin) or margin > account.margin_free * .25:
+        if margin is None or not math.isfinite(margin) or margin > margin_free * .25:
             raise DemoOnlyError('Margen libre insuficiente para esta entrada')
         request = dict(action=api.TRADE_ACTION_DEAL, symbol=symbol, volume=volume, type=kind,
                        price=price, sl=sl, tp=tp, deviation=20, magic=magic, comment=comment,

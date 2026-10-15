@@ -262,9 +262,11 @@ class DemoEngine:
         save(self.owner+'last_positions', tickets)
         self.manage(positions, now)
         self.sync_performance(now)
+        virtual=mt5_performance.capital(self.owner,account,positions)
+        equity=virtual['equity'] if virtual else account.equity
         day_key = self.owner+f'day:{int(now//86400)}'
-        daily = read(day_key, dict(equity=account.equity, paused=False))
-        if account.equity <= daily['equity']*(1-cfg['max_daily_loss_pct']):
+        daily = read(day_key, dict(equity=equity, paused=False))
+        if equity <= daily['equity']*(1-cfg['max_daily_loss_pct']):
             daily['paused'] = True
         save(day_key, daily)
         enabled = read(self.owner+'enabled', cfg['enabled'])
@@ -273,15 +275,28 @@ class DemoEngine:
                    'Entradas pausadas' if not enabled else 'Activa Algo Trading en MetaTrader 5')
         if daily['paused']:
             message = 'Límite diario alcanzado: nuevas entradas pausadas hasta mañana UTC'
+        position_rows = []
+        offset = round(self.clock_skew / 3600) * 3600
+        for p in positions:
+            tick = api.symbol_info_tick(p.symbol)
+            tick_time = getattr(tick, 'time', None)
+            opened_time = getattr(p, 'time', None)
+            position_rows.append(dict(
+                ticket=p.ticket, symbol=p.symbol,
+                bot=next((b for b,m in MAGICS.items() if m==p.magic), 'manual/otro'),
+                direction='long' if p.type==api.POSITION_TYPE_BUY else 'short', volume=p.volume,
+                entry=p.price_open, currentPrice=getattr(p, 'price_current', None),
+                openedAt=int(opened_time-offset) if isinstance(opened_time, (int, float)) else None,
+                priceAt=int(tick_time-offset) if isinstance(tick_time, (int, float)) else None,
+                quantityUnit='lots', sl=p.sl, tp=p.tp, pnl=p.profit))
         STATE.update(configured=True, connected=True, demo=True, server=account.server,
-                     currency=account.currency, balance=account.balance, equity=account.equity,
+                     currency=account.currency, balance=virtual['balance'] if virtual else account.balance, equity=equity,
+                     session=virtual,brokerBalance=account.balance,brokerEquity=account.equity,
                      enabled=enabled, tradingAllowed=bool(allowed and not daily['paused']), message=message,
                      riskPct=cfg['risk_pct']*100,
                      probationRiskPct=round(cfg['risk_pct']*learning.PROBATION_SIZE*100, 6),
                      maxPositions=cfg['max_positions'], updatedAt=int(now),
-                     positions=[dict(ticket=p.ticket, symbol=p.symbol, bot=next((b for b,m in MAGICS.items() if m==p.magic), 'manual/otro'),
-                                     direction='long' if p.type==api.POSITION_TYPE_BUY else 'short', volume=p.volume,
-                                     entry=p.price_open, sl=p.sl, tp=p.tp, pnl=p.profit) for p in positions],
+                     positions=position_rows,
                      diagnostics=dict(self.diagnostics), training=self.training_job[0] if self.training_job else None)
         candidates = [(bot, cfg['symbols'][symbol]) for bot in ALL_BOTS for symbol in bot.universe if symbol in cfg['symbols']]
         self.training(candidates, now)
@@ -340,7 +355,8 @@ class DemoEngine:
                 comment = f"{'cxp' if probation else 'cx'}-{bot.id}-{bar}"
                 request, risk = self.gateway.prepare_entry(symbol, direction, atr,
                     p.get('slAtr', bot.sl_atr), p.get('tpAtr', bot.tp_atr), MAGICS[bot.id], comment, time.time(),
-                    risk_mult=learning.PROBATION_SIZE if probation else 1.0)
+                    risk_mult=learning.PROBATION_SIZE if probation else 1.0,
+                    virtual_equity=(mt5_performance.capital(self.owner,account,current_positions) or {}).get('equity'))
                 result = self.submit(f'entry:{bot.id}:{symbol}:{bar}', symbol, request)
                 if result is not None and result.retcode in (api.TRADE_RETCODE_DONE, api.TRADE_RETCODE_DONE_PARTIAL):
                     for pos in self.gateway.positions():

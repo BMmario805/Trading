@@ -167,6 +167,21 @@ class ProbationEngineTests(unittest.TestCase):
             self.engine.cycle()
         return prepare, submit
 
+    def test_open_position_snapshot_has_prices_and_utc_timestamps(self):
+        self.engine.clock_skew = 3 * 3600
+        self.api.POSITION_TYPE_BUY = 0
+        self.api.symbol_info_tick.return_value.time = 3660 + 3 * 3600
+        self.api.positions_get.return_value = (NS(
+            ticket=42, symbol='XAUUSD', magic=mt5_demo.MAGICS['scalper'], comment='cxp-scalper-old',
+            type=0, volume=.01, price_open=100, price_current=101.25,
+            time=3500 + 3 * 3600, sl=90, tp=120, profit=1.25),)
+        self.cycle()
+        row = mt5_demo.STATE['positions'][0]
+        self.assertEqual(row['currentPrice'], 101.25)
+        self.assertEqual(row['openedAt'], 3500)
+        self.assertEqual(row['priceAt'], 3660)
+        self.assertEqual(row['quantityUnit'], 'lots')
+
     def test_unvalidated_demo_pair_uses_reduced_risk(self):
         prepare, submit = self.cycle()
         prepare.assert_called_once()

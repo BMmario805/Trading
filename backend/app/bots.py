@@ -97,14 +97,14 @@ SCALPER = BotConfig(
     tick_seconds=5,
     weight_tech=0.85,
     weight_senti=0.15,
-    entry_threshold=0.20,
+    entry_threshold=0.15,
     atr_period=14,
     sl_atr=1.5,
     tp_atr=2.25,
     trail_atr=1.2,
     risk_pct=0.01,
     max_leverage=20.0,
-    max_positions=5,
+    max_positions=6,
     max_hold_seconds=45 * 60,
     cooldown_seconds=60,
     focus_threshold_mult=0.85,
@@ -245,14 +245,14 @@ SQUEEZE = BotConfig(
     tick_seconds=10,
     weight_tech=0.9,
     weight_senti=0.1,
-    entry_threshold=0.35,
+    entry_threshold=0.15,
     atr_period=14,
     sl_atr=1.5,
     tp_atr=4.0,          # la expansión post-squeeze suele recorrer mucho
     trail_atr=1.2,
     risk_pct=0.015,
     max_leverage=10.0,
-    max_positions=5,
+    max_positions=6,
     max_hold_seconds=2 * 86400,
     cooldown_seconds=20 * 60,
     focus_threshold_mult=1.0,
@@ -311,7 +311,7 @@ def _conn() -> sqlite3.Connection:
         )"""
     )
     # migraciones: v1 -> atr_entry/best_price, v2 -> snapshot (velas + análisis)
-    for col in ("atr_entry REAL", "best_price REAL", "snapshot TEXT", "initial_risk_dist REAL", "trail_multiple REAL"):
+    for col in ("atr_entry REAL", "best_price REAL", "snapshot TEXT", "initial_risk_dist REAL", "trail_multiple REAL", "quote_to_account REAL"):
         try:
             con.execute(f"ALTER TABLE bot_trades ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -326,6 +326,7 @@ def _conn() -> sqlite3.Connection:
             running INTEGER NOT NULL
         )"""
     )
+    con.execute('CREATE TABLE IF NOT EXISTS bot_sessions (bot TEXT PRIMARY KEY, payload TEXT NOT NULL)')
     return con
 
 
@@ -350,11 +351,12 @@ class Position:
     r_dist: float             # distancia inicial al stop (1R), para el trailing
     reasons: list[str] = field(default_factory=list)
     last_price: float = 0.0
+    quote_to_account: float = 1.0
 
     def unrealized(self, price: float | None = None) -> float:
         p = price if price is not None else self.last_price
         sign = 1.0 if self.direction == "long" else -1.0
-        return (p - self.entry_price) * self.qty * sign
+        return (p - self.entry_price) * self.qty * sign * self.quote_to_account
 
     def to_dict(self) -> dict:
         return {
@@ -393,6 +395,7 @@ def _kick_sentiment_refresh(sym: Symbol) -> None:
 class TradingBot:
     def __init__(self, cfg: BotConfig) -> None:
         self.cfg = cfg
+        self.session = None
         self.balance = cfg.initial_balance
         self.running = True
         self.positions: dict[str, Position] = {}
@@ -503,6 +506,11 @@ class TradingBot:
 
     def load_state(self) -> None:
         with _conn() as con:
+            session=con.execute('SELECT payload FROM bot_sessions WHERE bot=?',(self.cfg.id,)).fetchone()
+            if session:
+                self.session=json.loads(session[0])
+                self.cfg=replace(self.cfg,initial_balance=self.session['initial'])
+                self.balance=self.cfg.initial_balance
             row = con.execute(
                 "SELECT balance, running FROM bot_state WHERE bot = ?", (self.cfg.id,)
             ).fetchone()
@@ -515,7 +523,7 @@ class TradingBot:
                 )
             open_rows = con.execute(
                 """SELECT id, symbol, direction, qty, entry_price, entry_time,
-                          sl, tp, reasons, atr_entry, best_price, initial_risk_dist, trail_multiple FROM bot_trades
+                          sl, tp, reasons, atr_entry, best_price, initial_risk_dist, trail_multiple, quote_to_account FROM bot_trades
                    WHERE bot = ? AND status = 'open'""",
                 (self.cfg.id,),
             ).fetchall()
@@ -529,6 +537,7 @@ class TradingBot:
                 trail_atr=r[12] if r[12] is not None else self.cfg.trail_atr,
                 r_dist=r[11] if r[11] is not None else (r[9] * self.cfg.sl_atr if r[9] else abs(r[4] - r[6])),
                 last_price=r[4],
+                quote_to_account=r[13] if r[13] is not None else 1.0,
             )
             self.positions[pos.symbol] = pos
             if any(str(r).startswith("A prueba") for r in pos.reasons):
@@ -951,8 +960,15 @@ class TradingBot:
                 f"Meta-modelo: p(éxito)={p_win:.0%} → tamaño ×{meta_mult:.2f}"
                 + (f" ({meta_note})" if meta_note else "")
             )
+        conversion=1.0
+        if self.session and self.session.get('currency')=='EUR':
+            quote='USDT' if sym.source=='binance' else sym.id[3:] if sym.category=='forex' else 'USD'
+            conversion=self.session['quoteToEuro'].get(quote)
+            if conversion is None or conversion<=0:
+                self.diagnostics[sym.id]={'reason':'Sin conversión a EUR para este mercado','at':int(time.time())}
+                return
         equity = max(0.0, self.balance + sum(p.unrealized() for p in self.positions.values()))
-        open_risk = sum(p.qty * p.r_dist for p in self.positions.values())
+        open_risk = sum(p.qty * p.r_dist * p.quote_to_account for p in self.positions.values())
         size_mult = scale * learn_mult * meta_mult
         if probation_why:
             # El aprendizaje puede reducir el riesgo exploratorio, nunca
@@ -960,13 +976,13 @@ class TradingBot:
             size_mult = min(1.0, size_mult) * prob_mult
         budget = min(equity * self.cfg.risk_pct * size_mult,
                      max(0.0, equity * self.cfg.max_open_risk_pct - open_risk))
-        qty = budget / (sl_dist + half_spread)
+        qty = budget / ((sl_dist + half_spread)*conversion)
         used_margin = sum(
-            p.qty * p.entry_price for p in self.positions.values()
+            p.qty * p.entry_price * p.quote_to_account for p in self.positions.values()
         ) / self.cfg.max_leverage
         free_margin = max(equity - used_margin, 0.0)
-        qty = min(qty, free_margin * self.cfg.max_leverage / entry)
-        if qty * entry < 1.0:
+        qty = min(qty, free_margin * self.cfg.max_leverage / (entry*conversion))
+        if qty * entry * conversion < 1.0:
             self.diagnostics[sym.id] = {"reason": "Sin margen o presupuesto de riesgo", "at": int(time.time())}
             return
 
@@ -989,11 +1005,11 @@ class TradingBot:
             cur = con.execute(
                 """INSERT INTO bot_trades
                    (bot, symbol, direction, qty, entry_price, entry_time,
-                    sl, tp, reasons, atr_entry, best_price, snapshot, initial_risk_dist, trail_multiple)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    sl, tp, reasons, atr_entry, best_price, snapshot, initial_risk_dist, trail_multiple, quote_to_account)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (self.cfg.id, sym.id, direction, qty, entry, now, sl, tp,
                  json.dumps(reasons, ensure_ascii=False), atr_val, entry,
-                 json.dumps(snapshot, ensure_ascii=False), sl_dist, trail_m),
+                 json.dumps(snapshot, ensure_ascii=False), sl_dist, trail_m, conversion),
             )
             trade_id = cur.lastrowid
         pos = Position(
@@ -1001,6 +1017,7 @@ class TradingBot:
             entry_price=entry, entry_time=now, sl=sl, tp=tp,
             atr_entry=atr_val, best_price=entry, trail_atr=trail_m,
             r_dist=sl_dist, reasons=reasons, last_price=entry,
+            quote_to_account=conversion,
         )
         self.positions[sym.id] = pos
         self.diagnostics[sym.id] = {"reason": "Operación abierta (simulada)", "at": now}
@@ -1014,7 +1031,7 @@ class TradingBot:
 
     def _close(self, pos: Position, exit_price: float, reason: str) -> None:
         sign = 1.0 if pos.direction == "long" else -1.0
-        pnl = (exit_price - pos.entry_price) * pos.qty * sign
+        pnl = (exit_price - pos.entry_price) * pos.qty * sign * pos.quote_to_account
         self._roll_day()
         new_balance = self.balance + pnl
         now = int(time.time())
@@ -1098,6 +1115,8 @@ class TradingBot:
             "horizon": self.cfg.horizon,
             "running": self.running,
             "initialBalance": self.cfg.initial_balance,
+            "currency": (self.session or {}).get('currency','USD'),
+            "session": self.session,
             "balance": round(self.balance, 2),
             "equity": round(self.balance + unrealized, 2),
             "openPositions": [p.to_dict() for p in self.positions.values()],
@@ -1130,6 +1149,7 @@ class TradingBot:
                 "workInterval": self.cfg.work_interval,
                 "trendInterval": self.cfg.trend_interval,
                 "scanSeconds": self.cfg.scan_seconds,
+                "entryThreshold": self.cfg.entry_threshold,
                 "riskPct": self.cfg.risk_pct * 100,
                 "requireValidation": self.cfg.require_validation,
                 "probationSizePct": learning.PROBATION_SIZE * 100,
@@ -1273,6 +1293,7 @@ def performance(
     points, summary = _cum_points(rows)
     out = {
         "points": points,
+        "currency": next(((b.session or {}).get('currency','USD') for b in BOTS.values()),'USD'),
         "summary": summary,
         "symbols": symbols,
         "bots": [
