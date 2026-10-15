@@ -8,11 +8,13 @@ import sqlite3
 import time
 from pathlib import Path
 
+from .database import Connection
+
 DB_PATH = Path(__file__).resolve().parent.parent / "data.db"
 
 
 def _conn() -> sqlite3.Connection:
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, factory=Connection)
     con.execute(
         """CREATE TABLE IF NOT EXISTS sentiment_history (
             symbol TEXT NOT NULL,

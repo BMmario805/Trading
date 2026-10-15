@@ -82,6 +82,12 @@ META_GATE_P = 0.35        # probabilidad de éxito mínima para dejar pasar
 META_LR = 0.05            # tasa de aprendizaje SGD
 META_L2 = 0.001           # regularización L2 (evita pesos desbocados)
 META_BOOTSTRAP_EPOCHS = 3 # pasadas extra al aprender el historial de golpe
+# Cambiar las features exige reaprender: quitar un peso no elimina su
+# influencia anterior sobre el sesgo y los demás coeficientes.
+META_FEATURE_VERSION = 2
+NON_CAUSAL_CONFIRMATIONS = frozenset({
+    "Opinión pública", "Señal combinada", "Contexto macro oficial",
+})
 
 # Cada cuántas horas se reentrena cada bot (walk-forward automático)
 RETRAIN_HOURS = {
@@ -129,8 +135,15 @@ def analyze(bot_id: str, window_days: int = WINDOW_DAYS) -> dict:
     La expectativa se mide en R (pnl / riesgo inicial |entrada - stop| × qty):
     es comparable entre símbolos con precios y volatilidades distintas.
     """
-    since = int(time.time()) - window_days * 86400
     with _conn() as con:
+        last_exit = con.execute(
+            """SELECT MAX(exit_time) FROM bot_trades
+               WHERE bot = ? AND status = 'closed' AND pnl IS NOT NULL""",
+            (bot_id,),
+        ).fetchone()[0]
+        # El tiempo con el equipo apagado no debe borrar la muestra reciente.
+        reference = last_exit if last_exit is not None else int(time.time())
+        since = reference - window_days * 86400
         rows = con.execute(
             """SELECT symbol, direction, qty, entry_price, sl, pnl,
                       entry_time, exit_reason, initial_risk_dist
@@ -217,15 +230,19 @@ def meta_features(
         "hour_cos": math.cos(2 * math.pi * hour_utc / 24),
     }
     for c in confirmations or []:
+        system = c.get("system", "?")
+        if system in NON_CAUSAL_CONFIRMATIONS:
+            continue
         v = c.get("vote") or 0.0
         if not v:
             continue
-        feats[f"conf:{c.get('system', '?')}"] = max(-1.0, min(1.0, v * sign))
+        feats[f"conf:{system}"] = max(-1.0, min(1.0, v * sign))
     return feats
 
 
 def _new_model() -> dict:
-    return {"w": {}, "n": 0, "lastTradeId": 0, "updatedAt": 0, "engineVersion": training.ENGINE_VERSION}
+    return {"w": {}, "n": 0, "lastTradeId": 0, "updatedAt": 0,
+            "engineVersion": training.ENGINE_VERSION, "featureVersion": META_FEATURE_VERSION}
 
 
 def _load_model(bot_id: str) -> dict:
@@ -236,7 +253,8 @@ def _load_model(bot_id: str) -> dict:
             "SELECT model FROM bot_model WHERE bot = ?", (bot_id,)
         ).fetchone()
     _models[bot_id] = json.loads(row[0]) if row else _new_model()
-    if _models[bot_id].get('engineVersion') != training.ENGINE_VERSION:
+    if (_models[bot_id].get('engineVersion') != training.ENGINE_VERSION
+            or _models[bot_id].get('featureVersion') != META_FEATURE_VERSION):
         _models[bot_id] = _new_model()
     return _models[bot_id]
 
@@ -471,21 +489,8 @@ def refresh(bot_id: str) -> dict:
 
 
 def load(bot_id: str) -> dict:
-    """Carga la política persistida (al arrancar) o la recalcula si no hay."""
+    """Recalcula al arrancar para no reutilizar estadísticas de reglas antiguas."""
     if bot_id in _policies:
-        return _policies[bot_id]
-    with _conn() as con:
-        row = con.execute(
-            "SELECT policy FROM bot_learning WHERE bot = ?", (bot_id,)
-        ).fetchone()
-    if row:
-        _policies[bot_id] = json.loads(row[0])
-        _edges[bot_id] = _load_edges(bot_id)
-        # bootstrap del meta-modelo: aprende el historial que aún no vio
-        try:
-            meta_learn_new_trades(bot_id)
-        except Exception as exc:
-            log.debug("%s: bootstrap del meta-modelo falló: %s", bot_id, exc)
         return _policies[bot_id]
     return refresh(bot_id)
 

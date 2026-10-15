@@ -123,7 +123,7 @@ def load_results() -> list[dict]:
 
 
 def due_symbols(bot_id: str, universe: tuple[str, ...], hours: float, now: float | None = None) -> list[str]:
-    """Pendientes por instrumento; un fallo de red tiene backoff de una hora."""
+    """Resultados evaluados respetan el ciclo; errores de datos reintentan en una hora."""
     now = time.time() if now is None else now
     with _conn() as con:
         attempts = {s: (ts, ok) for s, ts, ok in con.execute(
@@ -134,14 +134,17 @@ def due_symbols(bot_id: str, universe: tuple[str, ...], hours: float, now: float
     for symbol in universe:
         stamp, version = saved.get(symbol, (0, None))
         attempt, ok = attempts.get(symbol, (0, 1))
-        if not ok and now - attempt < 3600:
+        # Un error posterior al resultado guardado debe reintentarse en una
+        # hora, incluso si aún existen parámetros válidos del ciclo anterior.
+        if attempt and not ok and attempt >= stamp:
+            if now - attempt >= 3600:
+                due.append((stamp if version == ENGINE_VERSION else 0, symbol))
             continue
-        last = max(stamp, attempt) if version == ENGINE_VERSION or ok and attempt else 0
-        if symbol not in saved or version != ENGINE_VERSION:
-            if ((version != ENGINE_VERSION and symbol in saved)
-                    or not attempt or now - attempt >= (hours * 3600 if ok else 3600)):
-                due.append((0, symbol))
-        elif now - last >= hours * 3600:
+        if symbol in saved and version != ENGINE_VERSION:
+            due.append((0, symbol))
+            continue
+        last = max(stamp, attempt)
+        if not last or now - last >= hours * 3600:
             due.append((last, symbol))
     return [symbol for _, symbol in sorted(due)]
 
@@ -507,9 +510,12 @@ async def _train_bot(bot, symbols: list[str]) -> None:
             except Exception as exc:
                 log.warning("entrenamiento %s/%s falló: %s", bot.cfg.id, symbol_id, exc)
                 result = {"symbol": symbol_id, "ok": False, "reason": str(exc)[:200]}
+            # ok=False también puede ser una evaluación completa sin ventaja.
+            # Solo los fallos de fuente/histórico usan el backoff de una hora.
+            attempt_ok = int(bool(result.get("ok") or result.get("engineVersion") == ENGINE_VERSION))
             with _conn() as con:
                 con.execute('INSERT OR REPLACE INTO bot_training_attempts VALUES (?, ?, ?, ?)',
-                            (bot.cfg.id, symbol_id, int(time.time()), int(bool(result.get('ok')))))
+                            (bot.cfg.id, symbol_id, int(time.time()), attempt_ok))
             status["results"].append(result)
             log.info("entrenado %s/%s: %s", bot.cfg.id, symbol_id,
                      "aplicado" if result.get("applied") else result.get("reason", "no aplicado"))

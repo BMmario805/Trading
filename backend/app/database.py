@@ -6,8 +6,12 @@ import sqlite3
 class Connection(sqlite3.Connection):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.execute("PRAGMA busy_timeout=5000")
-        self.execute("PRAGMA journal_mode=WAL")
+        try:
+            self.execute("PRAGMA busy_timeout=5000")
+            self.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.Error:
+            self.close()
+            raise
 
     def __exit__(self, *args):
         try:

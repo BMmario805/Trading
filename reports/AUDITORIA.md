@@ -1,5 +1,34 @@
 # Auditoría del motor de trading — 9 de septiembre de 2026
 
+## Actualización de correcciones — 15 de octubre de 2026
+
+El diagnóstico original de abajo describe el estado del 9 de septiembre.
+En el código actual se han verificado o completado estas correcciones:
+
+- Los siete bots exigen validación vigente. Tanto los mercados rechazados
+  como los pendientes de validar quedan bloqueados para nuevas entradas.
+- Una optimización completa sin ventaja conserva `ok=False`, revoca los
+  parámetros previos y espera el ciclo habitual del bot (4–12 horas).
+  Los errores de fuente o histórico insuficiente reintentan tras una hora,
+  también cuando quedan parámetros válidos de un entrenamiento anterior.
+- La ventana de aprendizaje se ancla al último cierre con PnL del mismo bot.
+  Al cargar se recalculan las políticas para recuperar estadísticas y vetos
+  aunque la política persistida se hubiera quedado sin muestra durante el apagado.
+- El metamodelo excluye «Opinión pública», «Señal combinada» y «Contexto macro
+  oficial». Su versión de variables fuerza la reconstrucción de modelos antiguos
+  usando snapshots compatibles y filtrados, sin invalidar parámetros de ejecución.
+- El simulador ya aplica el filtro direccional de sobreextensión en todos los
+  tramos, incluidos subperiodos y costes duplicados; el motor vigente es la versión 3.
+- El histórico de sentimiento usa la conexión común con WAL, espera de bloqueo
+  y cierre al terminar. La base local y `bodycam-mods/` ya estaban fuera del índice
+  actual de Git; se amplían las exclusiones a diarios y variantes de SQLite.
+
+Verificación: 113 pruebas pasan, incluidas 12 nuevas con bases temporales para
+reintentos, recuperación tras inactividad, reconstrucción del metamodelo y SQLite.
+No se ha modificado la base del usuario ni reiniciado el servicio. Los cambios
+se activan al reiniciar el backend. Esta revisión no reevalúa la rentabilidad
+ni actualiza las cifras históricas que siguen a continuación.
+
 El proyecto ejecuta paper trading: las operaciones y el dinero son simulados.
 Se mejoraron los seis bots existentes, sin añadir estrategias que no cuentan con validación.
 Las pruebas de esta revisión no demuestran rentabilidad futura.
