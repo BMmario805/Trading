@@ -265,11 +265,21 @@ SCALPER = replace(SCALPER, universe=SCALPER.universe + EXTRA_CRYPTO[:5])
 SWING = replace(SWING, universe=SWING.universe + EXTRA_CRYPTO)
 TREND = replace(TREND, universe=TREND.universe + EXTRA_CRYPTO)
 SQUEEZE = replace(SQUEEZE, universe=SQUEEZE.universe + EXTRA_CRYPTO)
-FLOW = replace(SQUEEZE, id="flow", name="Bot Flujo (CMF)",
-               horizon="continuación con flujo y tendencia (horas)",
-               universe=("BTC", "ETH", "SOL", "XRP") + EXTRA_CRYPTO,
-               entry_threshold=.55, risk_pct=.005, max_positions=4,
-               weight_tech=1.0, weight_senti=0.0, sl_atr=2.0, tp_atr=3.0)
+FLOW = replace(
+    SQUEEZE,
+    id="flow",
+    name="Bot Flujo (CMF)",
+    horizon="continuación con flujo y tendencia (horas)",
+    universe=("XAUUSD", "BTC", "ETH", "SOL", "XRP", "EURUSD", "GBPUSD", "USDJPY", "NVDA", "TSLA", "AAPL", "MSFT") + EXTRA_CRYPTO,
+    entry_threshold=0.50,
+    risk_pct=0.005,
+    max_positions=4,
+    weight_tech=1.0,
+    weight_senti=0.0,
+    sl_atr=2.0,
+    tp_atr=3.0,
+    require_validation=False,
+)
 ALL_BOTS = (SCALPER, SWING, TREND, MEANREV, ORB, SQUEEZE, FLOW)
 
 # ---------------------------------------------------------------------------
