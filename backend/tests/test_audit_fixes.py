@@ -271,3 +271,39 @@ class MetaEntryDiagnosticsTests(TemporaryDatabaseTests):
         open_position.assert_not_called()
         self.assertIn('20%', bot.diagnostics['EURUSD']['reason'])
         self.assertIn('25%', bot.diagnostics['EURUSD']['reason'])
+
+
+class ManualParameterTests(TemporaryDatabaseTests):
+    def save(self, metrics, applied=0):
+        params = dict(entryThreshold=.35, slAtr=2, tpAtr=3, trailAtr=1)
+        with training._conn() as con:
+            con.execute('INSERT OR REPLACE INTO bot_params VALUES (?,?,?,?,?,?)',
+                        ('swing', 'BTC', json.dumps(params), json.dumps(metrics), applied, 10000))
+
+    def test_manual_parameters_are_loaded_only_for_probation(self):
+        self.save(dict(engineVersion=training.ENGINE_VERSION, manualAdjustment=dict(previousThreshold=.75)))
+        bot = bots.TradingBot(bots.SWING)
+        bot.reload_params()
+        self.assertEqual(bot._exec_params(bots.SYMBOLS_BY_ID['BTC']), (.35, 2, 3, 1))
+        self.assertNotIn('BTC', bot.trained_params)
+        self.assertFalse(training.load_results()[0]['applied'])
+        learning._edges['swing'] = learning._load_edges('swing')
+        with patch.object(learning, '_active_blocks', return_value=[]):
+            self.assertEqual(learning.entry_mode('swing', 'BTC')[0], 'probation')
+
+    def test_rejected_or_old_engine_parameters_are_not_manual_overrides(self):
+        for metrics in (dict(engineVersion=training.ENGINE_VERSION),
+                        dict(engineVersion=training.ENGINE_VERSION-1, manualAdjustment=True)):
+            with self.subTest(metrics=metrics):
+                self.save(metrics)
+                self.assertEqual(training.load_manual_params(), {})
+
+    def test_revalidation_replaces_manual_parameters(self):
+        self.save(dict(engineVersion=training.ENGINE_VERSION, manualAdjustment=True))
+        bot = bots.TradingBot(bots.SWING)
+        bot.reload_params()
+        self.assertIn('BTC', bot.manual_params)
+        self.save(dict(engineVersion=training.ENGINE_VERSION), applied=1)
+        bot.reload_params()
+        self.assertNotIn('BTC', bot.manual_params)
+        self.assertIn('BTC', bot.trained_params)

@@ -93,16 +93,20 @@ class DemoEngine:
                     time=int(tick.time-self.clock_skew), dataSource=provenance)
 
     def update_clock_skew(self):
-        """Estima el reloj del servidor con una cotización reciente del bróker."""
+        """Usa el tick más reciente para no confundir desfase con antigüedad."""
         local = time.time()
+        skews = []
         for symbol in self.config.get('symbols', {}).values():
+            if not self.api.symbol_select(symbol, True):
+                continue
             tick = self.api.symbol_info_tick(symbol)
             if tick is not None and getattr(tick, 'time', 0):
                 skew = float(tick.time) - local
                 if -300 <= skew <= 12 * 3600:
-                    self.clock_skew = skew
-                    self.gateway.clock_skew = skew
-                    return
+                    skews.append(skew)
+        if skews:
+            self.clock_skew = max(skews)
+            self.gateway.clock_skew = self.clock_skew
 
     def submit(self, key, symbol, request):
         if self.stopping:

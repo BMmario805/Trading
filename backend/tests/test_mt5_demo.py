@@ -267,6 +267,44 @@ class BrokerClockTests(unittest.TestCase):
                 self.assertEqual(closed_candles(candles, 60, now), candles)
                 self.assertEqual(candles[-1]['dataSource']['provider'], 'mt5')
 
+    def test_most_recent_tick_prevents_other_symbols_appearing_in_the_future(self):
+        now, offset = 1000000, 10800
+        self.config['symbols']['EURUSD'] = 'EURUSD'
+        ticks = {'XAUUSD': NS(time=now+offset-20, bid=100, ask=100.02),
+                 'EURUSD': NS(time=now+offset, bid=1, ask=1.0001)}
+        self.api.symbol_info_tick.side_effect = ticks.get
+        with patch.object(mt5_demo.time, 'time', return_value=now):
+            self.engine.update_clock_skew()
+        self.assertEqual(self.engine.clock_skew, offset)
+        self.assertEqual(self.engine.gateway.clock_skew, offset)
+        for symbol in ticks:
+            self.api.symbol_select.assert_any_call(symbol, True)
+            self.assertIs(self.engine.gateway.tick(symbol, now), ticks[symbol])
+
+    def test_stale_ticks_stay_stale_even_when_another_symbol_is_fresh(self):
+        now, offset = 1000000, 7200
+        self.config['symbols']['EURUSD'] = 'EURUSD'
+        self.api.symbol_info_tick.side_effect = {
+            'XAUUSD': NS(time=now+offset-600, bid=100, ask=100.02),
+            'EURUSD': NS(time=now+offset, bid=1, ask=1.0001),
+        }.get
+        with patch.object(mt5_demo.time, 'time', return_value=now):
+            self.engine.update_clock_skew()
+        self.assertEqual(self.engine.clock_skew, offset)
+        with self.assertRaises(DemoOnlyError):
+            self.engine.gateway.tick('XAUUSD', now)
+
+    def test_invalid_or_unselectable_ticks_do_not_replace_existing_skew(self):
+        self.engine.clock_skew = self.engine.gateway.clock_skew = 7200
+        self.config['symbols'].update(EURUSD='EURUSD', GBPUSD='GBPUSD')
+        self.api.symbol_select.side_effect = lambda symbol, selected: symbol != 'XAUUSD'
+        self.api.symbol_info_tick.side_effect = {'EURUSD': None, 'GBPUSD': NS(time=float('nan'))}.get
+        with patch.object(mt5_demo.time, 'time', return_value=1000000):
+            self.engine.update_clock_skew()
+        self.assertEqual(self.engine.clock_skew, 7200)
+        self.assertEqual(self.engine.gateway.clock_skew, 7200)
+        self.assertNotIn('XAUUSD', [call.args[0] for call in self.api.symbol_info_tick.call_args_list])
+
 
 if __name__ == '__main__':
     unittest.main()

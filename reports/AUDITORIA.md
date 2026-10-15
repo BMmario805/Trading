@@ -1,5 +1,34 @@
 # Auditoría del motor de trading — 9 de septiembre de 2026
 
+## Reloj MT5, recarga y umbrales manuales — 15 de octubre de 2026
+
+La estimación del reloj selecciona los símbolos del terminal y usa el mayor
+desfase válido entre sus ticks. Un primer tick atrasado ya no hace aparecer
+las cotizaciones recientes de otras divisas como futuras. Se mantiene el filtro
+de antigüedad: una cotización caducada sigue sin permitir entradas.
+
+`start.ps1` recarga el backend mediante `start-background.ps1 -RestartBackend`.
+El arranque identifica los procesos Python de este proyecto antes de sustituirlos,
+conserva el frontend activo y comprueba que la API responde. Sin ese argumento,
+`start-background.ps1` conserva los servicios existentes. Las llamadas actuales
+a `meta_features()` ya eran compatibles; no se revirtieron archivos funcionales.
+La regla de cruce reciente sigue vigente.
+
+Tras copiar ambas bases a `.runtime/backups/clock-fix-20261015-100102/`, se
+reiniciaron siete modelos y siete políticas, se activaron los siete bots y se
+limpiaron tres estados de cooldown/día de MT5. No había órdenes inciertas.
+Los siete pares aprobados con umbral superior a 0,40 se ajustaron a 0,35:
+Reversión/AAPL, Swing/ADA y CL, Apertura/MSFT y Tendencia/BCH, ETH y LTC.
+Los parámetros anteriores quedan registrados en los metadatos del ajuste.
+
+Cambiar el umbral invalida la validación de esa configuración: estos ajustes
+se cargan aparte de los parámetros validados y operan a prueba con el límite
+actual del 35%. Se conservan SL, TP, trailing y procedencia. Un entrenamiento
+posterior sustituye el ajuste y determina de nuevo su elegibilidad.
+
+Verificación: 140 pruebas Python y cuatro escenarios PowerShell de arranque
+con procesos simulados pasan. Se reinició el backend y se comprobó la API.
+
 ## Ajuste de exploración y diagnóstico — 15 de octubre de 2026
 
 Por petición del usuario se ajusta el modo a prueba al 35% del riesgo habitual,

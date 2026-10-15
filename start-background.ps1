@@ -1,4 +1,6 @@
-# Inicio local sin ventanas; conserva los servicios de este proyecto ya activos.
+# Inicio local sin ventanas; permite recargar el backend de este proyecto.
+param([switch]$RestartBackend)
+
 $ErrorActionPreference = 'Stop'
 $tradingRoot = $PSScriptRoot
 $runtimeDir = Join-Path $tradingRoot '.runtime'
@@ -15,11 +17,44 @@ function Start-TradingService {
                 throw "El puerto $Port está ocupado por otra aplicación."
             }
         }
-        return
+        if ($Name -ne 'backend' -or -not $RestartBackend) {
+            return
+        }
+        $backendProcesses = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.Name -like 'python*.exe' -and $_.CommandLine -and
+            $_.CommandLine.Contains($tradingRoot + '\backend') -and
+            $_.CommandLine.Contains('-m uvicorn app.main:app')
+        })
+        foreach ($listener in $listeners) {
+            if ($listener.OwningProcess -notin $backendProcesses.ProcessId) {
+                throw 'El servicio del puerto 8000 no es el backend esperado de este proyecto.'
+            }
+        }
+        foreach ($backendProcess in $backendProcesses) {
+            Stop-Process -Id $backendProcess.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+        foreach ($backendProcess in $backendProcesses) {
+            Wait-Process -Id $backendProcess.ProcessId -Timeout 10 -ErrorAction SilentlyContinue
+        }
     }
-    Start-Process -FilePath $Executable -ArgumentList $Arguments -WorkingDirectory $Directory -WindowStyle Hidden `
+    $serviceProcess = Start-Process -FilePath $Executable -ArgumentList $Arguments -WorkingDirectory $Directory -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput (Join-Path $runtimeDir "$Name-$launchStamp.stdout.log") `
-        -RedirectStandardError (Join-Path $runtimeDir "$Name-$launchStamp.stderr.log") | Out-Null
+        -RedirectStandardError (Join-Path $runtimeDir "$Name-$launchStamp.stderr.log")
+    if ($Name -eq 'backend') {
+        $deadline = (Get-Date).AddSeconds(45)
+        while ((Get-Date) -lt $deadline) {
+            $serviceProcess.Refresh()
+            if ($serviceProcess.HasExited) {
+                throw "El backend terminó al arrancar. Revisa .runtime/backend-$launchStamp.stderr.log."
+            }
+            try {
+                $response = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/mt5' -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { return }
+            } catch { }
+            Start-Sleep -Milliseconds 500
+        }
+        throw "El backend no responde. Revisa .runtime/backend-$launchStamp.stderr.log."
+    }
 }
 
 Start-TradingService -Port 8000 -Executable (Join-Path $tradingRoot 'backend\.venv\Scripts\python.exe') `

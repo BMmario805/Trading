@@ -389,6 +389,7 @@ class TradingBot:
         self.cooldown_until: dict[str, float] = {}
         self.probation_open: set[str] = set()       # símbolos abiertos a prueba
         self.trained_params: dict[str, dict] = {}   # símbolo -> params validados
+        self.manual_params: dict[str, dict] = {}    # ajustes explícitos a prueba
         self._task: asyncio.Task | None = None
         self._last_scan = 0.0
         self._scan_cursor = 0
@@ -466,13 +467,17 @@ class TradingBot:
             s: p for (b, s), p in training.load_applied_params().items()
             if b == self.cfg.id
         }
+        self.manual_params = {
+            s: p for (b, s), p in training.load_manual_params().items()
+            if b == self.cfg.id
+        }
         if self.trained_params:
             log.info("%s: parámetros entrenados para %s",
                      self.cfg.id, ", ".join(sorted(self.trained_params)))
 
     def _exec_params(self, sym: Symbol) -> tuple[float, float, float, float]:
         """(umbral, sl_atr, tp_atr, trail_atr) efectivos para un símbolo."""
-        p = self.trained_params.get(sym.id)
+        p = self.trained_params.get(sym.id) or self.manual_params.get(sym.id)
         threshold = p["entryThreshold"] if p else self.cfg.entry_threshold
         sl = p["slAtr"] if p else self.cfg.sl_atr
         tp = p["tpAtr"] if p else self.cfg.tp_atr
@@ -679,7 +684,8 @@ class TradingBot:
             if signal is None:
                 self.diagnostics[symbol_id]["reason"] = "Histórico cerrado insuficiente"
                 continue
-            expected_source = self.trained_params.get(symbol_id, {}).get('dataSource')
+            execution_params = self.trained_params.get(symbol_id) or self.manual_params.get(symbol_id, {})
+            expected_source = execution_params.get('dataSource')
             if not has_pos and expected_source and signal['candles'][-1].get('dataSource') != expected_source:
                 self.diagnostics[symbol_id]['reason'] = 'Fuente distinta de la validada; esperando datos MT5'
                 continue
@@ -898,6 +904,8 @@ class TradingBot:
         probation_why: str | None = None,
     ) -> None:
         reasons: list[str] = list(signal["reasons"])
+        if sym.id in self.manual_params:
+            reasons.append("Parámetros ajustados manualmente; pendientes de revalidación")
         half_spread = price * self.spread_pct(sym) / 2
         entry = price + half_spread if direction == "long" else price - half_spread
         sl_dist = atr_val * sl_m

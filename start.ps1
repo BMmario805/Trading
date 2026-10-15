@@ -1,4 +1,4 @@
-# Arranca los servicios en segundo plano y abre el panel.
-& (Join-Path $PSScriptRoot 'start-background.ps1')
-Start-Sleep -Seconds 3
+# Recarga el backend, conserva el frontend y abre el panel.
+$ErrorActionPreference = 'Stop'
+& (Join-Path $PSScriptRoot 'start-background.ps1') -RestartBackend
 Start-Process "http://localhost:5173"

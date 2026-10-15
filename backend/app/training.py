@@ -122,6 +122,17 @@ def load_results() -> list[dict]:
     ]
 
 
+def load_manual_params() -> dict[tuple[str, str], dict]:
+    """Ajustes explícitos pendientes de revalidación, solo para modo a prueba."""
+    with _conn() as con:
+        rows = con.execute(
+            "SELECT bot, symbol, params, metrics FROM bot_params WHERE applied = 0"
+        ).fetchall()
+    return {(b, s): json.loads(p) for b, s, p, m in rows
+            if json.loads(m).get("engineVersion") == ENGINE_VERSION
+            and json.loads(m).get("manualAdjustment")}
+
+
 def due_symbols(bot_id: str, universe: tuple[str, ...], hours: float, now: float | None = None) -> list[str]:
     """Resultados evaluados respetan el ciclo; errores de datos reintentan en una hora."""
     now = time.time() if now is None else now
