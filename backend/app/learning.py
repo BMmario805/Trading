@@ -70,14 +70,14 @@ BLOCK_EXPECTANCY_R = -0.15
 MIN_TRADES_HOUR = 10
 BLOCK_HOUR_EXPECTANCY_R = -0.25
 
-PROBATION_SIZE = 0.25         # máximo 25% del riesgo normal en pares sin validar
-PROBATION_THRESHOLD_MULT = 1.05  # umbral de entrada un 5% más exigente
-PROBATION_META_P = 0.50        # p(éxito) mínima del meta-modelo (si es maduro)
-MAX_PROBATION_POSITIONS = 3    # posiciones a prueba simultáneas por bot
+PROBATION_SIZE = 0.35         # máximo 35% del riesgo normal en pares sin validar
+PROBATION_THRESHOLD_MULT = 1.0   # sin recargo sobre el umbral de entrada
+PROBATION_META_P = 0.30        # p(éxito) mínima del meta-modelo (si es maduro)
+MAX_PROBATION_POSITIONS = 5    # posiciones a prueba simultáneas por bot
 
 # --- Meta-modelo (regresión logística online) ---
 META_MIN_SAMPLES = 30     # madurez mínima antes de que pueda vetar señales
-META_GATE_P = 0.35        # probabilidad de éxito mínima para dejar pasar
+META_GATE_P = 0.25        # probabilidad de éxito mínima para dejar pasar
 META_LR = 0.05            # tasa de aprendizaje SGD
 META_L2 = 0.001           # regularización L2 (evita pesos desbocados)
 META_BOOTSTRAP_EPOCHS = 3 # pasadas extra al aprender el historial de golpe

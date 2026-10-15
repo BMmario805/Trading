@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from app.mt5_gateway import DemoGateway, DemoOnlyError, lot_floor
 from app import bots, learning, mt5_demo, training
+from app.execution import closed_candles
 
 
 def setup_api():
@@ -169,10 +170,11 @@ class ProbationEngineTests(unittest.TestCase):
     def test_unvalidated_demo_pair_uses_reduced_risk(self):
         prepare, submit = self.cycle()
         prepare.assert_called_once()
-        self.assertEqual(prepare.call_args.kwargs['risk_mult'], .25)
+        self.assertEqual(prepare.call_args.kwargs['risk_mult'], .35)
         self.assertTrue(prepare.call_args.args[6].startswith('cxp-'))
         submit.assert_called_once()
-        self.assertIn('25%', self.engine.diagnostics['scalper/XAUUSD'])
+        self.assertIn('35%', self.engine.diagnostics['scalper/XAUUSD'])
+        self.assertEqual(mt5_demo.STATE['probationRiskPct'], .035)
 
     def test_validated_demo_pair_uses_normal_budget_and_threshold(self):
         mt5_demo.save(self.engine.owner+'params:scalper/XAUUSD', dict(
@@ -181,8 +183,13 @@ class ProbationEngineTests(unittest.TestCase):
         prepare.assert_called_once()
         self.assertEqual(prepare.call_args.kwargs['risk_mult'], 1)
 
-    def test_probation_requires_five_percent_stronger_signal(self):
+    def test_probation_accepts_original_threshold_without_surcharge(self):
         prepare, submit = self.cycle(score=self.bot.entry_threshold*1.02)
+        prepare.assert_called_once()
+        submit.assert_called_once()
+
+    def test_probation_still_requires_threshold_crossing(self):
+        prepare, submit = self.cycle(score=self.bot.entry_threshold*.99)
         prepare.assert_not_called()
         submit.assert_not_called()
         self.assertIn('Sin cruce', self.engine.diagnostics['scalper/XAUUSD'])
@@ -194,15 +201,29 @@ class ProbationEngineTests(unittest.TestCase):
         self.assertIn('Esperando validación', self.engine.diagnostics['scalper/XAUUSD'])
 
     def test_probation_cap_survives_missing_metadata_after_restart(self):
-        self.config['max_positions'] = 5
+        self.config['max_positions'] = 6
         self.api.positions_get.return_value = tuple(
             NS(ticket=i, symbol=f'TEST{i}', magic=mt5_demo.MAGICS['scalper'], comment='cxp-scalper-old',
                type=0, volume=.01, price_open=100, sl=90, tp=120, profit=0)
-            for i in range(3))
+            for i in range(5))
         prepare, submit = self.cycle()
         prepare.assert_not_called()
         submit.assert_not_called()
         self.assertIn('Límite de posiciones a prueba', self.engine.diagnostics['scalper/XAUUSD'])
+
+    def test_shared_limit_updates_all_markets_instead_of_leaving_stale_diagnostics(self):
+        self.bot = replace(self.bot, universe=('XAUUSD', 'EURUSD'))
+        self.config['symbols']['EURUSD'] = 'EURUSD'
+        self.api.positions_get.return_value = tuple(
+            NS(ticket=i, symbol=f'TEST{i}', magic=mt5_demo.MAGICS['scalper'], comment='cxp-scalper-old',
+               type=0, volume=.01, price_open=100, sl=90, tp=120, profit=0)
+            for i in range(3))
+        self.engine.diagnostics['scalper/EURUSD'] = 'Sin cruce reciente de señal'
+        prepare, submit = self.cycle()
+        prepare.assert_not_called()
+        submit.assert_not_called()
+        for symbol in ('XAUUSD', 'EURUSD'):
+            self.assertEqual(self.engine.diagnostics['scalper/'+symbol], 'Límite compartido de posiciones alcanzado')
 
 
 class IntentTests(unittest.TestCase):
@@ -221,6 +242,30 @@ class IntentTests(unittest.TestCase):
                 finally: restarted.worker.shutdown()
                 api.order_send.assert_called_once()
             finally: engine.worker.shutdown()
+
+
+class BrokerClockTests(unittest.TestCase):
+    def setUp(self):
+        self.api, self.config, _, _ = setup_api()
+        self.config['symbols'] = {'XAUUSD': 'XAUUSD'}
+        self.engine = mt5_demo.DemoEngine(self.config, self.api)
+        self.addCleanup(self.engine.worker.shutdown)
+
+    def test_broker_candles_remain_fresh_after_utc_normalization(self):
+        now = 4200
+        for offset in (0, 7200, 10800):
+            with self.subTest(offset=offset):
+                self.engine.clock_skew = offset
+                self.api.copy_rates_from_pos.return_value = [
+                    dict(time=t+offset, open=100, high=101, low=99, close=100,
+                         real_volume=0, tick_volume=10)
+                    for t in (now-180, now-120, now-60, now)
+                ]
+                with patch.object(mt5_demo.time, 'time', return_value=now):
+                    candles = self.engine.market_read('candles', '1m', 4)
+                self.assertEqual([c['time'] for c in candles], [now-180, now-120, now-60])
+                self.assertEqual(closed_candles(candles, 60, now), candles)
+                self.assertEqual(candles[-1]['dataSource']['provider'], 'mt5')
 
 
 if __name__ == '__main__':

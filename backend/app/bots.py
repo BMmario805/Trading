@@ -711,7 +711,11 @@ class TradingBot:
                     self._close(pos, exit_p, "señal contraria")
                 continue
 
-            if abs(score) < threshold or atr_val <= 0:
+            if abs(score) < threshold:
+                self.diagnostics[symbol_id]["reason"] = f"Señal {score:+.3f} no alcanza umbral {threshold:.3f}"
+                continue
+            if atr_val <= 0:
+                self.diagnostics[symbol_id]["reason"] = "ATR insuficiente para calcular el riesgo"
                 continue
             if not fresh_signal(score, signal.get("recent_prev", [signal["prev"]]), threshold):
                 self.diagnostics[symbol_id]["reason"] = "Sin cruce reciente en esta dirección"
@@ -749,13 +753,15 @@ class TradingBot:
             )
             meta_ok, p_win, meta_note = learning.meta_gate(self.cfg.id, feats)
             if not meta_ok:
-                self.diagnostics[symbol_id]["reason"] = "Filtrado por meta-modelo"
+                self.diagnostics[symbol_id]["reason"] = meta_note or "Filtrado por meta-modelo"
                 log.debug("%s: %s %s filtrado por meta-modelo (p=%.2f)",
                           self.cfg.id, symbol_id, direction, p_win or 0.0)
                 continue
             if mode == "probation" and p_win is not None and p_win < learning.PROBATION_META_P:
                 # a prueba solo pasan las señales de más convicción
-                self.diagnostics[symbol_id]["reason"] = "Confianza insuficiente del meta-modelo para operar a prueba"
+                self.diagnostics[symbol_id]["reason"] = (
+                    f"Entrada a prueba filtrada: p(éxito)={p_win:.1%} < {learning.PROBATION_META_P:.0%}"
+                )
                 log.debug("%s: %s %s a prueba sin convicción (p=%.2f)",
                           self.cfg.id, symbol_id, direction, p_win)
                 continue
@@ -765,6 +771,9 @@ class TradingBot:
                 (direction == "long" and ext > self.cfg.overext_atr)
                 or (direction == "short" and ext < -self.cfg.overext_atr)
             ):
+                self.diagnostics[symbol_id]["reason"] = (
+                    f"Precio sobreextendido ({ext:+.2f} ATR; límite {self.cfg.overext_atr:g})"
+                )
                 log.debug("%s: %s sobreextendido (%.1f ATR), no se persigue",
                           self.cfg.id, symbol_id, ext)
                 continue
@@ -929,7 +938,7 @@ class TradingBot:
         size_mult = scale * learn_mult * meta_mult
         if probation_why:
             # El aprendizaje puede reducir el riesgo exploratorio, nunca
-            # elevarlo por encima del 25% del presupuesto habitual.
+            # elevarlo por encima de PROBATION_SIZE del presupuesto habitual.
             size_mult = min(1.0, size_mult) * prob_mult
         budget = min(equity * self.cfg.risk_pct * size_mult,
                      max(0.0, equity * self.cfg.max_open_risk_pct - open_risk))

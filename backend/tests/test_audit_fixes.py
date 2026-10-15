@@ -1,7 +1,9 @@
 import asyncio
 import json
+import math
 import sqlite3
 import tempfile
+import time
 import unittest
 from contextlib import ExitStack
 from dataclasses import replace
@@ -202,18 +204,18 @@ class ProbationSizingTests(TemporaryDatabaseTests):
                       p_win=p_win, probation_why='Sin validar')
         return bot.positions['BTC']
 
-    def test_probation_risk_cannot_be_amplified_above_one_quarter(self):
+    def test_probation_risk_cannot_be_amplified_above_configured_fraction(self):
         bot = bots.TradingBot(bots.SCALPER)
         pos = self.open_probation(bot, learn_mult=1.5, p_win=.99)
         risk_with_spread = pos.qty * (pos.r_dist + 100 * bot.spread_pct(bots.SYMBOLS_BY_ID['BTC']) / 2)
-        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .25)
+        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .35)
 
     def test_loss_streak_can_reduce_probation_risk_further(self):
         bot = bots.TradingBot(bots.SCALPER)
         bot.consec_losses = 2
         pos = self.open_probation(bot)
         risk_with_spread = pos.qty * (pos.r_dist + .025)
-        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .125)
+        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .175)
 
     def test_restart_preserves_probation_slots(self):
         bot = bots.TradingBot(bots.SCALPER)
@@ -222,9 +224,9 @@ class ProbationSizingTests(TemporaryDatabaseTests):
         restored.load_state()
         self.assertIn('BTC', restored.probation_open)
 
-    def test_three_probation_positions_stop_further_exploration(self):
+    def test_five_probation_positions_stop_further_exploration(self):
         bot = bots.TradingBot(replace(bots.SCALPER, universe=('BTC',)))
-        bot.probation_open.update(('ETH', 'SOL', 'XRP'))
+        bot.probation_open.update(('ETH', 'SOL', 'XRP', 'ADA', 'BNB'))
         with patch.object(learning, 'entry_mode', return_value=('probation', 'Sin validar')), \
              patch.object(bot, '_evaluate', AsyncMock()) as evaluate:
             asyncio.run(bot._scan())
@@ -234,3 +236,38 @@ class ProbationSizingTests(TemporaryDatabaseTests):
     def test_unknown_pair_does_not_apply_a_second_exploration_discount(self):
         learning._policies['scalper'] = dict(sizeMult={})
         self.assertEqual(learning.size_multiplier('scalper', 'BTC'), (1.0, None))
+
+
+class MetaEntryDiagnosticsTests(TemporaryDatabaseTests):
+    def scan(self, probability):
+        bot = bots.TradingBot(replace(bots.SCALPER, universe=('EURUSD',)))
+        signal = dict(score=.8, stale=False, atr=2, price=100, prev=0,
+                      recent_prev=[0]*3, extension=0, confirmations=[])
+        learning._models['scalper'] = {
+            **learning._new_model(), 'n': 46,
+            'w': {'bias': math.log(probability/(1-probability))},
+        }
+        with patch.object(learning, 'entry_mode', return_value=('probation', 'Sin validar')), \
+             patch.object(bot, '_evaluate', AsyncMock(return_value=signal)), \
+             patch.object(bots.market_data, 'get_price', AsyncMock(return_value=dict(price=100, time=time.time()))), \
+             patch.object(bot, '_open') as open_position:
+            asyncio.run(bot._scan())
+        return bot, open_position
+
+    def test_mature_model_can_admit_probation_above_thirty_percent(self):
+        for probability in (.31, .42):
+            with self.subTest(probability=probability):
+                _, open_position = self.scan(probability)
+                open_position.assert_called_once()
+
+    def test_probation_rejection_reports_probability_and_threshold(self):
+        bot, open_position = self.scan(.27)
+        open_position.assert_not_called()
+        self.assertIn('27.0%', bot.diagnostics['EURUSD']['reason'])
+        self.assertIn('30%', bot.diagnostics['EURUSD']['reason'])
+
+    def test_general_meta_rejection_reports_probability_and_threshold(self):
+        bot, open_position = self.scan(.20)
+        open_position.assert_not_called()
+        self.assertIn('20%', bot.diagnostics['EURUSD']['reason'])
+        self.assertIn('25%', bot.diagnostics['EURUSD']['reason'])

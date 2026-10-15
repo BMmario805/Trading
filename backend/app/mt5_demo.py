@@ -273,7 +273,7 @@ class DemoEngine:
                      currency=account.currency, balance=account.balance, equity=account.equity,
                      enabled=enabled, tradingAllowed=bool(allowed and not daily['paused']), message=message,
                      riskPct=cfg['risk_pct']*100,
-                     probationRiskPct=cfg['risk_pct']*learning.PROBATION_SIZE*100,
+                     probationRiskPct=round(cfg['risk_pct']*learning.PROBATION_SIZE*100, 6),
                      maxPositions=cfg['max_positions'], updatedAt=int(now),
                      positions=[dict(ticket=p.ticket, symbol=p.symbol, bot=next((b for b,m in MAGICS.items() if m==p.magic), 'manual/otro'),
                                      direction='long' if p.type==api.POSITION_TYPE_BUY else 'short', volume=p.volume,
@@ -303,7 +303,7 @@ class DemoEngine:
                 current_positions = self.gateway.positions()
                 if len(current_positions) >= cfg['max_positions']:
                     self.diagnostics[key] = 'Límite compartido de posiciones alcanzado'
-                    break
+                    continue
                 if probation:
                     probation_count = sum(
                         1 for pos in current_positions if pos.magic == MAGICS[bot.id]
@@ -344,7 +344,7 @@ class DemoEngine:
                             save(self.owner+f'position:{pos.ticket}', dict(risk=risk, atr=atr, best=pos.price_open,
                                                                       trail=p.get('trailAtr', bot.trail_atr),
                                                                       probation=probation))
-                    self.diagnostics[key] = ('Orden DEMO a prueba ejecutada (25% del riesgo habitual)' if probation
+                    self.diagnostics[key] = (f'Orden DEMO a prueba ejecutada ({learning.PROBATION_SIZE:.0%} del riesgo habitual)' if probation
                                              else 'Orden DEMO ejecutada en MT5')
                 else:
                     self.diagnostics[key] = 'Orden ya procesada, rechazada o pendiente de reconciliación'

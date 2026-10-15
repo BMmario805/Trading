@@ -1,5 +1,36 @@
 # Auditoría del motor de trading — 9 de septiembre de 2026
 
+## Ajuste de exploración y diagnóstico — 15 de octubre de 2026
+
+Por petición del usuario se ajusta el modo a prueba al 35% del riesgo habitual,
+sin recargo de umbral, con probabilidad mínima del 30% si el metamodelo es maduro
+y hasta cinco posiciones a prueba por bot. La puerta general del metamodelo
+queda en el 25%. Se conservan los demás límites de riesgo; MT5 sigue limitado
+por su configuración compartida de tres posiciones y por la cuenta DEMO autorizada.
+Su riesgo objetivo por entrada sin validar pasa del 0,025% al 0,035%.
+
+El diagnóstico muestra la probabilidad y el umbral cuando el metamodelo veta,
+el umbral de señal cuando no se alcanza y la extensión cuando se descarta
+perseguir el precio. Cuando la cuenta MT5 está llena se actualizan los motivos
+de todos los mercados, en lugar de conservar mensajes de ciclos anteriores.
+
+La inspección previa encontró cero muestras en los siete modelos y ninguna orden
+`pending` o `uncertain`. `strategy.py` y `market_data.py` coincidían con HEAD:
+no existían las funciones `_orthogonal_trend_blend` o `_mt5_candles` citadas en
+el adjunto. Se verificó que XAUUSD llegaba desde MT5 con una vela de 79 segundos
+de antigüedad; las pruebas con relojes adelantados dos y tres horas conservan
+las últimas velas cerradas al normalizar a UTC. No se cambió la escala de señal.
+
+Con el backend detenido se copiaron ambas bases a
+`.runtime/backups/unblock-20261015-093752/`, se limpiaron siete modelos y siete
+políticas, se dejaron los siete bots en ejecución y se eliminaron ocho estados
+MT5 de cooldown/día. No había órdenes inciertas que eliminar. Se conservan el
+historial, las posiciones, los parámetros entrenados y los registros de órdenes
+aceptadas. El aprendizaje puede reconstruir las políticas a partir del historial.
+
+Verificación: 134 pruebas pasan. El backend se reinició para activar los cambios.
+Las secciones siguientes documentan las revisiones anteriores.
+
 ## Modo a prueba restaurado — 15 de octubre de 2026
 
 Por petición del usuario, los siete bots del Laboratorio y MT5 DEMO permiten
