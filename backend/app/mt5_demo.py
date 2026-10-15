@@ -215,12 +215,14 @@ class DemoEngine:
                 tick = self.gateway.tick(symbol, now)
                 spread = (tick.ask-tick.bid)/((tick.ask+tick.bid)/2)
                 account, _ = self.gateway.account()
+                virtual=mt5_performance.capital(self.owner,account,self.gateway.positions())
+                equity=virtual['equity'] if virtual else account.equity
                 def optimize():
                     scores = score_series(cfg.id, data, resample(data, TREND_STEP[cfg.id]))
                     seconds = INTERVAL_SECONDS[cfg.work_interval]
                     return training.optimize(cfg.id, data, scores, atr_series(data, cfg.atr_period), spread,
                                              max(1, cfg.max_hold_seconds//seconds), max(1, cfg.cooldown_seconds//seconds),
-                                             account.equity*self.config['risk_pct'], account.equity,
+                                             equity*self.config['risk_pct'], equity,
                                              overext_atr=cfg.overext_atr)
                 self.training_job = (key, self.worker.submit(optimize))
             except Exception as exc:

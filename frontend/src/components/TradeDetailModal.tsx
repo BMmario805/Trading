@@ -38,11 +38,11 @@ const fmtTime = (ts: number) =>
     minute: '2-digit',
   })
 
-const fmtPnl = (v: number) =>
-  `${v >= 0 ? '+' : '-'}$${Math.abs(v).toLocaleString('en-US', {
+const fmtPnl = (v: number, currency = 'USD') =>
+  `${v >= 0 ? '+' : '-'}${Math.abs(v).toLocaleString('es-ES', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`
+  })} ${currency}`
 
 function voteIcon(vote: number) {
   if (vote > 0.15) return <span className="up">▲</span>
@@ -146,10 +146,11 @@ function SnapshotChart({ trade }: { trade: TradeDetail }) {
 interface Props {
   botId: string
   tradeId: number
+  currency?: string
   onClose: () => void
 }
 
-export default function TradeDetailModal({ botId, tradeId, onClose }: Props) {
+export default function TradeDetailModal({ botId, tradeId, onClose, currency }: Props) {
   const [trade, setTrade] = useState<TradeDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -234,7 +235,7 @@ export default function TradeDetailModal({ botId, tradeId, onClose }: Props) {
                   <div>
                     <small className="muted">PnL</small>
                     <strong className={trade.pnl >= 0 ? 'up' : 'down'}>
-                      {fmtPnl(trade.pnl)}
+                      {fmtPnl(trade.pnl,currency)}
                     </strong>
                   </div>
                 )}

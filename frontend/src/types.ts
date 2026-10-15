@@ -220,6 +220,8 @@ export interface BotStatus {
   horizon: string
   running: boolean
   initialBalance: number
+  currency?: string
+  session?: { initial: number; currency: string; startedAt: number } | null
   balance: number
   equity: number
   openPositions: BotPosition[]
@@ -340,6 +342,7 @@ export interface PerfSeries {
 export interface BotPerformance {
   source?: 'mt5' | 'paper'
   currency?: string | null
+  session?: { initial: number; currency: string; startedAt: number } | null
   updatedAt?: number
   syncError?: string | null
   cards?: { id: string; name: string; realizedPnl: number; unrealizedPnl: number; totalPnl: number; openPositions: number; closedTrades: number }[]

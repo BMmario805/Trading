@@ -122,15 +122,16 @@ def _lab_positions(now, data):
             if stamp is not None:
                 stamps.append(stamp)
             qty = _number(p.qty, positive=True)
+            conversion=getattr(p,'quote_to_account',1.0)
             entry = _number(p.entry_price, positive=True)
-            pnl = (_number((price - entry) * qty * (1 if p.direction == 'long' else -1))
+            pnl = (_number((price - entry) * qty * (1 if p.direction == 'long' else -1)*conversion)
                    if None not in (price, entry, qty) else None)
             positions.append(dict(
                 id=f'lab:{bot_id}:{p.id}', source='lab', sourceLabel='Laboratorio',
                 botId=bot_id, botName=bot.cfg.name, symbol=p.symbol, side=p.direction,
                 quantity=qty, quantityUnit='units', entryPrice=entry, currentPrice=price,
-                notional=_number(qty * entry) if None not in (qty, entry) else None,
-                unrealizedPnl=pnl, currency=_lab_currency(p.symbol, data),
+                notional=_number(qty * entry * conversion) if None not in (qty, entry) else None,
+                unrealizedPnl=pnl, currency=(getattr(bot,'session',None) or {}).get('currency') or _lab_currency(p.symbol, data),
                 openedAt=_number(p.entry_time, positive=True),
                 stopLoss=_number(p.sl, positive=True), takeProfit=_number(p.tp, positive=True),
                 priceFresh=fresh, priceUpdatedAt=stamp, accountMode='paper', pnlBasis='gross',

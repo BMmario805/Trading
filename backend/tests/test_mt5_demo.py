@@ -6,7 +6,7 @@ from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
 from app.mt5_gateway import DemoGateway, DemoOnlyError, lot_floor
-from app import bots, learning, mt5_demo, training
+from app import bots, learning, mt5_demo, mt5_performance, training
 from app.execution import closed_candles
 
 
@@ -139,6 +139,9 @@ class ProbationEngineTests(unittest.TestCase):
         self.db_patch = patch.object(mt5_demo, 'DB_PATH', Path(self.tmp.name)/'test.sqlite')
         self.db_patch.start()
         self.addCleanup(self.db_patch.stop)
+        perf_patch=patch.object(mt5_performance,'DB_PATH',Path(self.tmp.name)/'test.sqlite')
+        perf_patch.start()
+        self.addCleanup(perf_patch.stop)
         self.state_patch = patch.dict(mt5_demo.STATE, {}, clear=True)
         self.state_patch.start()
         self.addCleanup(self.state_patch.stop)

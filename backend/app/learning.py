@@ -145,7 +145,7 @@ def analyze(bot_id: str, window_days: int = WINDOW_DAYS) -> dict:
         since = reference - window_days * 86400
         rows = con.execute(
             """SELECT symbol, direction, qty, entry_price, sl, pnl,
-                      entry_time, exit_reason, initial_risk_dist
+                      entry_time, exit_reason, COALESCE(initial_risk_dist,ABS(entry_price-sl))*COALESCE(quote_to_account,1)
                FROM bot_trades
                WHERE bot = ? AND status = 'closed' AND pnl IS NOT NULL
                  AND exit_time >= ?""",

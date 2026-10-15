@@ -46,7 +46,8 @@ export default function MetaTraderPerformance() {
   }, [data])
   const money = (v: number | null | undefined) => v == null ? '—' : `${v.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${data?.currency ?? ''}`
   return <div className="mt5-performance">
-    <h3>Rendimiento general de tu cuenta MT5</h3>
+    <h3>{data?.session ? 'Rendimiento del presupuesto virtual MT5' : 'Rendimiento general de tu cuenta MT5'}</h3>
+    {data?.session && <p className="muted small">Cuenta de seguimiento desde {money(data.session.initial)}. Se incluyen únicamente resultados posteriores al reinicio; el historial anterior continúa en el bróker.</p>}
     {(error || data?.syncError) && <p role="status">Sincronización pendiente: se conservan los últimos datos disponibles.</p>}
     {Math.abs(data?.account?.reconciliationDifference ?? 0) > .01 && <p role="status">El historial disponible no reconcilia todo el saldo: diferencia de {money(data?.account?.reconciliationDifference)}. El balance y patrimonio mostrados proceden directamente de MT5.</p>}
     <div className="bot-stats mt5-account-stats">

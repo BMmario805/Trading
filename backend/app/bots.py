@@ -81,7 +81,7 @@ class BotConfig:
     # --- medidas de seguridad (estándar prop-firm) ---
     max_open_risk_pct: float = 0.06  # riesgo inicial agregado por bot
     max_daily_loss_pct: float = 0.05  # pérdida diaria máxima antes de pausar entradas
-    max_same_category: int = 2        # posiciones simultáneas misma categoría+dirección
+    max_same_category: int = 6        # posiciones simultáneas misma categoría+dirección
     overext_atr: float = 2.0          # no entrar si el precio está a más de esto de la EMA20
 
 
@@ -104,7 +104,7 @@ SCALPER = BotConfig(
     trail_atr=1.2,
     risk_pct=0.01,
     max_leverage=20.0,
-    max_positions=6,
+    max_positions=10,
     max_hold_seconds=45 * 60,
     cooldown_seconds=60,
     focus_threshold_mult=0.85,
@@ -138,7 +138,7 @@ SWING = BotConfig(
     cooldown_seconds=10 * 60,
     focus_threshold_mult=0.85,
     max_daily_loss_pct=0.08,
-    max_same_category=3,
+    max_same_category=6,
     overext_atr=2.5,
 )
 
@@ -163,12 +163,12 @@ TREND = BotConfig(
     trail_atr=2.4,
     risk_pct=0.02,
     max_leverage=5.0,
-    max_positions=6,
+    max_positions=10,
     max_hold_seconds=10 * 86400,
     cooldown_seconds=30 * 60,
     focus_threshold_mult=1.0,
     max_daily_loss_pct=0.08,
-    max_same_category=3,
+    max_same_category=6,
     overext_atr=3.5,     # las rupturas nacen estiradas: veto solo lo extremo
 )
 
@@ -193,12 +193,12 @@ MEANREV = BotConfig(
     trail_atr=1.6,
     risk_pct=0.015,
     max_leverage=5.0,
-    max_positions=6,
+    max_positions=10,
     max_hold_seconds=3 * 86400,
     cooldown_seconds=30 * 60,
     focus_threshold_mult=1.0,
     max_daily_loss_pct=0.06,
-    max_same_category=3,
+    max_same_category=6,
 )
 
 ORB = BotConfig(
@@ -222,12 +222,12 @@ ORB = BotConfig(
     trail_atr=1.2,
     risk_pct=0.01,
     max_leverage=10.0,
-    max_positions=4,
+    max_positions=8,
     max_hold_seconds=5 * 3600,   # nunca de un día para otro
     cooldown_seconds=15 * 60,
     focus_threshold_mult=1.0,
     max_daily_loss_pct=0.05,
-    max_same_category=3,
+    max_same_category=6,
     overext_atr=3.0,
 )
 
@@ -252,7 +252,7 @@ SQUEEZE = BotConfig(
     trail_atr=1.2,
     risk_pct=0.015,
     max_leverage=10.0,
-    max_positions=6,
+    max_positions=10,
     max_hold_seconds=2 * 86400,
     cooldown_seconds=20 * 60,
     focus_threshold_mult=1.0,
@@ -273,7 +273,7 @@ FLOW = replace(
     universe=("XAUUSD", "BTC", "ETH", "SOL", "XRP", "EURUSD", "GBPUSD", "USDJPY", "NVDA", "TSLA", "AAPL", "MSFT") + EXTRA_CRYPTO,
     entry_threshold=0.50,
     risk_pct=0.005,
-    max_positions=4,
+    max_positions=8,
     weight_tech=1.0,
     weight_senti=0.0,
     sl_atr=2.0,

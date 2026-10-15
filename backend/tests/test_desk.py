@@ -67,14 +67,14 @@ class SizingTests(unittest.TestCase):
 
     def test_tape_excludes_open_and_future_candles(self):
         now=100000
-        rows=[dict(time=now-900*(80-i),open=100+i,high=102+i,low=99+i,close=101+i,volume=100) for i in range(80)]
+        rows=[dict(time=now-desk.CANDLE_SECONDS*(80-i),open=100+i,high=102+i,low=99+i,close=101+i,volume=100) for i in range(80)]
         base=desk.tape(rows,now)
         extra=dict(time=now,open=1,high=99999,low=1,close=9999,volume=100)
         self.assertEqual(base,desk.tape(rows+[extra],now))
 
     def test_tape_accepts_nearby_moving_averages_during_a_moderate_impulse(self):
         now=100000
-        rows=[dict(time=now-900*(80-i),open=99,high=101,low=98,close=99,volume=100) for i in range(80)]
+        rows=[dict(time=now-desk.CANDLE_SECONDS*(80-i),open=99,high=101,low=98,close=99,volume=100) for i in range(80)]
         rows[-1].update(close=100)
         with patch.object(desk,'ema',side_effect=[[100]*80,[100.5]*80]), \
              patch.object(desk,'atr',return_value=2), patch.object(desk,'rsi',return_value=[78]*80):
@@ -253,7 +253,7 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         agent.choose_market.assert_not_awaited()
         self.assertIsNotNone(self.engine.state['position'])
 
-    async def test_position_analysis_error_preserves_position_risk_and_selection_without_rotation(self):
+    async def test_position_analysis_error_preserves_risk_and_continues_searching_free_slots(self):
         await self.entry()
         position=dict(self.engine.state['position'])
         selection=dict(self.engine.state['selection'])
@@ -262,9 +262,57 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
             await self.engine.scan(add_markets(data(),['BTC']))
         agent.choose_market.assert_not_awaited()
         self.assertEqual(self.engine.state['position'],position)
-        self.assertEqual(self.engine.state['selected'],position['symbol'])
-        self.assertEqual(self.engine.state['selection'],selection)
+        self.assertEqual(self.engine.state['selected'],'BTCUSDT')
+        self.assertEqual(position['evidence']['selection'],selection)
         self.assertEqual(self.engine.state['candidates'][0]['status'],'error')
+
+    async def test_three_distinct_positions_preserve_cash_risk_and_restart_without_duplicates(self):
+        snapshot=add_markets(data(),['BTC','ETH','XRP','PAXG'])
+        with patch.object(self.engine,'wire',AsyncMock(return_value=dict(ok=True,detail='ok'))),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
+            await self.engine.scan(snapshot)
+            self.assertEqual(len(self.engine.state['positions']),3)
+            self.assertEqual(len({p['symbol'] for p in self.engine.state['positions']}),3)
+            self.assertGreaterEqual(self.engine.state['cash'],0)
+            risk=sum(p['risk'] for p in self.engine.state['positions'])
+            self.assertLessEqual(risk,self.engine.equity()*.03)
+            self.engine.save()
+            restored=desk.Desk()
+            await restored.scan(snapshot)
+            self.assertEqual(len(restored.state['positions']),3)
+            self.assertEqual(restored.state['roles']['Size']['status'],'managing')
+            self.assertEqual(len(restored.public()['trades']),3)
+            before=restored.state['cash']
+            expected=sum(p['qty']*99.99*(1-desk.SLIPPAGE)*(1-desk.FEE) for p in restored.state['positions'])
+            await restored.control('close')
+            restored.manage(snapshot)
+            self.assertEqual(restored.state['positions'],[])
+            self.assertAlmostEqual(restored.state['cash'],before+expected)
+
+    async def test_open_market_does_not_prevent_other_assets_from_entering(self):
+        await self.entry()
+        first=dict(self.engine.state['position'])
+        with patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
+            await self.engine.scan(add_markets(data(),['BTC','ETH']))
+        self.assertEqual(len(self.engine.state['positions']),3)
+        self.assertEqual(self.engine.state['positions'][0],first)
+
+    async def test_daily_stop_closes_all_positions_and_never_reopens(self):
+        snapshot=add_markets(data(),['BTC','ETH'])
+        with patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
+            await self.engine.scan(snapshot)
+        self.engine.state['dayEquity']=1200
+        self.engine.manage(snapshot)
+        self.assertEqual(self.engine.state['positions'],[])
+        self.assertFalse(self.engine.state['enabled'])
+        await self.engine.control('start')
+        self.assertFalse(self.engine.state['enabled'])
+
+    async def test_position_rotates_after_45_minutes_using_a_fresh_quote(self):
+        await self.entry()
+        self.engine.state['positions'][0]['entryTime']=time.time()-desk.MAX_HOLD_S-1
+        self.engine.manage(data())
+        self.assertEqual(self.engine.state['positions'],[])
+        self.assertEqual(self.engine.public()['trades'][0]['exitReason'],'Tiempo máximo')
 
     async def test_chasing_and_insufficient_liquidity_block_entry(self):
         self.analysis['ema20']=95

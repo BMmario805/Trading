@@ -13,13 +13,13 @@ import type { BotLearning, BotStatus, BotTrade, TrainingStatus } from '../types'
 
 const REFRESH_MS = 5_000
 
-const fmtMoney = (v: number) =>
-  `${v < 0 ? '-' : ''}$${Math.abs(v).toLocaleString('en-US', {
+const fmtMoney = (v: number, currency = 'USD') =>
+  `${v < 0 ? '-' : ''}${Math.abs(v).toLocaleString('es-ES', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`
+  })} ${currency}`
 
-const fmtPnl = (v: number) => (v >= 0 ? `+${fmtMoney(v)}` : fmtMoney(v))
+const fmtPnl = (v: number, currency = 'USD') => (v >= 0 ? `+${fmtMoney(v,currency)}` : fmtMoney(v,currency))
 
 const fmtTime = (ts: number) =>
   new Date(ts * 1000).toLocaleString('es-ES', {
@@ -73,7 +73,7 @@ function PositionsTable({
               <td className="down">{formatPrice(p.sl)}</td>
               <td className="up">{formatPrice(p.tp)}</td>
               <td className={p.unrealizedPnl >= 0 ? 'up' : 'down'}>
-                {fmtPnl(p.unrealizedPnl)}
+                {fmtPnl(p.unrealizedPnl,bot.currency)}
               </td>
             </tr>
           ))}
@@ -86,9 +86,11 @@ function PositionsTable({
 function TradesTable({
   trades,
   onSelect,
+  currency,
 }: {
   trades: BotTrade[]
   onSelect: (tradeId: number) => void
+  currency?: string
 }) {
   if (trades.length === 0)
     return <p className="muted small">Todavía no hay operaciones cerradas.</p>
@@ -124,7 +126,7 @@ function TradesTable({
                 {formatPrice(t.entryPrice)} → {formatPrice(t.exitPrice)}
               </td>
               <td className="muted">{t.exitReason}</td>
-              <td className={t.pnl >= 0 ? 'up' : 'down'}>{fmtPnl(t.pnl)}</td>
+              <td className={t.pnl >= 0 ? 'up' : 'down'}>{fmtPnl(t.pnl,currency)}</td>
             </tr>
           ))}
         </tbody>
@@ -338,11 +340,11 @@ function BotCard({
       <div className="bot-stats">
         <div>
           <small className="muted">Equity</small>
-          <strong>{fmtMoney(bot.equity)}</strong>
+          <strong>{fmtMoney(bot.equity,bot.currency)}</strong>
         </div>
         <div>
           <small className="muted">PnL total</small>
-          <strong className={totalPnl >= 0 ? 'up' : 'down'}>{fmtPnl(totalPnl)}</strong>
+          <strong className={totalPnl >= 0 ? 'up' : 'down'}>{fmtPnl(totalPnl,bot.currency)}</strong>
         </div>
         <div>
           <small className="muted">Operaciones</small>
@@ -360,12 +362,13 @@ function BotCard({
         </div>
       </div>
 
+      {bot.session && <p className="muted small">Sesión nueva desde {fmtMoney(bot.initialBalance,bot.currency)} · conversiones de divisa fijadas al inicio · el tamaño se ajusta al patrimonio.</p>}
       {bot.risk && (
         <p className={`small risk-line ${bot.risk.entriesPaused ? 'down' : 'muted'}`}>
           🛡️ PnL hoy: <span className={bot.risk.dailyPnl >= 0 ? 'up' : 'down'}>
-            {fmtPnl(bot.risk.dailyPnl)}
+            {fmtPnl(bot.risk.dailyPnl,bot.currency)}
           </span>{' '}
-          (límite diario -{fmtMoney(bot.risk.dailyLossLimit)})
+          (límite diario -{fmtMoney(bot.risk.dailyLossLimit,bot.currency)})
           {bot.risk.entriesPaused &&
             ' · ⛔ entradas pausadas hasta mañana por límite de pérdidas'}
           {!bot.risk.entriesPaused && bot.risk.riskScale < 1 &&
@@ -407,11 +410,12 @@ function BotCard({
             ` · entrenado: ${bot.trainedSymbols.join(', ')}`}
         </small>
       </div>
-      {showHistory && <TradesTable trades={trades ?? []} onSelect={setDetailTrade} />}
+      {showHistory && <TradesTable trades={trades ?? []} onSelect={setDetailTrade} currency={bot.currency} />}
       {detailTrade != null && (
         <TradeDetailModal
           botId={bot.id}
           tradeId={detailTrade}
+          currency={bot.currency}
           onClose={() => setDetailTrade(null)}
         />
       )}

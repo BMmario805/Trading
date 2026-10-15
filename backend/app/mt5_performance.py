@@ -70,7 +70,7 @@ def ingest(owner, account, positions, deals, now, full=False):
     info = sync_info(owner)
     settings=session(owner)
     if settings:
-        deals=[d for d in deals if int(getattr(d,'time_msc',d.time*1000))>=settings['cutoffMsc']]
+        deals=[d for d in deals if int(getattr(d,'time_msc',d.time*1000))>=settings['cutoffMsc'] and d.type not in TRANSFERS]
     with connection() as con:
         con.executemany('INSERT OR REPLACE INTO mt5_deals VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', [
             (owner, int(d.ticket), int(getattr(d, 'time_msc', d.time*1000)), int(d.position_id), int(d.magic),
@@ -187,13 +187,14 @@ def performance(owner, bots, bot=None, symbol=None, since=None, until=None, per_
         history = history[::math.ceil(len(history)/1999)]
         if history[-1]['ts'] != last['ts']:
             history.append(last)
-    out.update(currency=currency, updatedAt=sync['updatedAt'], syncError=sync['error'], source='mt5',
+    settings=session(owner)
+    out.update(currency=currency, session=settings, updatedAt=sync['updatedAt'], syncError=sync['error'], source='mt5',
                bots=[dict(id=key, name=value) for key,value in names.items()],
                symbols=sorted({r['symbol'] for r in rows if r['symbol']} | {p['symbol'] for p in open_positions}),
                cards=cards, accountHistory=history, account=dict(
                    balance=latest['balance'] if latest else None, equity=latest['equity'] if latest else None,
                    realizedPnl=round(sum(realized.values()), 2), unrealizedPnl=round(account_float, 2),
-                   totalPnl=round(sum(realized.values())+account_float, 2), netFunding=round(cash_flows, 2),
+                   totalPnl=round(sum(realized.values())+account_float, 2), netFunding=round(cash_flows+(settings or {}).get('initial',0), 2),
                    reconciliationDifference=round(latest['balance']+latest['credit']-(session(owner) or {}).get('initial',0)-cash_flows-sum(realized.values()), 2) if latest else None,
                    historySince=snapshots[0]['ts'] if snapshots else None))
     if per_bot:
