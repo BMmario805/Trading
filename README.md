@@ -1,5 +1,15 @@
 # 📈 Panel de Trading en Tiempo Real
 
+> **Mesa Siete activa (14-10-2026):** [funcionamiento y límites](reports/MESA-SIETE.md).
+> Página inicial con Gemini como selector y seis roles deterministas, hasta 81
+> mercados, velas reales y libro independiente de 1.000 USDT simulados. Incluye
+> comparación con comprar y mantener, controles e historial persistente.
+> Es experimental: todavía no tiene una ventaja rentable demostrada.
+
+> **Gemini activo (14-10-2026):** [configuración y funcionamiento](reports/GEMINI.md).
+> Clasifica textos de oro/BTC/ETH en observación, con historial, caché y límites
+> persistentes. No cambia las órdenes ni las probabilidades del motor actual.
+
 > **Motor v3 (14-10-2026):** [cambios y comprobaciones](reports/MOTOR-V3.md).
 > Todos los bots exigen validación de esta versión; el modo «a prueba» ya no abre
 > entradas en la cuenta principal. Scalper/swing usan tres bloques 40/40/20 y el
@@ -288,6 +298,8 @@ Abrir <http://localhost:5173>.
 
 ## API
 
+- `GET /api/desk` — siete roles, mercados, libro simulado, curvas y registro.
+- `POST /api/desk/start|pause|close` — activar entradas, pausarlas o pedir cierre simulado.
 - `GET /api/symbols` — catálogo de instrumentos
 - `GET /api/candles/{id}?interval=1m|5m|15m|1h|4h|1d` — velas OHLCV
 - `GET /api/sentiment/{id}` — opinión pública agregada (caché de 5 min)

@@ -13,11 +13,14 @@ from .hub import hub
 from .indicators import technical_analysis
 from . import sentiment as sentiment_mod
 from . import tradingview
+from . import gemini_agent
+from . import desk
 from . import mt5_demo
 from . import mt5_performance
 from .sentiment import get_opinions, get_sentiment
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger('httpx').setLevel(logging.WARNING)
 
 
 @asynccontextmanager
@@ -25,7 +28,11 @@ async def lifespan(_: FastAPI):
     bots.start_all()
     learning.start_scheduler()   # reentrenamiento walk-forward automático
     mt5_demo.start()
+    gemini_agent.start()
+    desk.start()
     yield
+    await desk.stop()
+    await gemini_agent.stop()
     await mt5_demo.stop()
     await learning.stop_scheduler()
     await training.stop_all()
@@ -36,6 +43,33 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Trading Dashboard API", lifespan=lifespan)
+
+
+@app.get('/api/desk')
+async def desk_status():
+    return desk.DESK.public() if desk.DESK else {'mode':'paper','enabled':False}
+
+
+@app.post('/api/desk/{action}')
+async def desk_control(action: str):
+    if desk.DESK is None:
+        raise HTTPException(503,'Mesa no iniciada')
+    if action not in ('start','pause','close'):
+        raise HTTPException(400,'Acción inválida')
+    return await desk.DESK.control(action)
+
+
+@app.get('/api/agents/gemini')
+async def gemini_status():
+    if gemini_agent.AGENT is None:
+        return {'configured': False, 'enabled': False, 'mode': 'observation'}
+    agent = gemini_agent.AGENT
+    return {**agent.status(), 'observations': [agent.snapshot(s) for s in agent.settings.symbols]}
+
+
+@app.get('/api/agents/gemini/{symbol_id}')
+async def gemini_observation(symbol_id: str):
+    return gemini_agent.snapshot(_symbol(symbol_id).id)
 
 
 @app.get('/api/mt5')
@@ -154,6 +188,7 @@ async def analysis(symbol_id: str, interval: str = "1h"):
         "interval": interval,
         "technical": tech,
         "sentiment": senti,
+        "gemini": gemini_agent.snapshot(sym.id),
         "upProbability": round(combined * 100, 1),
         "verdict": (
             "alcista" if combined >= 0.6 else

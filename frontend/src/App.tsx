@@ -3,6 +3,8 @@ import { fetchAnalysis, fetchSymbols, PriceSocket } from './api'
 import Watchlist, { formatPrice } from './components/Watchlist'
 import ChartPanel from './components/ChartPanel'
 import AnalysisPanel from './components/AnalysisPanel'
+import GeminiPanel from './components/GeminiPanel'
+import DeskPanel from './components/DeskPanel'
 import SentimentHistory from './components/SentimentHistory'
 import OpinionsModal from './components/OpinionsModal'
 import BotsPanel from './components/BotsPanel'
@@ -18,6 +20,7 @@ import {
 const ANALYSIS_REFRESH_MS = 60_000
 
 export default function App() {
+  const [view, setView] = useState<'desk' | 'markets'>('desk')
   const [symbols, setSymbols] = useState<SymbolInfo[]>([])
   const [selected, setSelected] = useState('XAUUSD')
   const [interval, setInterval_] = useState<Interval>('1h')
@@ -92,7 +95,9 @@ export default function App() {
   const tick = prices[selected]
 
   return (
-    <div className="layout">
+    <div className={`layout app-${view}`}>
+      <nav className="workspace-switch" aria-label="Vista del proyecto"><button className={view === 'desk' ? 'active' : ''} onClick={() => setView('desk')}>Mesa Siete</button><button className={view === 'markets' ? 'active' : ''} onClick={() => setView('markets')}>Mercados y laboratorio</button></nav>
+      {view === 'desk' ? <DeskPanel /> : <>
       <Watchlist
         symbols={symbols}
         prices={prices}
@@ -138,6 +143,7 @@ export default function App() {
           onSourceClick={setOpinionsSource}
         />
         <SentimentHistory symbol={selected} />
+        <GeminiPanel symbol={selected} />
         <MetaTraderPanel />
         <details className="panel">
           <summary>Laboratorio de paper trading · simulación independiente de MT5</summary>
@@ -151,6 +157,7 @@ export default function App() {
           />
         )}
       </main>
+      </>}
     </div>
   )
 }

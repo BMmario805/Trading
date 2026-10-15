@@ -1,5 +1,10 @@
 # Agentes: qué contratar y cómo mantenerlos — 14 de octubre de 2026
 
+> **Actualización:** Gemini 3.5 Flash-Lite ya está integrado y activo como
+> clasificador en observación. [Configuración y límites](GEMINI.md).
+> La recomendación vigente es validar primero el motor; Jev y Grok quedan
+> como alternativas pendientes, sin contratar ni activar.
+
 Mi recomendación es un piloto de análisis de textos: Jev como clasificador y
 Grok como fuente puntual de noticias/publicaciones en X. El código mantiene
 el control de entradas, tamaño, stop y objetivo. Ninguno ha demostrado una
