@@ -5,7 +5,9 @@ from decimal import Decimal, ROUND_DOWN
 
 
 class DemoOnlyError(RuntimeError):
-    pass
+    def __init__(self, message, details=None):
+        super().__init__(message)
+        self.details = details
 
 
 def lot_floor(volume, step):
@@ -17,6 +19,7 @@ class DemoGateway:
     def __init__(self, api, config):
         self.api, self.config = api, config
         self.clock_skew = 0.0
+        self.last_entry_diagnostics = None
 
     def account(self, trading=False):
         a, t = self.api.account_info(), self.api.terminal_info()
@@ -52,6 +55,7 @@ class DemoGateway:
 
     def prepare_entry(self, symbol, direction, atr, sl_multiple, tp_multiple, magic, comment, now,
                       risk_mult=1.0, virtual_equity=None):
+        self.last_entry_diagnostics = None
         if not math.isfinite(risk_mult) or not 0 < risk_mult <= 1:
             raise DemoOnlyError('Multiplicador de riesgo inválido')
         api = self.api
@@ -59,6 +63,7 @@ class DemoGateway:
         positions = self.positions()
         equity=account.equity
         margin_free=account.margin_free
+        margins=[]
         if virtual_equity is not None:
             if not math.isfinite(virtual_equity) or virtual_equity<=0:
                 raise DemoOnlyError('Presupuesto virtual agotado o inválido')
@@ -101,13 +106,48 @@ class DemoGateway:
             open_risk += max(0, -loss)
         budget = min(equity * self.config['risk_pct'] * risk_mult,
                      equity * self.config['max_open_risk_pct'] - open_risk)
+        costs = self.config.get('replay_costs', {}).get(symbol, {})
+        commission = costs.get('roundTripCommissionPerLot')
+        if commission is not None and (not math.isfinite(commission) or commission < 0):
+            raise DemoOnlyError('Comisión del contrato inválida')
+        risk_per_lot = -unit_loss + max(-unit_loss*.1, commission or 0)
+        minimum_risk = risk_per_lot * info.volume_min
+        minimum_margin = api.order_calc_margin(kind, symbol, info.volume_min, price)
+        if minimum_margin is None or not math.isfinite(minimum_margin) or minimum_margin < 0:
+            raise DemoOnlyError('No se puede calcular el margen del lote mínimo')
+        required_capital = max(minimum_risk / (self.config['risk_pct'] * risk_mult),
+                               (open_risk + minimum_risk) / self.config['max_open_risk_pct'],
+                               minimum_margin * 4 + sum(margins))
+        details = dict(symbol=symbol, currency=getattr(account, 'currency', None),
+                       equity=equity, riskBudget=max(0, budget), minimumLot=info.volume_min,
+                       volumeStep=info.volume_step, minimumLotRisk=minimum_risk,
+                       minimumLotMargin=minimum_margin, requiredCapital=required_capital,
+                       riskMultiplier=risk_mult,commissionKnown=commission is not None)
+        self.last_entry_diagnostics = details
         # Reserva del 10% para fricción; los gaps todavía pueden exceder el stop.
-        volume = lot_floor(min(info.volume_max, max(0, budget) / (-unit_loss * 1.1)), info.volume_step)
+        volume = lot_floor(min(info.volume_max, max(0, budget) / risk_per_lot), info.volume_step)
         if volume < info.volume_min:
-            raise DemoOnlyError('El lote mínimo excede el presupuesto de riesgo')
+            currency = details['currency'] or 'divisa de cuenta'
+            raise DemoOnlyError(
+                f'El lote mínimo ({info.volume_min:g}) arriesga {minimum_risk:.4f} {currency}; '
+                f'presupuesto {max(0, budget):.4f}. Capital requerido: {required_capital:.2f} {currency}', details)
         margin = api.order_calc_margin(kind, symbol, volume, price)
         if margin is None or not math.isfinite(margin) or margin > margin_free * .25:
-            raise DemoOnlyError('Margen libre insuficiente para esta entrada')
+            raise DemoOnlyError('Margen libre insuficiente para esta entrada', details)
+        target_profit = api.order_calc_profit(kind,symbol,volume,price,tp)
+        if target_profit is None or not math.isfinite(target_profit) or target_profit <= 0:
+            raise DemoOnlyError('Objetivo monetario del contrato inválido', details)
+        if commission is not None:
+            # Prices already include the quoted side. This reserve covers
+            # configured broker commission, rather than importing Binance fees.
+            target_net = target_profit-commission*volume
+            details.update(targetAfterCommission=target_net,targetNetKnown=False,
+                           costWarning='Objetivo tras comisión; swap y deslizamiento realizado pendientes de reconciliar')
+            if target_net <= 0:
+                raise DemoOnlyError('El objetivo neto no cubre la comisión del bróker',details)
+        else:
+            details.update(targetNet=None,targetNetKnown=False,
+                           costWarning='Comisión del bróker sin verificar; presupuesto a prueba con reserva de fricción')
         request = dict(action=api.TRADE_ACTION_DEAL, symbol=symbol, volume=volume, type=kind,
                        price=price, sl=sl, tp=tp, deviation=20, magic=magic, comment=comment,
                        type_time=api.ORDER_TIME_GTC)

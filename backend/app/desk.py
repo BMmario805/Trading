@@ -10,11 +10,12 @@ import time
 from decimal import Decimal, ROUND_DOWN
 from pathlib import Path
 
-from . import gemini_agent, market_data, opportunities
+from . import gemini_agent, market_data, opportunities, portfolio_risk
 from .config import Symbol
 from .database import Connection
 from .execution import closed_candles
 from .indicators import atr, ema, rsi
+from .economics import planned_trade,ECONOMICS_VERSION
 
 DB_PATH = Path(__file__).resolve().parents[2]/'.runtime'/'desk.sqlite'
 INITIAL = 1000.0
@@ -26,7 +27,8 @@ ENTRY_RSI_MIN = 15
 ENTRY_RSI_MAX = 80
 ENTRY_EXTENSION_MIN = -4.0
 ENTRY_EXTENSION_MAX = 2.25
-STABLES = {'USDT','USDC','FDUSD','TUSD','DAI','USDP','USD1','USDD','EUR','AEUR','EURI'}
+STABLES = {'USDT','USDC','FDUSD','TUSD','DAI','USDP','USD1','USDD','EUR','AEUR','EURI',
+           'RLUSD','USDE','USDS','PYUSD','USDG','USDD','USDF','USDX','USDSB','EURCV'}
 # Nombres completos de productos apalancados legacy, no un filtro por sufijo:
 # JUP (Jupiter), por ejemplo, es un activo spot ordinario.
 LEVERAGED_BASES = {
@@ -40,6 +42,9 @@ SCAN_INTERVAL_S = 20
 CANDLE_INTERVAL = '5m'
 CANDLE_SECONDS = 300
 MAX_HOLD_S = 45*60
+MAX_NOTIONAL_FRACTION = 1/6  # Conserva el límite reducido solicitado en el archivo local.
+MIN_NET_REWARD_RISK = 1.0
+POLICY_VERSION = 'desk-net-v1'
 SELECTION_INTERVAL = 6*3600  # Gemini propone prioridades; el escaneo no espera este turno.
 
 
@@ -117,7 +122,7 @@ def size_order(equity, cash, ask, a, info, risk_budget=None):
     if stop<=0: return None
     risk_per_unit=fill*(1+FEE)-stop*(1-SLIPPAGE)*(1-FEE)
     allowed_risk=min(equity*.01,risk_budget) if risk_budget is not None else equity*.01
-    budget=min(equity/3,cash/(1+FEE),max(0,allowed_risk)/risk_per_unit*fill)
+    budget=min(equity*MAX_NOTIONAL_FRACTION,cash/(1+FEE),max(0,allowed_risk)/risk_per_unit*fill)
     lot=next((f for f in info.get('filters',[]) if f['filterType']=='LOT_SIZE'),{})
     step=Decimal(str(lot.get('stepSize','.00000001')))
     if step<=0: raise ValueError('Paso inválido')
@@ -126,8 +131,13 @@ def size_order(equity, cash, ask, a, info, risk_budget=None):
     minimum=max([float(f.get('minNotional',0)) for f in filters if f['filterType'] in ('MIN_NOTIONAL','NOTIONAL')] or [0])
     if qty<float(lot.get('minQty',0)) or qty*fill<minimum or qty<=0:
         return None
+    target=fill+1.8*a
+    plan=planned_trade(fill,stop,target,qty,fee_rate=FEE,exit_slippage=SLIPPAGE)
+    if not plan['viable'] or plan['netRewardRisk']<MIN_NET_REWARD_RISK:
+        return None
     return dict(qty=qty,entry=fill,notional=qty*fill,fee=qty*fill*FEE,
-                sl=stop,tp=fill+1.8*a,risk=qty*risk_per_unit)
+                sl=stop,tp=target,risk=qty*risk_per_unit,economics=plan,
+                costPolicy=dict(version=ECONOMICS_VERSION,feeRate=FEE,slippageRate=SLIPPAGE),policyVersion=POLICY_VERSION)
 
 
 class Desk:
@@ -139,8 +149,13 @@ class Desk:
             day=int(time.time()//86400),dayEquity=INITIAL,dailyStopped=False,roles={},lastScan=0)
         self.state.setdefault('positions',[self.state['position']] if self.state.get('position') else [])
         self.task=None
+        self.risk_task=None
         self.lock=asyncio.Lock()
+        self.scan_lock=asyncio.Lock()
         self.last_data=None
+        self.last_risk_data=None
+        self.risk_error=None
+        self.cycle_duration=0.0
         self.chart=[]
         self.last_curve=0
         self.last_error=None
@@ -214,7 +229,12 @@ class Desk:
         except (KeyError,ValueError,TypeError): return None
 
     def equity(self):
-        return self.state['cash']+sum(p['qty']*p['lastBid']*(1-SLIPPAGE)*(1-FEE) for p in self.state['positions'])
+        return self.state['cash']+sum(p['qty']*p['lastBid']*(1-self.costs(p)[1])*(1-self.costs(p)[0]) for p in self.state['positions'])
+
+    @staticmethod
+    def costs(position):
+        policy=position.get('costPolicy') or {}
+        return policy.get('feeRate',FEE),policy.get('slippageRate',SLIPPAGE)
 
     def hold_equity(self):
         b=self.state['benchmark']
@@ -237,11 +257,12 @@ class Desk:
     def close_position(self,bid,reason,symbol=None):
         p=next((p for p in self.state['positions'] if p['symbol']==symbol),None) if symbol else self.state['position']
         if not p: return
-        exit_price=bid*(1-SLIPPAGE)
-        proceeds=p['qty']*exit_price*(1-FEE)
+        fee,slip=self.costs(p)
+        exit_price=bid*(1-slip)
+        proceeds=p['qty']*exit_price*(1-fee)
         pnl=proceeds-p['notional']-p['fee']
         closed=dict(p,status='closed',exitPrice=exit_price,exitTime=time.time(),pnl=pnl,
-                    exitFee=p['qty']*exit_price*FEE,exitReason=reason)
+                    exitFee=p['qty']*exit_price*fee,exitReason=reason)
         self.state['cash']+=proceeds
         self.state['positions'].remove(p)
         self.focus_position()
@@ -254,20 +275,24 @@ class Desk:
         if not self.state['positions']:
             self.state.pop('flatten',None)
             if not self.state['dailyStopped']:
-                self.role('Risk','ready','Control diario activo; riesgo objetivo 1% y exposición máxima 1/3 al entrar')
+                self.role('Risk','ready','Control diario activo; riesgo objetivo 1% y exposición máxima 1/6 al entrar')
         for p in list(self.state['positions']):
+            # Un escaneo lento no debe sustituir el último libro de vigilancia.
+            if data.get('at',0)<p.get('quoteAt',0): continue
             q=self.quote(p['symbol'],data)
             if not q:
                 self.role('Risk','blocked','Sin precio fresco: no se simula un cierre a un precio inventado')
                 continue
             bid=q[0]
             p['lastBid']=bid
+            p['quoteAt']=data['at']
             if self.state.get('flatten') or bid<=p['sl'] or bid>=p['tp'] or time.time()-p['entryTime']>=MAX_HOLD_S:
                 self.close_position(bid,'Cierre solicitado' if self.state.get('flatten') else 'Stop' if bid<=p['sl'] else 'Objetivo' if bid>=p['tp'] else 'Tiempo máximo',p['symbol'])
             else:
                 p['best']=max(p['best'],bid)
                 if bid>=p['entry']+.7*p['initialDist']:
-                    stop=max(p['sl'],p['entry']*(1+FEE)/((1-SLIPPAGE)*(1-FEE)),p['best']-.9*p['atr'])
+                    fee,slip=self.costs(p)
+                    stop=max(p['sl'],(p['notional']+p['fee'])/(p['qty']*(1-slip)*(1-fee)),p['best']-.9*p['atr'])
                     if stop<bid: p['sl']=stop
                 self.role('Risk','managing',f'Stop activo; riesgo inicial {p["risk"]:.2f} USDT')
         if not self.state['positions']: self.state.pop('flatten',None)
@@ -298,6 +323,7 @@ class Desk:
                 candidate.update({k:old[k] for k in ('status','reason','checkedAt') if k in old})
         self.state['candidates']=candidates
         self.state['scanReviewed']=0
+        consumed=0
         for position in list(self.state['positions']):
             self.state['selected']=position['symbol']
             self.state['selection']=position.get('evidence',{}).get('selection',self.state.get('selection'))
@@ -307,7 +333,7 @@ class Desk:
                 self.role('Exec','blocked','El mercado de la posición no está disponible; se mantiene su control de riesgo')
                 continue
             try:
-                await self.review_candidate(candidate,data)
+                await asyncio.wait_for(self.review_candidate(candidate,data),timeout=8)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -350,8 +376,9 @@ class Desk:
             choice=None
         for candidate in batch:
             self.state['scanReviewed']+=1
+            consumed+=1
             # Persistir el avance incluso si una entrada o un error termina esta vuelta.
-            self.state['scanCursor']=(cursor+self.state['scanReviewed'])%len(eligible)
+            self.state['scanCursor']=(cursor+consumed)%len(eligible)
             if self.state['selected']!=candidate['symbol']:
                 self.chart=[]
                 self.state.pop('tape',None)
@@ -364,7 +391,7 @@ class Desk:
             self.role('Selector','selected',f'{candidate["symbol"]}: {selection["reason"]}',
                       provider='Gemini' if selected_by_ai else 'Reglas deterministas')
             try:
-                await self.review_candidate(candidate,data)
+                await asyncio.wait_for(self.review_candidate(candidate,data),timeout=8)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -406,6 +433,19 @@ class Desk:
             self.evaluated(candidate,'blocked','Velas cerradas insuficientes o antiguas')
             self.role('Tape','blocked','Velas cerradas insuficientes o antiguas')
             return
+        # En producción se vuelve a observar el libro después del trabajo de red.
+        # Las pruebas y evaluadores sin task conservan la instantánea suministrada.
+        if self.task is not None:
+            data=await opportunities.execution_snapshot([symbol],data)
+            q=self.quote(symbol,data)
+            if q is None:
+                self.evaluated(candidate,'blocked','El libro de ejecución no es válido')
+                return
+            bid,ask=q
+            quality=opportunities.assess(sym,data)
+            if not quality['eligible']:
+                self.evaluated(candidate,'blocked',quality['reason'])
+                return
         self.chart=analysis['rows']
         self.state['tape']={k:v for k,v in analysis.items() if k!='rows'}
         self.role('Tape','ready' if analysis['trend'] else 'waiting',f'EMA20/50; RSI {analysis["rsi"]:.0f}; ATR {analysis["atr"]:.5g}')
@@ -432,9 +472,10 @@ class Desk:
             return
         open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-SLIPPAGE)*(1-FEE)) for p in self.state['positions'])
         order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,max(0,self.equity()*.03-open_risk))
-        self.role('Size','ready' if order else 'blocked',f'Tamaño {order["notional"]:.2f} USDT; máximo 1/3; riesgo {order["risk"]:.2f}' if order else 'Lote mínimo incompatible con presupuesto')
+        size_reason='Lote mínimo o beneficio/riesgo neto insuficiente después de costes'
+        self.role('Size','ready' if order else 'blocked',f'Tamaño {order["notional"]:.2f} USDT; máximo 1/6; riesgo {order["risk"]:.2f}' if order else size_reason)
         if not self.state['enabled'] or self.state['dailyStopped'] or not price_ok or not identity['ok'] or not order:
-            self.evaluated(candidate,'waiting','Sin señal de Price' if not price_ok else 'Lote mínimo incompatible con presupuesto' if not order else 'Entradas pausadas por control de riesgo')
+            self.evaluated(candidate,'waiting','Sin señal de Price' if not price_ok else size_reason if not order else 'Entradas pausadas por control de riesgo')
             self.role('Exec','waiting','Esperando aprobación de Price, Wire, Size y Risk')
             return
         key=f'{symbol}:{analysis["bar"]}'
@@ -451,33 +492,81 @@ class Desk:
             self.evaluated(candidate,'blocked','Tamaño superior a la liquidez publicada al mejor ask')
             self.role('Exec','blocked','Tamaño superior a la liquidez publicada al mejor ask')
             return
-        position=dict(order,symbol=symbol,entryKey=key,entryTime=time.time(),atr=analysis['atr'],
+        rate=(self.state.get('funding') or {}).get('netQuotePerEuro')
+        reservation=None
+        if rate:
+            decision=portfolio_risk.assess(symbol,'long',order['risk']/rate,order['notional']/rate,
+                                           source='desk',bot_id='desk',reserve=True)
+            self.state['portfolioDecision']={k:v for k,v in decision.items() if k!='token'}
+            if not decision['allowed']:
+                self.evaluated(candidate,'blocked',decision['reason'])
+                self.role('Risk','blocked',decision['reason'])
+                return
+            reservation=decision.get('token')
+        position=dict(order,symbol=symbol,entryKey=key,entryTime=time.time(),quoteAt=data['at'],atr=analysis['atr'],
                       initialDist=order['entry']-order['sl'],best=order['entry'],lastBid=bid,status='open',
                       evidence=dict(tape=self.state['tape'],wire=identity,selection=self.state['selection']))
         self.state['cash']-=order['notional']+order['fee']
         self.state['positions'].append(position)
         self.state['position']=position
-        with connect() as con:
-            con.execute('INSERT INTO trades(entry_key,payload) VALUES (?,?)',(key,json.dumps(position)))
-            con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
+        try:
+            with connect() as con:
+                con.execute('INSERT INTO trades(entry_key,payload) VALUES (?,?)',(key,json.dumps(position)))
+                con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
+        except Exception:
+            self.state['positions'].remove(position)
+            self.state['cash']+=order['notional']+order['fee']
+            self.focus_position()
+            raise
+        finally:
+            portfolio_risk.release(reservation)
         self.role('Exec','executed',f'Compra SIMULADA de {base}; comisión y deslizamiento incluidos')
         self.evaluated(candidate,'executed','Operación simulada abierta; stop, objetivo, comisión y deslizamiento aplicados')
         self.role('Risk','managing','Stop y objetivo establecidos al abrir')
 
     async def cycle(self):
+        started=time.monotonic()
+        data=await opportunities.snapshot()
         async with self.lock:
-            data=await opportunities.snapshot()
             self.last_data=data
             self.manage(data)
-            if (self.state['enabled'] or self.state['selected']) and time.time()-self.state['lastScan']>=SCAN_INTERVAL_S:
+            scan_due=(self.state['enabled'] or self.state['selected']) and time.time()-self.state['lastScan']>=SCAN_INTERVAL_S
+            if scan_due:
                 self.state['lastScan']=time.time()
+        if scan_due:
+            async with self.scan_lock:
                 await self.scan(data)
+        async with self.lock:
             if time.time()-self.last_curve>=60:
                 self.last_curve=time.time()
                 with connect() as con:
                     con.execute('INSERT OR REPLACE INTO equity VALUES (?,?,?)',(int(self.last_curve),self.equity(),self.hold_equity()))
             self.save()
             self.last_error=None
+            self.cycle_duration=time.monotonic()-started
+
+    async def risk_cycle(self):
+        symbols=[p['symbol'] for p in self.state['positions']]
+        if not symbols:
+            self.risk_error=None
+            return
+        data=await opportunities.execution_snapshot(symbols,self.last_data or {})
+        async with self.lock:
+            self.last_risk_data=data
+            self.manage(data)
+            self.risk_error=None
+            self.save()
+
+    async def run_risk(self):
+        while True:
+            try:
+                await self.risk_cycle()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.risk_error=f'Libro de vigilancia sin actualizar ({type(exc).__name__})'
+                self.role('Risk','blocked',self.risk_error)
+            await asyncio.sleep(2)
 
     async def run(self):
         while True:
@@ -522,10 +611,13 @@ class Desk:
                     scope='Binance Spot · USDT',scanBatchSize=SCAN_BATCH_SIZE,
                     scanReviewed=self.state.get('scanReviewed',0),maxPositions=MAX_OPEN_POSITIONS,
                     scanIntervalSeconds=SCAN_INTERVAL_S,candleInterval=CANDLE_INTERVAL,
+                    policy=dict(version=POLICY_VERSION,costVersion=ECONOMICS_VERSION,maxNotionalPct=MAX_NOTIONAL_FRACTION*100,minNetRewardRisk=MIN_NET_REWARD_RISK),
+                    monitoring=dict(riskIndependent=True,riskError=self.risk_error,
+                                    quoteAt=(self.last_risk_data or {}).get('at'),scanDurationSeconds=round(self.cycle_duration,3)),
                     roles=[dict(name=r,**self.state['roles'].get(r,dict(status='waiting',detail='Pendiente',provider='Gemini' if r=='Selector' else 'Reglas deterministas'))) for r in ROLES],
                     position=next((p for p in self.state['positions'] if p['symbol']==self.state['selected']),None),positions=self.state['positions'],trades=trades,events=events,curve=curve,candles=self.chart,
                     stats=dict(closed=count,wins=wins,pnl=round(pnl,2)),
-                    error=self.last_error,updatedAt=int(self.last_data['at']) if self.last_data else None,
+                    error=self.last_error or self.risk_error,updatedAt=int(max((self.last_data or {}).get('at',0),(self.last_risk_data or {}).get('at',0))) or None,
                     wire=self.state.get('wire'),fees=dict(perSide=FEE,slippage=SLIPPAGE),
                     gemini=gemini_agent.AGENT.status() if gemini_agent.AGENT else None)
 
@@ -537,9 +629,15 @@ def start():
     global DESK
     if DESK is None: DESK=Desk()
     if DESK.task is None or DESK.task.done(): DESK.task=asyncio.create_task(DESK.run(),name='seven-role-desk')
+    if DESK.risk_task is None or DESK.risk_task.done(): DESK.risk_task=asyncio.create_task(DESK.run_risk(),name='desk-risk-monitor')
 
 
 async def stop():
+    if DESK and DESK.risk_task:
+        DESK.risk_task.cancel()
+        try: await DESK.risk_task
+        except asyncio.CancelledError: pass
+        DESK.risk_task=None
     if DESK and DESK.task:
         DESK.task.cancel()
         try: await DESK.task

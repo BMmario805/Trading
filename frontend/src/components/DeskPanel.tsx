@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { CandlestickSeries, ColorType, createChart, type IChartApi, type ISeriesApi, type Time } from 'lightweight-charts'
 import KitchenStage, { type KitchenRole } from './KitchenStage'
+import ResearchPanel from './ResearchPanel'
 import './DeskPanel.css'
 
 interface Candle { time: number; open: number; high: number; low: number; close: number }
@@ -21,6 +22,8 @@ interface Desk {
   selected: string | null; benchmarkSymbol: string | null; examined: number; discarded: number; eligible?: number; filtered?: number; notSelected?: number; scope?: string
   filterReasons?: { reason: string; count: number }[]; roles: KitchenRole[]
   scanBatchSize?: number; scanReviewed?: number; maxPositions?: number; scanIntervalSeconds?: number; candleInterval?: string
+  policy?: { maxNotionalPct: number; minNetRewardRisk: number }
+  monitoring?: { riskIndependent: boolean; riskError: string | null; quoteAt: number | null }
   positions?: { symbol: string }[]
   candidates: Candidate[]; candles: Candle[]; trades: Trade[]
   position: null | { symbol: string; notional: number; risk: number; sl: number; tp: number; lastBid: number }
@@ -217,7 +220,7 @@ function DeskPanel() {
       <div className="kitchen-stat"><span className="kitchen-stat-symbol" aria-hidden="true">▱</span><div><small>Operaciones terminadas</small><strong>{desk.stats.closed} <em>operaciones</em></strong><span>{desk.stats.wins} ganadoras · {money(desk.stats.pnl)} USDT</span></div></div>
       <div className="kitchen-stat"><span className="kitchen-stat-symbol" aria-hidden="true">✦</span><div><small>Ayudante de IA</small><strong>{money(desk.gemini?.estimatedCostMonthUSD ?? 0)} <em>USD / mes</em></strong><span>Estimación · límite {desk.gemini?.monthlyCapUSD ?? 10} USD</span></div></div>
     </section>
-    {euroRate > 0 && <p className="kitchen-session-note">Sesión desde {money(desk.funding!.amount)} € · Euro de referencia fijado al inicio: 1 € = {euroRate.toFixed(6)} USDT netos, tras conversión simulada. Las operaciones y el gráfico se contabilizan en USDT. Tamaño recalculado con el capital: riesgo objetivo 1 %, exposición máxima 1/3.</p>}
+    {euroRate > 0 && <p className="kitchen-session-note">Sesión desde {money(desk.funding!.amount)} € · Euro de referencia fijado al inicio: 1 € = {euroRate.toFixed(6)} USDT netos, tras conversión simulada. Las operaciones y el gráfico se contabilizan en USDT. Riesgo objetivo 1 %, exposición máxima {money(desk.policy?.maxNotionalPct ?? 100 / 6)} % por entrada. Objetivo neto mínimo: {desk.policy?.minNetRewardRisk ?? 1} veces el riesgo neto.</p>}
     <div className="kitchen-hero-grid">
       <section className="kitchen-workspace" aria-label="Los siete chefs y el proceso de la mesa">
         <div className="kitchen-section-head"><div><span className="kitchen-eyebrow">EL EQUIPO, EN DIRECTO</span><h2>Cada chef tiene su punto.</h2></div><span className="kitchen-scene-hint"><i />Toca un puesto para verlo</span></div>
@@ -238,6 +241,7 @@ function DeskPanel() {
       </aside>
     </div>
     <OpenPositionsPanel />
+    <ResearchPanel />
     <AvailableMarkets desk={desk} />
     <section className="kitchen-activity" aria-label="Últimos procesos registrados"><div className="kitchen-activity-head"><span className="kitchen-activity-icon" aria-hidden="true">⌁</span><div><h2>Recién salido de cocina</h2><p>Lo que está haciendo el equipo.</p></div><span className="kitchen-live-note">Registro del motor</span></div><div className="kitchen-activity-grid">{desk.events.length ? desk.events.slice(0, 3).map(event => <article className={`kitchen-activity-item ${newEvents.has(event.id) ? 'is-new' : ''}`} key={event.id}><div><span className={`kitchen-event-dot state-${event.status}`} /><strong>{event.role}</strong><time>{timeOf(event.at)}</time></div><p>{event.detail}</p><span className={`kitchen-event-status state-${event.status}`}>{statusOf(event.status)}</span></article>) : <p className="kitchen-empty">Todavía no hay decisiones registradas. El equipo está esperando datos.</p>}</div></section>
     <details className="kitchen-notebook" ref={chartDetails} onToggle={event => setNotebookOpen(event.currentTarget.open)}><summary><span className="kitchen-notebook-icon" aria-hidden="true">▤</span><div><strong>El cuaderno de la mesa</strong><span>Mercados, gráficos y todas las decisiones, al detalle.</span></div><span className="kitchen-notebook-chevron" aria-hidden="true">↓</span></summary><div className="kitchen-notebook-body"><div className="kitchen-detail-tabs" role="tablist" aria-label="Detalles de la mesa">{([['market', 'Mercado y candidatos'], ['performance', 'Rendimiento'], ['history', 'Historial de la mesa']] as const).map(([key, label]) => <button key={key} id={`kitchen-tab-${key}`} role="tab" aria-selected={view === key} aria-controls={`kitchen-panel-${key}`} onClick={() => setView(key)}>{label}</button>)}</div>
@@ -246,7 +250,7 @@ function DeskPanel() {
       {notebookOpen && view === 'history' && <div className="desk-bottom-row" id="kitchen-panel-history" role="tabpanel" aria-labelledby="kitchen-tab-history"><section className="desk-box"><div className="desk-box-head"><h2>Registro de decisiones</h2><span>{desk.events.length} eventos más recientes</span></div><div className="desk-log">{desk.events.map(event => <div key={event.id} className={newEvents.has(event.id) ? 'is-new' : ''}><time>{timeOf(event.at)}</time><strong>{event.role}</strong><span>{event.detail}<small className="kitchen-log-status">{statusOf(event.status)}</small></span></div>)}</div></section><section className="desk-box"><div className="desk-box-head"><h2>Operaciones</h2><span>Comisiones y deslizamiento incluidos</span></div>{desk.trades.length === 0 ? <p className="kitchen-empty">Sin operaciones todavía.</p> : <div className="desk-table-scroll"><table><thead><tr><th>Moneda / entrada</th><th>Capital</th><th>Resultado</th><th>Salida</th></tr></thead><tbody>{desk.trades.map(trade => <tr key={trade.entryKey}><td><strong>{trade.symbol}</strong><small className="kitchen-candidate-reason">{new Date(trade.entryTime * 1000).toLocaleString('es-ES')}</small></td><td>{money(trade.notional)}</td><td className={(trade.pnl ?? 0) >= 0 ? 'up' : 'down'}>{trade.status === 'open' ? 'Abierta' : `${money(trade.pnl ?? 0)} USDT`}</td><td>{trade.exitReason ?? 'Stop activo'}{trade.exitTime && <small className="kitchen-candidate-reason">{new Date(trade.exitTime * 1000).toLocaleString('es-ES')}</small>}</td></tr>)}</tbody></table></div>}</section></div>}
       <p className="kitchen-wire-note">Wire comprueba que el mercado exacto está listado y tiene una cotización reciente. Las referencias sociales son opcionales y no forman parte de esta comprobación de mercado.</p>
     </div></details>
-    <footer className="kitchen-footer"><span><ChefMark /> Hecho a fuego lento. Supervisado paso a paso.</span><p>Simulación spot sin apalancamiento · Máximo 1/3 del capital · Hasta 3 posiciones · Riesgo objetivo 1 % por operación y 3 % agregado · Límite diario 5 %</p></footer>
+    <footer className="kitchen-footer"><span><ChefMark /> Hecho a fuego lento. Supervisado paso a paso.</span><p>Simulación spot sin apalancamiento · Máximo {money(desk.policy?.maxNotionalPct ?? 100 / 6)} % por entrada · Hasta 3 posiciones · Riesgo objetivo 1 % por operación y 3 % en la mesa · Límite diario 5 %{desk.monitoring?.riskIndependent ? ' · Vigilancia de stops independiente del escaneo' : ''}</p></footer>
   </main>
 }
 

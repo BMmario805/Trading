@@ -25,6 +25,19 @@ def connection():
         owner TEXT PRIMARY KEY, updated_at INTEGER, last_full INTEGER, error TEXT)''')
     con.execute('''CREATE TABLE IF NOT EXISTS mt5_sessions (
         owner TEXT PRIMARY KEY, payload TEXT NOT NULL)''')
+    # Preserve the original broker clock for reset cutoffs and audit. Existing ts
+    # values remain valid until the next history sync supplies an explicit offset.
+    columns = {r[1] for r in con.execute('PRAGMA table_info(mt5_deals)')}
+    if 'raw_ts' not in columns:
+        con.execute('ALTER TABLE mt5_deals ADD COLUMN raw_ts INTEGER')
+        con.execute('ALTER TABLE mt5_deals ADD COLUMN offset_secs INTEGER NOT NULL DEFAULT 0')
+        con.execute('UPDATE mt5_deals SET raw_ts=ts WHERE raw_ts IS NULL')
+    if 'offset_assigned' not in columns:
+        con.execute('ALTER TABLE mt5_deals ADD COLUMN offset_assigned INTEGER NOT NULL DEFAULT 0')
+    con.execute('''CREATE TABLE IF NOT EXISTS mt5_account_ledger (
+        owner TEXT, ticket INTEGER, amount REAL NOT NULL, PRIMARY KEY(owner,ticket))''')
+    con.execute('''CREATE TABLE IF NOT EXISTS mt5_sync_evidence (
+        owner TEXT PRIMARY KEY, payload TEXT NOT NULL)''')
     return con
 
 
@@ -34,20 +47,44 @@ def session(owner):
     return json.loads(row[0]) if row else None
 
 
-def capital(owner, account, positions):
+def capital(owner, account, positions, now=None):
     settings=session(owner)
     if settings is None:
         return None
     if account.currency!=settings['currency']:
         raise ValueError('La divisa del presupuesto virtual no coincide con la cuenta demo')
     with connection() as con:
-        rows=con.execute('SELECT kind,profit,commission,swap,fee FROM mt5_deals WHERE owner=? AND ts>=?',
+        rows=con.execute('SELECT kind,profit,commission,swap,fee FROM mt5_deals WHERE owner=? AND raw_ts>=?',
                          (owner,settings['cutoffMsc'])).fetchall()
     realized=sum(sum(r[1:]) for r in rows if r[0] not in TRANSFERS)
     balance=settings['initial']+realized
     floating=sum(p.profit+p.swap for p in positions)
+    readiness = entry_readiness(owner, now, account=account, positions=positions) if now is not None else {}
     return dict(initial=settings['initial'],balance=balance,equity=balance+floating,
-                currency=settings['currency'],startedAt=settings['startedAt'])
+                currency=settings['currency'],startedAt=settings['startedAt'], **readiness)
+
+
+def entry_readiness(owner, now, *, account=None, positions=None):
+    """A virtual budget is spendable only after a fresh, reconciled broker read."""
+    sync = sync_info(owner)
+    with connection() as con:
+        row = con.execute('SELECT payload FROM mt5_sync_evidence WHERE owner=?', (owner,)).fetchone()
+    evidence = json.loads(row[0]) if row else {}
+    age = now - sync['updatedAt']
+    fresh = bool(sync['updatedAt'] and -5 <= age <= 30 and not sync['error'])
+    reconciled = evidence.get('reconciled') is True
+    unchanged = True
+    if account is not None:
+        unchanged = abs(account.balance+getattr(account,'credit',0)-evidence.get('brokerBalanceCredit',float('inf'))) <= .02
+    if positions is not None:
+        fingerprint = sorted([[int(p.ticket),float(p.volume)] for p in positions])
+        unchanged = unchanged and fingerprint == evidence.get('positions')
+    reconciled = reconciled and unchanged
+    reason = (sync['error'] or 'Historial o saldo MT5 sin sincronización reciente') if not fresh else (
+        None if reconciled else 'Saldo del bróker sin reconciliar con su historial')
+    return dict(entryReady=fresh and reconciled, synchronized=fresh, reconciled=reconciled,
+                syncUpdatedAt=sync['updatedAt'], syncError=reason,
+                reconciliationDifference=evidence.get('difference'))
 
 
 def sync_info(owner):
@@ -63,24 +100,47 @@ def sync_error(owner, message):
                     (owner, previous['updatedAt'], previous['lastFull'], message))
 
 
-def ingest(owner, account, positions, deals, now, full=False):
+def ingest(owner, account, positions, deals, now, full=False, clock_offset=0):
     """Importación idempotente y snapshot coherente; una respuesta None no borra datos."""
     if deals is None or positions is None:
         raise ValueError('Sin respuesta válida de MT5')
     info = sync_info(owner)
+    offset_value = int(clock_offset or 0)
+    offset_assigned = int(clock_offset is not None)
     settings=session(owner)
+    all_deals = list(deals)
     if settings:
         deals=[d for d in deals if int(getattr(d,'time_msc',d.time*1000))>=settings['cutoffMsc'] and d.type not in TRANSFERS]
     with connection() as con:
-        con.executemany('INSERT OR REPLACE INTO mt5_deals VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', [
-            (owner, int(d.ticket), int(getattr(d, 'time_msc', d.time*1000)), int(d.position_id), int(d.magic),
+        con.executemany('INSERT INTO mt5_deals '
+                        '(owner,ticket,ts,position_id,magic,kind,entry,volume,symbol,profit,commission,swap,fee,raw_ts,offset_secs,offset_assigned) '
+                        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(owner,ticket) DO UPDATE SET '
+                        'ts=excluded.raw_ts-(CASE WHEN mt5_deals.offset_assigned=1 THEN mt5_deals.offset_secs ELSE excluded.offset_secs END)*1000,'
+                        'position_id=excluded.position_id,magic=excluded.magic,kind=excluded.kind,'
+                        'entry=excluded.entry,volume=excluded.volume,symbol=excluded.symbol,profit=excluded.profit,'
+                        'commission=excluded.commission,swap=excluded.swap,fee=excluded.fee,'
+                        'raw_ts=excluded.raw_ts,offset_secs=CASE WHEN mt5_deals.offset_assigned=1 THEN mt5_deals.offset_secs ELSE excluded.offset_secs END,'
+                        'offset_assigned=MAX(mt5_deals.offset_assigned,excluded.offset_assigned)', [
+            (owner, int(d.ticket), int(getattr(d, 'time_msc', d.time*1000))-offset_value*1000, int(d.position_id), int(d.magic),
              int(d.type), int(d.entry), float(d.volume), d.symbol, float(d.profit), float(d.commission),
-             float(d.swap), float(getattr(d, 'fee', 0))) for d in deals])
+             float(d.swap), float(getattr(d, 'fee', 0)), int(getattr(d, 'time_msc', d.time*1000)),
+             offset_value,offset_assigned) for d in deals])
+        con.executemany('INSERT OR REPLACE INTO mt5_account_ledger VALUES (?,?,?)', [
+            (owner, int(d.ticket), float(d.profit+d.commission+d.swap+getattr(d, 'fee', 0))) for d in all_deals])
+        broker_expected = con.execute('SELECT COALESCE(SUM(amount),0) FROM mt5_account_ledger WHERE owner=?', (owner,)).fetchone()[0]
+        broker_actual = account.balance + getattr(account, 'credit', 0)
+        difference = broker_actual - broker_expected
+        evidence = dict(reconciled=math.isfinite(difference) and abs(difference) <= .02,
+                        difference=difference, brokerBalance=account.balance,
+                        brokerBalanceCredit=broker_actual,
+                        positions=sorted([[int(p.ticket),float(p.volume)] for p in positions]),
+                        clockOffsetSeconds=offset_value,clockConfirmed=bool(offset_assigned), checkedAt=int(now), full=bool(full))
+        con.execute('INSERT OR REPLACE INTO mt5_sync_evidence VALUES (?,?)', (owner, json.dumps(evidence)))
         pos = [dict(ticket=p.ticket, identifier=p.identifier, magic=p.magic, symbol=p.symbol,
                     profit=p.profit, swap=p.swap, volume=p.volume) for p in positions]
         virtual=None
         if settings:
-            rows=con.execute('SELECT kind,profit,commission,swap,fee FROM mt5_deals WHERE owner=? AND ts>=?',(owner,settings['cutoffMsc'])).fetchall()
+            rows=con.execute('SELECT kind,profit,commission,swap,fee FROM mt5_deals WHERE owner=? AND raw_ts>=?',(owner,settings['cutoffMsc'])).fetchall()
             balance=settings['initial']+sum(sum(r[1:]) for r in rows if r[0] not in TRANSFERS)
             virtual=(balance,balance+sum(p.profit+p.swap for p in positions),0)
         con.execute('INSERT OR REPLACE INTO mt5_snapshots VALUES (?,?,?,?,?,?,?)',
@@ -189,6 +249,7 @@ def performance(owner, bots, bot=None, symbol=None, since=None, until=None, per_
             history.append(last)
     settings=session(owner)
     out.update(currency=currency, session=settings, updatedAt=sync['updatedAt'], syncError=sync['error'], source='mt5',
+               timestampBasis='utc-normalized; raw_ts and per-deal broker offset retained',
                bots=[dict(id=key, name=value) for key,value in names.items()],
                symbols=sorted({r['symbol'] for r in rows if r['symbol']} | {p['symbol'] for p in open_positions}),
                cards=cards, accountHistory=history, account=dict(

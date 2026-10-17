@@ -72,7 +72,9 @@ def _desk_positions(now):
         return [], _source('desk', 'Mesa Siete', 'paper', False, message='Mesa no iniciada')
     state = engine.state
     data = engine.last_data
-    stamp = _number((data or {}).get('at'), positive=True)
+    risk_data=getattr(engine,'last_risk_data',None)
+    stamp = max(_number((data or {}).get('at'), positive=True) or 0,
+                _number((risk_data or {}).get('at'), positive=True) or 0) or None
     # El libro actual tiene una posición; admite además una lista explícita.
     raw = state.get('positions')
     raw = raw if isinstance(raw, list) else ([state['position']] if state.get('position') else [])
@@ -80,13 +82,16 @@ def _desk_positions(now):
     for p in raw:
         if not isinstance(p, dict) or p.get('status', 'open') != 'open':
             continue
-        price, price_at = _book(data, p['symbol'], 'long', now)
+        observed=max((d for d in (data,risk_data) if isinstance(d,dict) and p['symbol'] in d.get('books',{})),
+                     key=lambda d:d.get('at',0),default=None)
+        price, price_at = _book(observed, p['symbol'], 'long', now)
         fresh = price is not None
         price = price if fresh else _number(p.get('lastBid'), positive=True)
         qty = _number(p.get('qty'), positive=True)
         notional = _number(p.get('notional'))
         fee = _number(p.get('fee'))
-        pnl = (_number(qty * price * (1 - desk.SLIPPAGE) * (1 - desk.FEE) - notional - fee)
+        cost=p.get('costPolicy') or {}
+        pnl = (_number(qty * price * (1 - cost.get('slippageRate',desk.SLIPPAGE)) * (1 - cost.get('feeRate',desk.FEE)) - notional - fee)
                if None not in (qty, price, notional, fee) else None)
         positions.append(dict(
             id=f"desk:{p.get('entryKey', p['symbol'])}", source='desk', sourceLabel='Mesa Siete',
@@ -124,8 +129,8 @@ def _lab_positions(now, data):
             qty = _number(p.qty, positive=True)
             conversion=getattr(p,'quote_to_account',1.0)
             entry = _number(p.entry_price, positive=True)
-            pnl = (_number((price - entry) * qty * (1 if p.direction == 'long' else -1)*conversion)
-                   if None not in (price, entry, qty) else None)
+            pnl = _number(p.unrealized(price)) if None not in (price, entry, qty) else None
+            costs=getattr(p,'execution_costs',None)
             positions.append(dict(
                 id=f'lab:{bot_id}:{p.id}', source='lab', sourceLabel='Laboratorio',
                 botId=bot_id, botName=bot.cfg.name, symbol=p.symbol, side=p.direction,
@@ -134,7 +139,9 @@ def _lab_positions(now, data):
                 unrealizedPnl=pnl, currency=(getattr(bot,'session',None) or {}).get('currency') or _lab_currency(p.symbol, data),
                 openedAt=_number(p.entry_time, positive=True),
                 stopLoss=_number(p.sl, positive=True), takeProfit=_number(p.tp, positive=True),
-                priceFresh=fresh, priceUpdatedAt=stamp, accountMode='paper', pnlBasis='gross',
+                priceFresh=fresh, priceUpdatedAt=stamp, accountMode='paper',
+                pnlBasis='estimated-net' if costs else 'gross',
+                executionMode=costs.get('mode') if costs else 'legacy-simulation',costAssumptions=costs,
             ))
     available = bool(bots.BOTS)
     stale = any(not p['priceFresh'] for p in positions)

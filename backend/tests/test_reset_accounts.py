@@ -50,12 +50,16 @@ class ResetSessionTests(unittest.TestCase):
         restored=bots.TradingBot(bots.SCALPER)
         restored.load_state()
         self.assertEqual(restored.positions['USDJPY'].quote_to_account,.005)
-        expected=pos.qty*2*.005
-        self.assertAlmostEqual(pos.unrealized(pos.entry_price+2),expected)
-        with patch.object(learning,'refresh'):
+        mark=pos.entry_price+2
+        fill=mark*(1-.0001/2)*(1-.0002)
+        expected_mark=((fill-pos.entry_price)*pos.qty-pos.entry_fee-fill*pos.qty*.0002)*.005
+        with patch.object(bots.time,'time',return_value=pos.entry_time):
+            self.assertAlmostEqual(pos.unrealized(mark),expected_mark)
+        expected=(2*pos.qty-pos.entry_fee-mark*pos.qty*.0002)*.005
+        with patch.object(learning,'refresh'),patch.object(bots.time,'time',return_value=pos.entry_time):
             b._close(pos,pos.entry_price+2,'test')
         self.assertAlmostEqual(b.balance,100+expected)
-        self.assertEqual(learning.analyze(b.cfg.id)['bySymbol']['USDJPY']['expectancyR'],1.0)
+        self.assertEqual(learning.analyze(b.cfg.id)['bySymbol']['USDJPY']['expectancyR'],round(expected/pos.initial_risk(),3))
 
     def test_demo_full_sync_cannot_reintroduce_old_trades_or_deposits(self):
         settings=dict(initial=100,currency='EUR',startedAt=150,cutoffMsc=150000)

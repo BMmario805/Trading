@@ -18,6 +18,7 @@ from . import desk
 from . import mt5_demo
 from . import mt5_performance
 from . import open_positions
+from . import portfolio_risk, research_jobs
 from .sentiment import get_opinions, get_sentiment
 
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +33,7 @@ async def lifespan(_: FastAPI):
     gemini_agent.start()
     desk.start()
     yield
+    await research_jobs.stop()
     await desk.stop()
     await gemini_agent.stop()
     await mt5_demo.stop()
@@ -44,6 +46,21 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Trading Dashboard API", lifespan=lifespan)
+
+
+@app.get('/api/portfolio/risk')
+async def portfolio_risk_status():
+    return portfolio_risk.public_snapshot()
+
+
+@app.get('/api/research')
+async def research_status():
+    return research_jobs.status()
+
+
+@app.post('/api/research/run')
+async def research_start():
+    return research_jobs.start()
 
 
 @app.get('/api/desk')

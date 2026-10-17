@@ -1,4 +1,5 @@
 import tempfile
+import json
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -6,7 +7,7 @@ from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
 from app.mt5_gateway import DemoGateway, DemoOnlyError, lot_floor
-from app import bots, learning, mt5_demo, mt5_performance, training
+from app import bots, learning, mt5_demo, mt5_performance, training, broker_replay
 from app.execution import closed_candles
 
 
@@ -154,20 +155,21 @@ class ProbationEngineTests(unittest.TestCase):
         self.addCleanup(self.engine.worker.shutdown)
         self.rows = [dict(time=i*60, open=100, high=101, low=99, close=100, volume=10) for i in range(61)]
 
-    def cycle(self, bot=None, score=.8):
+    def cycle(self, bot=None, score=.8, request=None):
         with patch.object(mt5_demo, 'ALL_BOTS', (bot or self.bot,)), \
              patch.object(mt5_demo.time, 'time', return_value=3660), \
              patch.object(self.engine, 'update_clock_skew'), \
-             patch.object(self.engine, 'manage'), patch.object(self.engine, 'sync_performance'), \
+             patch.object(self.engine, 'manage') as manage, patch.object(self.engine, 'sync_performance'), \
              patch.object(self.engine, 'training'), \
              patch.object(self.engine, 'bars', return_value=self.rows), \
              patch.object(mt5_demo, 'score_series', return_value=[0]*60+[score]), \
              patch.object(mt5_demo, 'extension_atr', return_value=0), \
              patch.object(mt5_demo, 'atr_series', return_value=[2]*61), \
              patch.object(self.engine.gateway, 'tick', return_value=NS(bid=100, ask=100.02)), \
-             patch.object(self.engine.gateway, 'prepare_entry', return_value=({}, 2)) as prepare, \
+             patch.object(self.engine.gateway, 'prepare_entry', return_value=(request or {}, 2)) as prepare, \
              patch.object(self.engine, 'submit', return_value=NS(retcode=self.api.TRADE_RETCODE_DONE)) as submit:
             self.engine.cycle()
+            self.managed = manage
         return prepare, submit
 
     def test_open_position_snapshot_has_prices_and_utc_timestamps(self):
@@ -196,10 +198,39 @@ class ProbationEngineTests(unittest.TestCase):
 
     def test_validated_demo_pair_uses_normal_budget_and_threshold(self):
         mt5_demo.save(self.engine.owner+'params:scalper/XAUUSD', dict(
-            applied=True, engineVersion=training.ENGINE_VERSION, params=dict(entryThreshold=.5)))
+            applied=True, engineVersion=training.ENGINE_VERSION, brokerReplayVersion=broker_replay.VERSION,
+            source=dict(provider='mt5',account=self.engine.owner,symbol='XAUUSD'),params=dict(entryThreshold=.5)))
         prepare, _ = self.cycle(score=.51)
         prepare.assert_called_once()
         self.assertEqual(prepare.call_args.kwargs['risk_mult'], 1)
+
+    def test_generic_legacy_validation_does_not_promote_broker_budget(self):
+        mt5_demo.save(self.engine.owner+'params:scalper/XAUUSD', dict(
+            applied=True,engineVersion=training.ENGINE_VERSION,params=dict(entryThreshold=.5)))
+        prepare, _ = self.cycle(score=.8)
+        self.assertEqual(prepare.call_args.kwargs['risk_mult'], learning.PROBATION_SIZE)
+
+    def test_unreconciled_virtual_budget_blocks_entries_but_keeps_management(self):
+        with mt5_performance.connection() as con:
+            con.execute('INSERT INTO mt5_sessions VALUES (?,?)',(self.engine.owner,json.dumps(
+                dict(initial=100,currency='USD',startedAt=3000,cutoffMsc=3000000))))
+        prepare, submit = self.cycle()
+        self.managed.assert_called_once()
+        prepare.assert_not_called()
+        submit.assert_not_called()
+        self.assertFalse(mt5_demo.STATE['tradingAllowed'])
+        self.assertIn('sincronización', mt5_demo.STATE['message'])
+
+    def test_unknown_euro_notional_blocks_new_order_without_inventing_exposure(self):
+        self.account.currency='EUR'
+        self.api.symbol_info.return_value.trade_contract_size=100
+        self.api.symbol_info.return_value.currency_base='XAU'
+        self.api.symbol_info.return_value.currency_profit='USD'
+        request=dict(type=0,volume=.01,price=100,sl=98)
+        prepare,submit=self.cycle(request=request)
+        prepare.assert_called_once()
+        submit.assert_not_called()
+        self.assertIn('exposición global sin cuantificar',self.engine.diagnostics['scalper/XAUUSD'])
 
     def test_probation_accepts_original_threshold_without_surcharge(self):
         prepare, submit = self.cycle(score=self.bot.entry_threshold*1.02)
@@ -291,6 +322,7 @@ class BrokerClockTests(unittest.TestCase):
         ticks = {'XAUUSD': NS(time=now+offset-20, bid=100, ask=100.02),
                  'EURUSD': NS(time=now+offset, bid=1, ask=1.0001)}
         self.api.symbol_info_tick.side_effect = ticks.get
+        self.engine._clock_ticks = {symbol: tick.time-1 for symbol,tick in ticks.items()}
         with patch.object(mt5_demo.time, 'time', return_value=now):
             self.engine.update_clock_skew()
         self.assertEqual(self.engine.clock_skew, offset)
@@ -302,10 +334,12 @@ class BrokerClockTests(unittest.TestCase):
     def test_stale_ticks_stay_stale_even_when_another_symbol_is_fresh(self):
         now, offset = 1000000, 7200
         self.config['symbols']['EURUSD'] = 'EURUSD'
-        self.api.symbol_info_tick.side_effect = {
+        ticks = {
             'XAUUSD': NS(time=now+offset-600, bid=100, ask=100.02),
             'EURUSD': NS(time=now+offset, bid=1, ask=1.0001),
-        }.get
+        }
+        self.api.symbol_info_tick.side_effect = ticks.get
+        self.engine._clock_ticks = {symbol: tick.time-1 for symbol,tick in ticks.items()}
         with patch.object(mt5_demo.time, 'time', return_value=now):
             self.engine.update_clock_skew()
         self.assertEqual(self.engine.clock_skew, offset)
@@ -322,6 +356,38 @@ class BrokerClockTests(unittest.TestCase):
         self.assertEqual(self.engine.clock_skew, 7200)
         self.assertEqual(self.engine.gateway.clock_skew, 7200)
         self.assertNotIn('XAUUSD', [call.args[0] for call in self.api.symbol_info_tick.call_args_list])
+
+    def test_nonzero_offset_needs_an_advancing_tick(self):
+        now,offset=1000000,10800
+        tick=self.api.symbol_info_tick.return_value
+        tick.time=now+offset
+        with patch.object(mt5_demo.time,'time',return_value=now):
+            self.engine.update_clock_skew()
+        self.assertEqual(self.engine.clock_skew,0)
+        tick.time+=5
+        with patch.object(mt5_demo.time,'time',return_value=now+5):
+            self.engine.update_clock_skew()
+        self.assertEqual(self.engine.clock_skew,offset)
+
+    def test_all_frozen_ticks_never_renew_their_age(self):
+        now,offset=1000000,10800
+        self.engine.clock_skew=self.engine.gateway.clock_skew=offset
+        self.api.symbol_info_tick.return_value.time=now+offset-600
+        for elapsed in (0,5,60):
+            with patch.object(mt5_demo.time,'time',return_value=now+elapsed):
+                self.engine.update_clock_skew()
+            self.assertEqual(self.engine.clock_skew,offset)
+            with self.assertRaises(DemoOnlyError):
+                self.engine.gateway.tick('XAUUSD',now+elapsed)
+
+    def test_frozen_boot_ticks_cannot_calibrate_an_offset(self):
+        now,offset=1000000,10800
+        self.api.symbol_info_tick.return_value.time=now+offset-600
+        for elapsed in (0,5):
+            with patch.object(mt5_demo.time,'time',return_value=now+elapsed):
+                self.engine.update_clock_skew()
+        self.assertEqual(self.engine.clock_skew,0)
+        with self.assertRaises(DemoOnlyError): self.engine.gateway.tick('XAUUSD',now+5)
 
 
 if __name__ == '__main__':

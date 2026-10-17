@@ -21,9 +21,8 @@ para no "aprender" del ruido:
    franjas horarias UTC con expectativa claramente negativa y muestra
    suficiente.
 
-3. Tamaño adaptativo (Kelly fraccionado). El multiplicador de tamaño por
-   símbolo crece hacia 1.5× cuando la expectativa en vivo es positiva y
-   cae hacia 0.5× cuando es negativa.
+3. Tamaño prudente. La muestra en vivo puede reducir el tamaño hasta 0.5×;
+   una expectativa positiva no autoriza aumentos sin calibración monetaria.
 
 4. Meta-modelo (meta-labeling, López de Prado). Un clasificador logístico
    ONLINE aprende, operación a operación, en qué contextos las señales del
@@ -80,7 +79,6 @@ META_MIN_SAMPLES = 30     # madurez mínima antes de que pueda vetar señales
 META_GATE_P = 0.25        # probabilidad de éxito mínima para dejar pasar
 META_LR = 0.05            # tasa de aprendizaje SGD
 META_L2 = 0.001           # regularización L2 (evita pesos desbocados)
-META_BOOTSTRAP_EPOCHS = 3 # pasadas extra al aprender el historial de golpe
 # Cambiar las features exige reaprender: quitar un peso no elimina su
 # influencia anterior sobre el sesgo y los demás coeficientes.
 META_FEATURE_VERSION = 2
@@ -100,6 +98,7 @@ MAX_CONCURRENT_TRAININGS = 2
 _policies: dict[str, dict] = {}       # bot -> política vigente (en memoria)
 _edges: dict[str, dict[str, str]] = {}  # bot -> {símbolo: validated|rejected|unknown}
 _models: dict[str, dict] = {}         # bot -> meta-modelo {w, n, lastTradeId}
+META_PROCESSING_VERSION = 1
 _scheduler_task: asyncio.Task | None = None
 
 
@@ -119,6 +118,12 @@ def _conn() -> sqlite3.Connection:
             updated_at INTEGER NOT NULL
         )"""
     )
+    con.execute(
+        """CREATE TABLE IF NOT EXISTS bot_model_processed (
+            bot TEXT NOT NULL, trade_id INTEGER NOT NULL,
+            PRIMARY KEY (bot, trade_id)
+        )"""
+    )
     return con
 
 
@@ -127,7 +132,8 @@ def _conn() -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 
 
-def analyze(bot_id: str, window_days: int = WINDOW_DAYS) -> dict:
+def analyze(bot_id: str, window_days: int = WINDOW_DAYS,
+            after_by_symbol: dict[str, int] | None = None) -> dict:
     """Estadísticas de las operaciones cerradas recientes, por símbolo,
     por (símbolo, dirección), por hora UTC y por motivo de salida.
 
@@ -145,7 +151,8 @@ def analyze(bot_id: str, window_days: int = WINDOW_DAYS) -> dict:
         since = reference - window_days * 86400
         rows = con.execute(
             """SELECT symbol, direction, qty, entry_price, sl, pnl,
-                      entry_time, exit_reason, COALESCE(initial_risk_dist,ABS(entry_price-sl))*COALESCE(quote_to_account,1)
+                      entry_time, exit_reason,
+                      COALESCE(economic_risk_dist,initial_risk_dist,ABS(entry_price-sl))*COALESCE(quote_to_account,1), exit_time
                FROM bot_trades
                WHERE bot = ? AND status = 'closed' AND pnl IS NOT NULL
                  AND exit_time >= ?""",
@@ -159,7 +166,9 @@ def analyze(bot_id: str, window_days: int = WINDOW_DAYS) -> dict:
     by_dir: dict[tuple[str, str], dict] = {}
     by_hour: dict[int, dict] = {}
     by_exit: dict[str, dict] = {}
-    for sym, direction, qty, entry, sl, pnl, entry_time, exit_reason, initial_dist in rows:
+    for sym, direction, qty, entry, sl, pnl, entry_time, exit_reason, initial_dist, exit_time in rows:
+        if after_by_symbol and exit_time <= after_by_symbol.get(sym, -1):
+            continue
         risk = (initial_dist if initial_dist is not None else abs(entry - sl)) * qty
         r_mult = pnl / risk if risk > 0 else 0.0
         for bucket in (
@@ -185,7 +194,7 @@ def analyze(bot_id: str, window_days: int = WINDOW_DAYS) -> dict:
 
     return {
         "windowDays": window_days,
-        "trades": len(rows),
+        "trades": sum(d["n"] for d in by_symbol.values()),
         "bySymbol": {s: _fin(d) for s, d in by_symbol.items()},
         "byDirection": {f"{s}:{dr}": _fin(d) for (s, dr), d in by_dir.items()},
         "byHour": {str(h): _fin(d) for h, d in sorted(by_hour.items())},
@@ -241,7 +250,8 @@ def meta_features(
 
 def _new_model() -> dict:
     return {"w": {}, "n": 0, "lastTradeId": 0, "updatedAt": 0,
-            "engineVersion": training.ENGINE_VERSION, "featureVersion": META_FEATURE_VERSION}
+            "engineVersion": training.ENGINE_VERSION, "featureVersion": META_FEATURE_VERSION,
+            "processingVersion": META_PROCESSING_VERSION}
 
 
 def _load_model(bot_id: str) -> dict:
@@ -327,40 +337,53 @@ def meta_learn_new_trades(bot_id: str) -> int:
     """Entrena el meta-modelo con las operaciones cerradas aún no aprendidas.
 
     Se llama al cerrar cada operación (aprende de una en una) y al arrancar
-    (bootstrap con todo el historial pendiente, con varias épocas si es un
-    lote grande). Devuelve cuántas operaciones nuevas aprendió.
+    (bootstrap con todo el historial pendiente, en orden de cierre y una sola
+    pasada). Devuelve cuántas operaciones nuevas aprendió.
     """
-    m = _load_model(bot_id)
     with _conn() as con:
+        # El modelo y sus recibos se confirman juntos. Un fallo de escritura
+        # no puede dejar pesos aprendidos sin recibo (ni a la inversa).
+        con.execute("BEGIN IMMEDIATE")
+        saved = con.execute("SELECT model FROM bot_model WHERE bot = ?", (bot_id,)).fetchone()
+        m = json.loads(saved[0]) if saved else _new_model()
+        compatible = (m.get("engineVersion") == training.ENGINE_VERSION
+                      and m.get("featureVersion") == META_FEATURE_VERSION
+                      and m.get("processingVersion") == META_PROCESSING_VERSION)
+        if not compatible:
+            # El antiguo cursor por ID de apertura no permite distinguir las
+            # operaciones omitidas de las ya aprendidas: reconstruir los pesos
+            # evita duplicarlos y recupera todos los cierres compatibles.
+            m = _new_model()
+            con.execute("DELETE FROM bot_model_processed WHERE bot = ?", (bot_id,))
         rows = con.execute(
-            """SELECT id, symbol, direction, entry_time, snapshot, pnl
-               FROM bot_trades
-               WHERE bot = ? AND status = 'closed' AND pnl IS NOT NULL AND id > ?
-               ORDER BY id""",
-            (bot_id, m["lastTradeId"]),
+            """SELECT t.id, t.symbol, t.direction, t.entry_time, t.snapshot, t.pnl
+               FROM bot_trades t
+               LEFT JOIN bot_model_processed p ON p.bot=t.bot AND p.trade_id=t.id
+               WHERE t.bot = ? AND t.status = 'closed' AND t.pnl IS NOT NULL
+                 AND p.trade_id IS NULL
+               ORDER BY t.exit_time, t.id""",
+            (bot_id,),
         ).fetchall()
-    if not rows:
+        learned = 0
+        for tid, symbol, direction, entry_time, snap, pnl in rows:
+            feats = _trade_features(bot_id, (symbol, direction, entry_time, snap))
+            m["lastTradeId"] = max(m["lastTradeId"], tid)  # informativo, nunca cursor
+            if feats is not None and math.isfinite(pnl):
+                _meta_sgd_step(m, feats, pnl > 0)
+                learned += 1
+            con.execute("INSERT INTO bot_model_processed VALUES (?, ?)", (bot_id, tid))
+        m["n"] += learned
+        if rows or not compatible or not saved:
+            m["updatedAt"] = int(time.time())
+            m["w"] = {k: round(v, 6) for k, v in m["w"].items() if abs(v) > 1e-6}
+            con.execute("INSERT OR REPLACE INTO bot_model VALUES (?, ?, ?)",
+                        (bot_id, json.dumps(m, ensure_ascii=False), m["updatedAt"]))
+    _models[bot_id] = m
+    if not learned:
         return 0
-    batch: list[tuple[dict[str, float], bool]] = []
-    for tid, symbol, direction, entry_time, snap, pnl in rows:
-        feats = _trade_features(bot_id, (symbol, direction, entry_time, snap))
-        m["lastTradeId"] = max(m["lastTradeId"], tid)
-        if feats is None:
-            continue
-        batch.append((feats, pnl > 0))
-    if not batch:
-        _save_model(bot_id)
-        return 0
-    # lote grande (bootstrap) -> varias épocas; goteo normal -> una pasada
-    epochs = META_BOOTSTRAP_EPOCHS if len(batch) >= 50 else 1
-    for _ in range(epochs):
-        for feats, won in batch:
-            _meta_sgd_step(m, feats, won)
-    m["n"] += len(batch)
-    _save_model(bot_id)
     log.info("%s: meta-modelo aprendió %d operaciones (total %d)",
-             bot_id, len(batch), m["n"])
-    return len(batch)
+             bot_id, learned, m["n"])
+    return learned
 
 
 def meta_summary(bot_id: str) -> dict:
@@ -372,6 +395,8 @@ def meta_summary(bot_id: str) -> dict:
         "mature": m["n"] >= META_MIN_SAMPLES,
         "minSamples": META_MIN_SAMPLES,
         "gateP": META_GATE_P,
+        "calibrated": False,
+        "sizeIncreaseAllowed": False,
         "topFeatures": [
             {"feature": k, "weight": round(v, 3)} for k, v in top
         ],
@@ -401,9 +426,24 @@ def refresh(bot_id: str) -> dict:
     stats = analyze(bot_id)
     now = int(time.time())
     trained_at = training.last_trained_at(bot_id)
+    results = [r for r in training.load_results() if r["bot"] == bot_id]
+    validated_at = {r["symbol"]: r["trainedAt"] for r in results if r["applied"]}
+    risk_stats = analyze(bot_id, after_by_symbol=validated_at) if validated_at else stats
+    previous = _policies.get(bot_id)
+    if previous is None:
+        with _conn() as con:
+            row = con.execute("SELECT policy FROM bot_learning WHERE bot = ?", (bot_id,)).fetchone()
+        previous = json.loads(row[0]) if row else {}
+    prior_blocks = {(b["symbol"], b.get("direction")): b for b in previous.get("blocks", [])}
+
+    def created_at(symbol: str, direction: str | None) -> int:
+        old = prior_blocks.get((symbol, direction))
+        if old and validated_at.get(symbol, 0) <= old.get("createdAt", 0):
+            return old.get("createdAt", now)
+        return now
 
     blocks: list[dict] = []
-    for sym, s in stats["bySymbol"].items():
+    for sym, s in risk_stats["bySymbol"].items():
         if s["n"] >= MIN_TRADES_SYMBOL and (s["expectancyR"] or 0) < BLOCK_EXPECTANCY_R:
             blocks.append({
                 "symbol": sym,
@@ -412,16 +452,16 @@ def refresh(bot_id: str) -> dict:
                     f"expectativa {s['expectancyR']:+.2f}R en {s['n']} operaciones "
                     f"({stats['windowDays']} días)"
                 ),
-                "createdAt": now,
+                "createdAt": created_at(sym, None),
             })
     blocked_syms = {b["symbol"] for b in blocks}
-    for key, s in stats["byDirection"].items():
+    for key, s in risk_stats["byDirection"].items():
         sym, direction = key.split(":")
         if sym in blocked_syms:
             continue
         if (
             s["n"] >= MIN_TRADES_DIRECTION
-            and (s["winRate"] or 100) <= 30
+            and s["winRate"] is not None and s["winRate"] <= 30
             and s["pnl"] < 0
         ):
             blocks.append({
@@ -431,13 +471,13 @@ def refresh(bot_id: str) -> dict:
                     f"{'largos' if direction == 'long' else 'cortos'} con "
                     f"{s['winRate']:.0f}% de acierto y {s['pnl']:+.2f} en {s['n']} ops"
                 ),
-                "createdAt": now,
+                "createdAt": created_at(sym, direction),
             })
 
     size_mult: dict[str, float] = {}
     for sym, s in stats["bySymbol"].items():
         if s["n"] >= MIN_TRADES_SIZING and s["expectancyR"] is not None:
-            size_mult[sym] = round(min(1.5, max(0.5, 1.0 + s["expectancyR"])), 2)
+            size_mult[sym] = round(min(1.0, max(0.5, 1.0 + s["expectancyR"])), 2)
 
     # vetos por franja horaria UTC: horas con expectativa claramente negativa
     # y muestra suficiente (p. ej. la iliquidez del rollover asiático)
@@ -450,7 +490,8 @@ def refresh(bot_id: str) -> dict:
                     f"expectativa {s['expectancyR']:+.2f}R en {s['n']} operaciones "
                     f"a las {h}:00 UTC"
                 ),
-                "createdAt": now,
+                "createdAt": next((b.get("createdAt", now) for b in previous.get("hourBlocks", [])
+                                   if b["hour"] == int(h)), now),
             })
 
     policy = {
@@ -459,6 +500,7 @@ def refresh(bot_id: str) -> dict:
         "sizeMult": size_mult,
         "stats": stats,
         "lastTrainedAt": trained_at,
+        "validatedAtBySymbol": validated_at,
         "updatedAt": now,
     }
     _policies[bot_id] = policy
@@ -502,6 +544,7 @@ def reset(bot_id: str) -> None:
     with _conn() as con:
         con.execute("DELETE FROM bot_learning WHERE bot = ?", (bot_id,))
         con.execute("DELETE FROM bot_model WHERE bot = ?", (bot_id,))
+        con.execute("DELETE FROM bot_model_processed WHERE bot = ?", (bot_id,))
 
 
 # ---------------------------------------------------------------------------
@@ -514,12 +557,12 @@ def _active_blocks(bot_id: str) -> list[dict]:
     (la reentrada se gana revalidando la ventaja, no esperando)."""
     policy = _policies.get(bot_id) or load(bot_id)
     edges = _edges.get(bot_id, {})
-    trained_at = policy.get("lastTrainedAt") or 0
+    validated_at = policy.get("validatedAtBySymbol", {})
     out = []
     for b in policy.get("blocks", []):
         if (
             edges.get(b["symbol"]) == "validated"
-            and trained_at > b.get("createdAt", 0)
+            and validated_at.get(b["symbol"], 0) > b.get("createdAt", 0)
         ):
             continue
         out.append(b)
@@ -567,7 +610,7 @@ def gate(
 def size_multiplier(bot_id: str, symbol: str) -> tuple[float, str | None]:
     """Multiplicador de tamaño aprendido -> (multiplicador, explicación)."""
     policy = _policies.get(bot_id) or load(bot_id)
-    mult = policy.get("sizeMult", {}).get(symbol, 1.0)
+    mult = min(1.0, max(0.5, policy.get("sizeMult", {}).get(symbol, 1.0)))
     note = None
     if mult != 1.0:
         note = f"tamaño ×{mult:g} por expectativa en vivo"

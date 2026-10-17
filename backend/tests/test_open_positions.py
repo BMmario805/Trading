@@ -21,6 +21,7 @@ class OpenPositionsTests(unittest.TestCase):
                          last_error=None, save=MagicMock(), public=MagicMock())
         self.lab_position = NS(id=7, symbol='ETH', direction='long', qty=.1, entry_price=100,
                                last_price=98, entry_time=9100, sl=95, tp=110)
+        self.lab_position.unrealized=lambda price:(price-self.lab_position.entry_price)*self.lab_position.qty*(1 if self.lab_position.direction=='long' else -1)*getattr(self.lab_position,'quote_to_account',1)
         self.bot = NS(positions={'ETH': self.lab_position}, cfg=NS(name='Bot de prueba'),
                       status=MagicMock(), _save_state=MagicMock(), _open=MagicMock(), _close=MagicMock())
         self.mt5 = dict(configured=True, demo=True, connected=True, updatedAt=self.now,
@@ -122,6 +123,21 @@ class OpenPositionsTests(unittest.TestCase):
         self.assertEqual(lab['unrealizedPnl'], 100)
         self.assertEqual(lab['notional'], 15000)
         self.assertTrue(lab['priceFresh'])
+
+    def test_modern_lab_positions_publish_engine_net_pnl_and_cost_contract(self):
+        from app.bots import Position
+        from app.economics import cost_profile
+        modern=Position(id=9,symbol='ETH',direction='long',qty=1,entry_price=100,
+                        entry_time=self.now,sl=95,tp=110,atr_entry=2,best_price=100,
+                        trail_atr=1,r_dist=5,last_price=99,quote_to_account=.9,
+                        execution_costs=cost_profile('lab','cripto'),entry_fee=.1)
+        self.bot.positions={'ETH':modern}
+        result=open_positions.snapshot()
+        row=next(p for p in result['positions'] if p['source']=='lab')
+        self.assertEqual(row['pnlBasis'],'estimated-net')
+        self.assertEqual(row['executionMode'],'simulated-margin')
+        self.assertAlmostEqual(row['unrealizedPnl'],modern.unrealized(row['currentPrice']))
+        self.assertLess(row['unrealizedPnl'],-.9)
 
     def test_empty_uninitialized_sources_and_nonfinite_numbers_are_json_safe(self):
         self.lab_position.last_price = float('nan')

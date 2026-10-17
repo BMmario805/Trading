@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import math
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,8 @@ from . import training
 from . import mt5_performance
 from . import mt5_market
 from . import learning
+from . import broker_replay
+from . import portfolio_risk
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / '.runtime' / 'mt5-demo.json'
@@ -55,11 +58,14 @@ class DemoEngine:
         self.last_scan = self.last_train = 0
         self.last_performance = 0
         self.clock_skew = 0.0
+        self._clock_ticks = {}
+        self._clock_confirmed = False
         self.cursor = 0
         self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix='mt5-validation')
         self.training_job = None
         self.stopping = False
         self.diagnostics = {}
+        self.risk_diagnostics = {}
         self.timeframes = {k: getattr(api, 'TIMEFRAME_' + v) for k, v in
                            [('1m', 'M1'), ('5m', 'M5'), ('15m', 'M15'), ('1h', 'H1'), ('4h', 'H4'), ('1d', 'D1')]}
 
@@ -93,39 +99,56 @@ class DemoEngine:
                     time=int(tick.time-self.clock_skew), dataSource=provenance)
 
     def update_clock_skew(self):
-        """Usa el tick más reciente para no confundir desfase con antigüedad."""
+        """Only an advancing tick can calibrate a whole-hour server offset.
+
+        The age residual is never folded into the offset. Frozen/closed markets
+        therefore become stale rather than resetting their apparent age to zero.
+        UTC is the documented default; an observed broker offset needs two reads.
+        """
         local = time.time()
         skews = []
         for symbol in self.config.get('symbols', {}).values():
             if not self.api.symbol_select(symbol, True):
                 continue
             tick = self.api.symbol_info_tick(symbol)
-            if tick is not None and getattr(tick, 'time', 0):
-                skew = float(tick.time) - local
-                if -300 <= skew <= 12 * 3600:
+            stamp = getattr(tick, 'time', 0) if tick is not None else 0
+            if isinstance(stamp, (int, float)) and math.isfinite(stamp) and stamp > 0:
+                previous = self._clock_ticks.get(symbol)
+                self._clock_ticks[symbol] = stamp
+                skew = round((stamp - local) / 3600) * 3600
+                age = local + skew - stamp
+                if (previous is not None and stamp > previous and 0 <= skew <= 12*3600
+                        and -5 <= age <= 120):
                     skews.append(skew)
         if skews:
-            self.clock_skew = max(skews)
+            # Retain a confirmed offset until a new, advancing tick provides
+            # evidence of a server clock change (e.g. DST).
+            self.clock_skew = max(set(skews), key=lambda x: (skews.count(x), -abs(x-self.clock_skew)))
             self.gateway.clock_skew = self.clock_skew
+            self._clock_confirmed = True
 
-    def submit(self, key, symbol, request):
+    def submit(self, key, symbol, request, portfolio_token=None):
         if self.stopping:
+            portfolio_risk.release(portfolio_token)
             raise DemoOnlyError('Motor detenido')
         # Se registra ANTES de enviar. Ante una respuesta ambigua jamás se reenvía a ciegas.
         with connection() as con:
             if con.execute('SELECT 1 FROM intents WHERE key=?', (self.owner+key,)).fetchone():
+                portfolio_risk.release(portfolio_token)
                 return None
-            con.execute('INSERT INTO intents VALUES (?,?,?,?)', (self.owner+key, symbol, 'pending', '{}'))
+            detail = dict(request=request, submittedAt=time.time(), clockOffset=self.clock_skew,
+                          portfolioToken=portfolio_token)
+            con.execute('INSERT INTO intents VALUES (?,?,?,?)', (self.owner+key, symbol, 'pending', json.dumps(detail)))
         try:
             result = self.gateway.send(request)
         except DemoOnlyError:
+            portfolio_risk.release(portfolio_token)
             with connection() as con:
                 con.execute('UPDATE intents SET status=? WHERE key=?', ('rejected', self.owner+key))
             raise
         status = 'uncertain'
-        detail = {}
         if result is not None:
-            detail = dict(retcode=result.retcode, order=result.order, deal=result.deal, comment=result.comment)
+            detail.update(retcode=result.retcode, order=result.order, deal=result.deal, comment=result.comment)
             if result.retcode in (self.api.TRADE_RETCODE_DONE, self.api.TRADE_RETCODE_DONE_PARTIAL):
                 status = 'accepted'
             elif result.retcode not in (self.api.TRADE_RETCODE_TIMEOUT, self.api.TRADE_RETCODE_CONNECTION,
@@ -133,13 +156,108 @@ class DemoEngine:
                 status = 'rejected'
         with connection() as con:
             con.execute('UPDATE intents SET status=?, detail=? WHERE key=?', (status, json.dumps(detail), self.owner+key))
+        if status == 'rejected':
+            portfolio_risk.release(portfolio_token)
         log.info('MT5 DEMO %s %s %s', symbol, status, detail)
         return result
+
+    def reconcile_intents(self, positions, now):
+        """Resolve ambiguity with positive broker evidence; never resend an intent.
+
+        Absence of a position or an empty history response is not proof that an
+        order failed. Legacy intents without a request identity remain blocked.
+        """
+        with connection() as con:
+            rows = con.execute("SELECT key,symbol,detail FROM intents WHERE key LIKE ? "
+                               "AND status IN ('pending','uncertain')", (self.owner+'%',)).fetchall()
+        for key, symbol, raw in rows:
+            detail = json.loads(raw)
+            request = detail.get('request') or {}
+            comment, magic = request.get('comment'), request.get('magic')
+            if not request:
+                continue
+            evidence, status = None, None
+            if not request.get('position') and comment and comment.startswith(('cx-', 'cxp-')):
+                found = next((p for p in positions if p.symbol == symbol and p.magic == magic
+                              and getattr(p, 'comment', None) == comment), None)
+                if found:
+                    evidence, status = dict(position=found.ticket), 'accepted'
+            submitted = detail.get('submittedAt')
+            if not evidence and isinstance(submitted, (int, float)):
+                start = max(0, int(submitted + detail.get('clockOffset', 0)) - 120)
+                try:
+                    deals = self.api.history_deals_get(start, int(now+self.clock_skew)+86400)
+                    order_id = detail.get('order')
+                    for deal in deals or ():
+                        exact_order = bool(order_id and getattr(deal, 'order', None) == order_id)
+                        exact_identity = bool(comment and getattr(deal, 'comment', None) == comment
+                                              and getattr(deal, 'magic', None) == magic
+                                              and getattr(deal, 'symbol', None) == symbol
+                                              and getattr(deal, 'time', 0) >= start)
+                        if request.get('position'):
+                            exact_identity = exact_identity and getattr(deal, 'position_id', None) == request['position']
+                        if exact_order or exact_identity:
+                            evidence, status = dict(deal=deal.ticket), 'accepted'
+                            break
+                    if not evidence and order_id:
+                        orders = self.api.history_orders_get(ticket=order_id)
+                        definitive = {getattr(self.api, 'ORDER_STATE_'+v, None) for v in ('CANCELED','REJECTED','EXPIRED')}
+                        definitive = {v for v in definitive if isinstance(v, int)}
+                        found = next((o for o in orders or () if o.ticket == order_id and o.state in definitive), None)
+                        if found:
+                            evidence, status = dict(order=found.ticket, state=found.state), 'rejected'
+                except Exception as exc:
+                    log.warning('MT5 intent reconciliation unavailable: %s', exc)
+            if evidence:
+                detail.update(reconciledAt=int(now), evidence=evidence)
+                if status == 'rejected':
+                    portfolio_risk.release(detail.get('portfolioToken'))
+                with connection() as con:
+                    con.execute('UPDATE intents SET status=?,detail=? WHERE key=?', (status,json.dumps(detail),key))
 
     def uncertain(self, symbol):
         with connection() as con:
             return con.execute("SELECT 1 FROM intents WHERE key LIKE ? AND symbol=? AND status IN ('pending','uncertain')",
                                (self.owner+'%', symbol)).fetchone() is not None
+
+    def reconcile_portfolio_reservations(self, positions, now):
+        """Release a filled order only when its risk is published or proven closed.
+
+        A fast round trip can open and close between two UI snapshots. Its
+        reservation is released from a complete, reconciled execution ledger,
+        never just from the position disappearing or the passage of time.
+        """
+        with connection() as con:
+            rows = con.execute("SELECT key,symbol,detail FROM intents WHERE key LIKE ? AND status='accepted'",
+                               (self.owner+'%',)).fetchall()
+        fresh_history = mt5_performance.entry_readiness(self.owner,now)
+        live_ids = {getattr(p,'identifier',p.ticket) for p in positions}
+        for key,symbol,raw in rows:
+            detail = json.loads(raw)
+            token = detail.get('portfolioToken')
+            if not token or detail.get('portfolioReleasedAt'):
+                continue
+            request = detail.get('request') or {}
+            published = any(p.symbol == symbol and p.magic == request.get('magic')
+                            and getattr(p,'comment',None) == request.get('comment') for p in positions)
+            closed = False
+            if not published and fresh_history['entryReady']:
+                deal_id = detail.get('deal') or (detail.get('evidence') or {}).get('deal')
+                if deal_id:
+                    with mt5_performance.connection() as con:
+                        row = con.execute('SELECT position_id FROM mt5_deals WHERE owner=? AND ticket=?',
+                                          (self.owner,deal_id)).fetchone()
+                        if row and row[0] and row[0] not in live_ids:
+                            volumes = con.execute('SELECT entry,SUM(volume) FROM mt5_deals WHERE owner=? '
+                                'AND position_id=? AND kind IN (0,1) GROUP BY entry',(self.owner,row[0])).fetchall()
+                            volumes = dict(volumes)
+                            entered = volumes.get(0,0)
+                            closed = entered > 0 and volumes.get(1,0)+volumes.get(3,0) >= entered-1e-8
+            if published or closed:
+                portfolio_risk.release(token)
+                detail.update(portfolioReleasedAt=int(now),portfolioReleaseEvidence='published' if published else 'closed-ledger')
+                with connection() as con:
+                    con.execute('UPDATE intents SET detail=? WHERE key=?',(json.dumps(detail),key))
 
     def manage(self, positions, now):
         configs = {MAGICS[c.id]: c for c in ALL_BOTS}
@@ -205,7 +323,9 @@ class DemoEngine:
         for cfg, symbol in candidates:
             key = cfg.id+'/'+symbol
             previous = read(self.owner+'params:'+key, {})
-            if previous.get('engineVersion') == training.ENGINE_VERSION and now-previous.get('at', 0) < 6*3600:
+            if (previous.get('engineVersion') == training.ENGINE_VERSION
+                    and previous.get('brokerReplayVersion') == broker_replay.VERSION
+                    and now-previous.get('at', 0) < 6*3600):
                 continue
             self.last_train = now
             try:
@@ -213,17 +333,18 @@ class DemoEngine:
                 if len(data) < 500:
                     raise DemoOnlyError('Histórico del bróker insuficiente para entrenar')
                 tick = self.gateway.tick(symbol, now)
-                spread = (tick.ask-tick.bid)/((tick.ask+tick.bid)/2)
                 account, _ = self.gateway.account()
                 virtual=mt5_performance.capital(self.owner,account,self.gateway.positions())
                 equity=virtual['equity'] if virtual else account.equity
+                contract = broker_replay.capture_contract(self.api,symbol,account,self.config,tick,self.clock_skew)
                 def optimize():
                     scores = score_series(cfg.id, data, resample(data, TREND_STEP[cfg.id]))
-                    seconds = INTERVAL_SECONDS[cfg.work_interval]
-                    return training.optimize(cfg.id, data, scores, atr_series(data, cfg.atr_period), spread,
-                                             max(1, cfg.max_hold_seconds//seconds), max(1, cfg.cooldown_seconds//seconds),
-                                             equity*self.config['risk_pct'], equity,
-                                             overext_atr=cfg.overext_atr)
+                    result = broker_replay.optimize(cfg,data,scores,atr_series(data,cfg.atr_period),contract,
+                        initial=equity,risk_pct=self.config['risk_pct'],
+                        max_open_risk_pct=self.config['max_open_risk_pct'],
+                        max_daily_loss_pct=self.config['max_daily_loss_pct'],engine_version=training.ENGINE_VERSION)
+                    result['source'] = dict(provider='mt5',symbol=symbol,account=self.owner)
+                    return result
                 self.training_job = (key, self.worker.submit(optimize))
             except Exception as exc:
                 save(self.owner+'params:'+key, dict(at=int(now), engineVersion=training.ENGINE_VERSION, applied=False, reason=str(exc)))
@@ -235,7 +356,7 @@ class DemoEngine:
         self.last_performance = now
         try:
             info = mt5_performance.sync_info(self.owner)
-            full = now-info['lastFull'] >= 86400
+            full = now-info['lastFull'] >= 86400 or not mt5_performance.entry_readiness(self.owner, now)['reconciled']
             start = 0 if full else max(0, info['updatedAt']-86400)
             # Algunos servidores fechan ejecuciones con su reloj local adelantado.
             # El margen incluye esas ejecuciones ya existentes, nunca órdenes futuras.
@@ -244,7 +365,9 @@ class DemoEngine:
                 raise DemoOnlyError('No se ha podido sincronizar el historial de MT5')
             positions = self.gateway.positions()
             account, _ = self.gateway.account()
-            mt5_performance.ingest(self.owner, account, positions, deals, now, full)
+            mt5_performance.ingest(self.owner, account, positions, deals, now, full,
+                                   clock_offset=(getattr(self, 'clock_skew', 0)
+                                       if getattr(self,'_clock_confirmed',True) else None))
         except Exception as exc:
             mt5_performance.sync_error(self.owner, str(exc))
 
@@ -256,6 +379,7 @@ class DemoEngine:
         self.update_clock_skew()
         now = time.time()
         positions = self.gateway.positions()
+        self.reconcile_intents(positions, now)
         old_positions = read(self.owner+'last_positions', {})
         tickets = {str(p.ticket): p.symbol for p in positions if p.magic in MAGICS.values()}
         for ticket, symbol in old_positions.items():
@@ -264,7 +388,11 @@ class DemoEngine:
         save(self.owner+'last_positions', tickets)
         self.manage(positions, now)
         self.sync_performance(now)
-        virtual=mt5_performance.capital(self.owner,account,positions)
+        # Management may have closed a position. Publish and size from the
+        # current broker read, never the pre-management position list.
+        positions = self.gateway.positions()
+        account, terminal = self.gateway.account()
+        virtual=mt5_performance.capital(self.owner,account,positions,now=now)
         equity=virtual['equity'] if virtual else account.equity
         day_key = self.owner+f'day:{int(now//86400)}'
         daily = read(day_key, dict(equity=equity, paused=False))
@@ -273,16 +401,32 @@ class DemoEngine:
         save(day_key, daily)
         enabled = read(self.owner+'enabled', cfg['enabled'])
         allowed = enabled and terminal.trade_allowed and not terminal.tradeapi_disabled and account.trade_allowed and account.trade_expert
+        if virtual and (not virtual['entryReady'] or not self._clock_confirmed):
+            allowed = False
         message = ('Cuenta DEMO activa: buscando señales' if allowed else
                    'Entradas pausadas' if not enabled else 'Activa Algo Trading en MetaTrader 5')
         if daily['paused']:
             message = 'Límite diario alcanzado: nuevas entradas pausadas hasta mañana UTC'
+        if virtual and not virtual['entryReady']:
+            message = virtual['syncError']
+        elif virtual and not self._clock_confirmed:
+            message = 'Verificando avance de ticks y reloj del bróker antes de nuevas entradas'
         position_rows = []
         offset = round(self.clock_skew / 3600) * 3600
         for p in positions:
             tick = api.symbol_info_tick(p.symbol)
             tick_time = getattr(tick, 'time', None)
             opened_time = getattr(p, 'time', None)
+            loss = api.order_calc_profit(p.type,p.symbol,p.volume,p.price_open,p.sl) if p.sl > 0 else None
+            risk_eur = max(0,-loss)*1.1 if (account.currency == 'EUR' and isinstance(loss,(int,float)) and math.isfinite(loss)) else None
+            info = api.symbol_info(p.symbol)
+            nominal_eur = None
+            contract_size = getattr(info,'trade_contract_size',None)
+            if account.currency == 'EUR' and isinstance(contract_size,(int,float)) and math.isfinite(contract_size):
+                if getattr(info,'currency_base',None) == 'EUR':
+                    nominal_eur = p.volume*contract_size
+                elif getattr(info,'currency_profit',None) == 'EUR':
+                    nominal_eur = p.volume*contract_size*p.price_open
             position_rows.append(dict(
                 ticket=p.ticket, symbol=p.symbol,
                 bot=next((b for b,m in MAGICS.items() if m==p.magic), 'manual/otro'),
@@ -290,7 +434,9 @@ class DemoEngine:
                 entry=p.price_open, currentPrice=getattr(p, 'price_current', None),
                 openedAt=int(opened_time-offset) if isinstance(opened_time, (int, float)) else None,
                 priceAt=int(tick_time-offset) if isinstance(tick_time, (int, float)) else None,
-                quantityUnit='lots', sl=p.sl, tp=p.tp, pnl=p.profit))
+                quantityUnit='lots', sl=p.sl, tp=p.tp, pnl=p.profit,
+                riskEUR=risk_eur,notionalEUR=nominal_eur,
+                exposureKnown=nominal_eur is not None))
         STATE.update(configured=True, connected=True, demo=True, server=account.server,
                      currency=account.currency, balance=virtual['balance'] if virtual else account.balance, equity=equity,
                      session=virtual,brokerBalance=account.balance,brokerEquity=account.equity,
@@ -299,7 +445,10 @@ class DemoEngine:
                      probationRiskPct=round(cfg['risk_pct']*learning.PROBATION_SIZE*100, 6),
                      maxPositions=cfg['max_positions'], updatedAt=int(now),
                      positions=position_rows,
-                     diagnostics=dict(self.diagnostics), training=self.training_job[0] if self.training_job else None)
+                     diagnostics=dict(self.diagnostics), riskDiagnostics=dict(self.risk_diagnostics),
+                     clockOffsetSeconds=self.clock_skew, clockConfirmed=self._clock_confirmed,
+                     training=self.training_job[0] if self.training_job else None)
+        self.reconcile_portfolio_reservations(positions,now)
         candidates = [(bot, cfg['symbols'][symbol]) for bot in ALL_BOTS for symbol in bot.universe if symbol in cfg['symbols']]
         self.training(candidates, now)
         if not allowed or daily['paused'] or now-self.last_scan < 60:
@@ -317,7 +466,10 @@ class DemoEngine:
                 if self.uncertain(symbol):
                     raise DemoOnlyError('Respuesta de orden incierta: revisar MT5 antes de continuar en este símbolo')
                 params = read(self.owner+'params:'+key, {})
-                p = params.get('params', {}) if params.get('applied') and params.get('engineVersion') == training.ENGINE_VERSION else {}
+                p = params.get('params', {}) if (params.get('applied') and params.get('engineVersion') == training.ENGINE_VERSION
+                    and params.get('brokerReplayVersion') == broker_replay.VERSION
+                    and params.get('source', {}).get('account') == self.owner
+                    and params.get('source', {}).get('symbol') == symbol) else {}
                 if bot.require_validation and not p:
                     raise DemoOnlyError('Esperando validación sobre histórico MT5')
                 probation = not bool(p)
@@ -335,7 +487,7 @@ class DemoEngine:
                         raise DemoOnlyError('Límite de posiciones a prueba alcanzado')
                 work = self.bars(symbol, bot.work_interval)
                 higher = self.bars(symbol, bot.trend_interval)
-                if len(work) < 60 or now-work[-1]['time'] > 3*INTERVAL_SECONDS[bot.work_interval]+60:
+                if len(work) < 60 or now+self.clock_skew-work[-1]['time'] > 3*INTERVAL_SECONDS[bot.work_interval]+60:
                     raise DemoOnlyError('Velas insuficientes o antiguas')
                 scores = score_series(bot.id, work, higher)
                 threshold = p.get('entryThreshold', bot.entry_threshold)
@@ -355,11 +507,39 @@ class DemoEngine:
                     raise DemoOnlyError('Precio alejado de la señal')
                 bar = work[-1]['time']
                 comment = f"{'cxp' if probation else 'cx'}-{bot.id}-{bar}"
+                current_virtual=mt5_performance.capital(self.owner,account,current_positions,now=time.time())
+                if current_virtual and not current_virtual['entryReady']:
+                    raise DemoOnlyError(current_virtual['syncError'])
                 request, risk = self.gateway.prepare_entry(symbol, direction, atr,
                     p.get('slAtr', bot.sl_atr), p.get('tpAtr', bot.tp_atr), MAGICS[bot.id], comment, time.time(),
                     risk_mult=learning.PROBATION_SIZE if probation else 1.0,
-                    virtual_equity=(mt5_performance.capital(self.owner,account,current_positions) or {}).get('equity'))
-                result = self.submit(f'entry:{bot.id}:{symbol}:{bar}', symbol, request)
+                    virtual_equity=(current_virtual or {}).get('equity'))
+                if self.gateway.last_entry_diagnostics:
+                    self.risk_diagnostics[key] = dict(self.gateway.last_entry_diagnostics)
+                portfolio_token = None
+                if request:
+                    if account.currency != 'EUR':
+                        raise DemoOnlyError('Sin conversión monetaria verificada a EUR para el riesgo global')
+                    loss = api.order_calc_profit(request['type'],symbol,request['volume'],request['price'],request['sl'])
+                    if loss is None or not math.isfinite(loss):
+                        raise DemoOnlyError('Riesgo monetario global desconocido')
+                    info = api.symbol_info(symbol)
+                    contract_size = getattr(info,'trade_contract_size',None)
+                    nominal_eur = None
+                    if isinstance(contract_size,(int,float)) and math.isfinite(contract_size) and contract_size > 0:
+                        if getattr(info,'currency_base',None) == 'EUR':
+                            nominal_eur = request['volume']*contract_size
+                        elif getattr(info,'currency_profit',None) == 'EUR':
+                            nominal_eur = request['volume']*contract_size*request['price']
+                    proposal = portfolio_risk.assess(symbol,'long' if direction > 0 else 'short',
+                        max(0,-loss)*1.1,nominal_eur,source='mt5',bot_id=bot.id,reserve=True)
+                    if not proposal['allowed']:
+                        raise DemoOnlyError(proposal['reason'])
+                    portfolio_token = proposal['token']
+                    self.risk_diagnostics.setdefault(key,{}).update(
+                        portfolioPolicy=proposal.get('policyVersion'),notionalEUR=nominal_eur,
+                        exposureWarning=None if nominal_eur is not None else 'Nocional EUR sin conversión verificada')
+                result = self.submit(f'entry:{bot.id}:{symbol}:{bar}', symbol, request, portfolio_token=portfolio_token)
                 if result is not None and result.retcode in (api.TRADE_RETCODE_DONE, api.TRADE_RETCODE_DONE_PARTIAL):
                     for pos in self.gateway.positions():
                         if pos.symbol == symbol and pos.magic == MAGICS[bot.id]:
@@ -372,6 +552,8 @@ class DemoEngine:
                     self.diagnostics[key] = 'Orden ya procesada, rechazada o pendiente de reconciliación'
             except DemoOnlyError as exc:
                 self.diagnostics[key] = str(exc)
+                if exc.details:
+                    self.risk_diagnostics[key] = exc.details
             except Exception as exc:
                 self.diagnostics[key] = 'Error de evaluación: '+str(exc)
 

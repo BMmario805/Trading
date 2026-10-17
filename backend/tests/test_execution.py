@@ -100,19 +100,22 @@ class PersistenceTests(unittest.TestCase):
         with patch.object(learning, 'refresh'):
             self.bot._close(pos, pos.entry_price + 2, 'test')
         with bots._conn() as con:
-            row = con.execute('SELECT initial_risk_dist, pnl, qty FROM bot_trades').fetchone()
+            row = con.execute('SELECT initial_risk_dist, pnl, qty, economic_risk_dist FROM bot_trades').fetchone()
             balance = con.execute('SELECT balance FROM bot_state WHERE bot=?', ('scalper',)).fetchone()[0]
-        self.assertAlmostEqual(row[1] / (row[0] * row[2]), .5)
+        self.assertEqual(row[0], 4)  # mover el stop no reescribe el riesgo original
+        self.assertGreater(row[3], row[0])  # la nueva base incluye todas las fricciones
+        self.assertLess(row[1] / (row[3] * row[2]), .5)
         self.assertEqual(balance, self.bot.balance)
         result = learning.analyze('scalper')
         self.assertIn('BTC', result['bySymbol'])
+        self.assertEqual(result['bySymbol']['BTC']['expectancyR'], round(row[1]/(row[3]*row[2]), 3))
 
     def test_live_stop_uses_current_price(self):
         pos = self.open_position()
         with patch.object(bots.market_data, 'get_price', AsyncMock(return_value=dict(price=90, time=time.time()))), \
              patch.object(self.bot, '_close') as close:
             asyncio.run(self.bot._manage_positions())
-        self.assertAlmostEqual(close.call_args.args[1], 90 * (1 - .0005 / 2))
+        self.assertAlmostEqual(close.call_args.args[1], 90 * (1 - .0005 / 2) * (1 - .0002))
 
     def test_stale_quote_cannot_close(self):
         self.open_position()
@@ -152,7 +155,10 @@ class PersistenceTests(unittest.TestCase):
         self.bot.day_utc -= 1
         with patch.object(learning, 'refresh'):
             self.bot._close(pos, pos.entry_price - 2, 'test')
-        self.assertAlmostEqual(self.bot.daily_pnl(), -2 * pos.qty)
+        self.assertLess(self.bot.daily_pnl(), -2 * pos.qty)
+        with bots._conn() as con:
+            recorded = con.execute('SELECT pnl FROM bot_trades WHERE id=?', (pos.id,)).fetchone()[0]
+        self.assertAlmostEqual(self.bot.daily_pnl(), recorded)
 
 
 if __name__ == '__main__':

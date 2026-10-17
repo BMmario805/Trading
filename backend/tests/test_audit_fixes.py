@@ -207,14 +207,14 @@ class ProbationSizingTests(TemporaryDatabaseTests):
     def test_probation_risk_cannot_be_amplified_above_configured_fraction(self):
         bot = bots.TradingBot(bots.SCALPER)
         pos = self.open_probation(bot, learn_mult=1.5, p_win=.99)
-        risk_with_spread = pos.qty * (pos.r_dist + 100 * bot.spread_pct(bots.SYMBOLS_BY_ID['BTC']) / 2)
+        risk_with_spread = pos.initial_risk()
         self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .35)
 
     def test_loss_streak_can_reduce_probation_risk_further(self):
         bot = bots.TradingBot(bots.SCALPER)
         bot.consec_losses = 2
         pos = self.open_probation(bot)
-        risk_with_spread = pos.qty * (pos.r_dist + .025)
+        risk_with_spread = pos.initial_risk()
         self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .175)
 
     def test_restart_preserves_probation_slots(self):

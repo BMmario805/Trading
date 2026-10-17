@@ -1,24 +1,25 @@
 """Entrenamiento de los bots: backtest + optimización walk-forward.
 
-Para cada símbolo se descarga histórico real, se calcula UNA vez la serie de
-señal (la misma función que usa el bot en vivo) y se prueba una rejilla de
-parámetros de ejecución (umbral de entrada, SL, TP y trailing en múltiplos
-de ATR) sobre el 70 % inicial de los datos. El mejor conjunto se valida
-sobre el 30 % final que la optimización nunca vio (walk-forward), y solo se
-aplica al bot en vivo si la validación es rentable — la defensa estándar
-contra el sobreajuste. Los parámetros aplicados se guardan en SQLite
-(tabla bot_params) y el bot los usa por símbolo.
+Una rejilla acotada se selecciona en el 45% inicial. Se comprueba en tres
+bloques cronológicos posteriores, con embargo, costes completos, vecindad
+e incertidumbre, antes de consultar una sola vez el holdout final del 20%.
+La rentabilidad de un backtest no garantiza ventaja futura; repetir ajustes
+sobre el mismo holdout lo convierte en datos conocidos. Se registra versión,
+número de pruebas y protocolo; las versiones anteriores no se promocionan.
 
 El spread y la sobreextensión se filtran en todos los tramos. Para XAUUSD
 se priorizan las velas del terminal MT5 DEMO autorizado. Sin terminal se
 usará un proxy PAXG/GC solamente informativo, sin validar el spot.
-No se dispone de tasas históricas de financiación o swaps en el simulador.
+Los costes de financiación son escenarios explícitos, no swaps históricos.
 """
 
 import asyncio
 import json
 import logging
+import math
+import random
 import sqlite3
+import statistics
 import time
 from itertools import product
 
@@ -28,6 +29,7 @@ from .config import SYMBOLS_BY_ID, Symbol
 from .history import DB_PATH
 from .database import Connection
 from .execution import closed_candles, fresh_signal
+from .economics import cost_profile, execution_fill, net_outcome, planned_trade, ECONOMICS_VERSION
 from .indicators import atr_series
 from .strategy import TREND_STEP, resample, score_series, extension_series
 
@@ -35,14 +37,13 @@ log = logging.getLogger("training")
 
 # Rejilla de parámetros de ejecución (los periodos de los indicadores se
 # fijan: cada parámetro libre extra multiplica el riesgo de sobreajuste).
-# Incluye umbrales bajos (0.20/0.25): si la validación los sostiene, el bot
-# opera más a menudo; si no, el walk-forward los descarta solo.
-GRID_THRESHOLD = (0.20, 0.25, 0.30, 0.375, 0.45, 0.55, 0.65, 0.75)
-GRID_SL = (1.0, 1.5, 2.0, 2.5, 3.0)
-GRID_TP = (1.5, 2.25, 3.0, 4.0, 6.0)
-GRID_TRAIL = (0.8, 1.2, 1.6, 2.4)
+# Rejilla pequeña y predefinida: se registra cuántas variantes se probaron.
+GRID_THRESHOLD = (0.30, 0.45, 0.60, 0.75)
+GRID_SL = (1.5, 2.0, 3.0)
+GRID_TP = (2.25, 3.0, 4.5)
+GRID_TRAIL = (1.2, 2.0)
 
-TRAIN_SPLIT = 0.7
+TRAIN_SPLIT = 0.45
 # Embargo entre entrenamiento y validación: se descartan velas pegadas al
 # corte para que ninguna posición/indicador del tramo de entrenamiento
 # contamine la validación (purged walk-forward, práctica estándar actual)
@@ -51,7 +52,8 @@ MIN_TRAIN_TRADES = {
     "flow": 10, "scalper": 20, "swing": 8, "trend": 6, "meanrev": 8, "orb": 10, "squeeze": 8,
 }
 MIN_VALIDATION_TRADES = 8
-ENGINE_VERSION = 3
+ENGINE_VERSION = 4
+VALIDATION_PROTOCOL = 'fixed-origin-3-blocks-holdout20-net-v1'
 
 # Segundos por vela de cada intervalo de trabajo
 WORK_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
@@ -240,6 +242,9 @@ def simulate(
     end: int,
     extensions: list[float | None] | None = None,
     overext_atr: float = float("inf"),
+    cost_model: dict | None = None,
+    allow_short: bool = True,
+    risk_multipliers: list[float] | None = None,
 ) -> dict:
     """Backtest de una configuración sobre candles[start:end]. Sin capitalizar
     (tamaño fijo por operación) para que las métricas sean comparables.
@@ -252,18 +257,50 @@ def simulate(
     gross_win = gross_loss = 0.0
     equity_peak = equity = 0.0
     max_dd = 0.0
+    trade_pnls: list[float] = []
+    total_fees = total_carry = turnover = 0.0
+    model = dict(cost_model or {})
+    fee_rate = model.get('feeRate', 0.0)
+    slippage = model.get('slippageRate', 0.0)
+    carry_rate = model.get('carryDailyRate', 0.0)
+    spread_pct = model.get('spreadPct', spread_pct)
+    for value in (fee_rate, slippage, carry_rate, spread_pct):
+        if not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value < 1:
+            raise ValueError('Coste no finito o fuera de rango')
 
     direction = 0        # 0 sin posición, +1 largo, -1 corto
     entry = sl = tp = qty = atr0 = best = 0.0
     bars_held = 0
     cooldown = 0
+    entry_fee = entry_time = exit_time = 0.0
+
+    def carry_at(stamp: float) -> float:
+        return entry * qty * carry_rate * max(0, stamp - entry_time) / 86400
+
+    def exit_fill(price: float) -> float:
+        return execution_fill(price, direction, False, spread_pct, slippage)
+
+    def break_even_price(current_price: float) -> float:
+        if cost_model is None:
+            return entry + direction * current_price * spread_pct
+        per_unit = (entry_fee + carry_at(exit_time)) / qty
+        fill = (direction * entry + per_unit) / (direction - fee_rate)
+        mid = fill / exit_fill(1.0)
+        # Un stop de equilibrio no se coloca por delante del mercado.
+        return sl if (mid - current_price) * direction > 0 else mid
 
     def close(price: float) -> None:
         nonlocal pnl, wins, losses, gross_win, gross_loss, direction
         nonlocal equity, equity_peak, max_dd, cooldown
-        p = (price - entry) * qty * direction
+        nonlocal total_fees, total_carry, turnover
+        carry = carry_at(exit_time)
+        p = net_outcome(entry, price, qty, direction, entry_fee, fee_rate, carry=carry)
+        total_fees += entry_fee + price * qty * fee_rate
+        total_carry += carry
+        turnover += (entry + price) * qty
+        trade_pnls.append(p)
         pnl += p
-        if p >= 0:
+        if p > 0:
             wins += 1
             gross_win += p
             # tras ganar, cooldown corto (mismo criterio que el bot en vivo)
@@ -280,46 +317,60 @@ def simulate(
     end = min(end, len(candles))
     for i in range(max(start, 1), end):
         c = candles[i]
-        half = c["close"] * spread_pct / 2
+        exit_time = c['time']
 
         if direction:
             bars_held += 1
             if direction > 0:
                 if c["low"] <= sl:            # el stop primero: es lo conservador
-                    close(min(sl, c["open"]) - half)
+                    close(exit_fill(min(sl, c["open"])))
                     continue
                 if c["high"] >= tp:
-                    close(tp - half)
+                    close(exit_fill(tp))
                     continue
                 best = max(best, c["high"])
                 if best >= entry + sl_atr * atr0:   # breakeven + trailing
                     # el trailing se estrecha tras 2R (protege la ganancia)
                     tr = trail_atr * (0.75 if best >= entry + 2 * sl_atr * atr0 else 1.0)
-                    sl = max(sl, entry + 2 * half, best - tr * atr0)
+                    sl = max(sl, break_even_price(c['close']), best - tr * atr0)
             else:
                 if c["high"] >= sl:
-                    close(max(sl, c["open"]) + half)
+                    close(exit_fill(max(sl, c["open"])))
                     continue
                 if c["low"] <= tp:
-                    close(tp + half)
+                    close(exit_fill(tp))
                     continue
                 best = min(best, c["low"])
                 if best <= entry - sl_atr * atr0:
                     tr = trail_atr * (0.75 if best <= entry - 2 * sl_atr * atr0 else 1.0)
-                    sl = min(sl, entry - 2 * half, best + tr * atr0)
+                    sl = min(sl, break_even_price(c['close']), best + tr * atr0)
+            # Drawdown también incluye flotante y el coste de liquidación.
+            floating = net_outcome(entry, exit_fill(c['close']), qty, direction,
+                                   entry_fee, fee_rate, carry=carry_at(exit_time))
+            equity_peak = max(equity_peak, equity + floating)
+            max_dd = max(max_dd, equity_peak - equity - floating)
             # señal claramente contraria (histéresis 0.75×umbral, como en vivo)
             if direction and scores[i] * direction <= -0.75 * threshold:
-                close(c["close"] - half if direction > 0 else c["close"] + half)
+                # Una decisión al cierre solo se ejecuta en la siguiente apertura.
+                if i + 1 < end:
+                    exit_time = candles[i + 1]['time']
+                    close(exit_fill(candles[i + 1]['open']))
+                else:
+                    close(exit_fill(c['close']))
                 continue
             if direction and bars_held >= max_hold_bars:
-                close(c["close"] - half if direction > 0 else c["close"] + half)
+                if i + 1 < end:
+                    exit_time = candles[i + 1]['time']
+                    close(exit_fill(candles[i + 1]['open']))
+                else:
+                    close(exit_fill(c['close']))
             continue
 
         if cooldown:
             cooldown -= 1
             continue
         s, a = scores[i], atrs[i]
-        if a is None or a <= 0 or abs(s) < threshold:
+        if a is None or not math.isfinite(a) or a <= 0 or not math.isfinite(s) or abs(s) < threshold or (s < 0 and not allow_short):
             continue
         # solo con señal FRESCA: el cruce del umbral ocurrió en las últimas
         # 3 velas (la misma ventana anti-madurez que aplica el bot en vivo)
@@ -338,17 +389,31 @@ def simulate(
         if abs(fill - c["close"]) > a:
             continue
         direction = 1 if s > 0 else -1
-        entry = fill + fill * spread_pct / 2 * direction
+        entry = execution_fill(fill, direction, True, spread_pct, slippage)
         atr0 = a
         sl = entry - direction * sl_atr * a
         tp = entry + direction * tp_atr * a
-        qty = min(risk_amount / (sl_atr * a + entry * spread_pct / 2), notional_cap / entry)
+        unit = planned_trade(entry, sl, tp, 1, direction, fee_rate, slippage, spread_pct,
+                             carry=entry * carry_rate * max_hold_bars * max(1, candles[min(i + 1, end - 1)]['time'] - c['time']) / 86400)
+        if cost_model is not None and not unit['viable']:
+            direction = 0
+            continue
+        # Con un modelo declarado el riesgo incluye la ida y vuelta y carry.
+        unit_risk = unit['netRisk'] if cost_model is not None else sl_atr * a + entry * spread_pct / 2
+        multiplier = min(1.0, max(0.0, risk_multipliers[i])) if risk_multipliers is not None else 1.0
+        if multiplier <= 0:
+            direction = 0
+            continue
+        qty = min(risk_amount * multiplier / max(unit_risk, 1e-12), notional_cap / entry)
+        entry_fee = entry * qty * fee_rate
+        entry_time = candles[i + 1]['time']
         best = entry
         bars_held = 0
 
     if direction:
         final_price = candles[end - 1]["close"]
-        close(final_price * (1 - direction * spread_pct / 2))
+        exit_time = candles[end - 1]['time']
+        close(exit_fill(final_price))
     n = wins + losses
     return {
         "expectancy": round(pnl / n, 4) if n else None,
@@ -358,12 +423,68 @@ def simulate(
         "winRate": round(wins / n * 100, 1) if n else None,
         "profitFactor": round(gross_win / gross_loss, 2) if gross_loss > 0 else None,
         "maxDrawdown": round(max_dd, 2),
+        "fees": round(total_fees, 6),
+        "carry": round(total_carry, 6),
+        "turnover": round(turnover, 4),
+        "tradePnls": trade_pnls,
+        "costModel": model or {'mode': 'legacy-spread-only'},
     }
 
 
 # ---------------------------------------------------------------------------
 # Optimización walk-forward
 # ---------------------------------------------------------------------------
+
+
+def temporal_protocol(length: int, max_hold_bars: int = 1) -> dict:
+    """Origen fijo: selección 45%, tres bloques hasta 80%, holdout final 20%.
+
+    Cada bloque empieza sin posiciones. El embargo es al menos la permanencia
+    máxima; los indicadores pueden consultar exclusivamente su pasado conocido.
+    El holdout nunca interviene en ranking, vecindad ni ajuste de parámetros.
+    """
+    select_end, development_end = int(length * .45), int(length * .8)
+    embargo = max(EMBARGO_BARS, max_hold_bars)
+    boundaries = [select_end + (development_end - select_end) * i // 3 for i in range(4)]
+    folds = [(min(a + embargo, b), b) for a, b in zip(boundaries, boundaries[1:])]
+    return dict(version=VALIDATION_PROTOCOL, selection=(0, select_end), folds=folds,
+                holdout=(min(development_end + embargo, length), length), embargo=embargo,
+                finalHoldoutFraction=.2, selectionFrozenBeforeValidation=True)
+
+
+def expectancy_uncertainty(pnls: list[float], samples: int = 512, seed: int = 417) -> dict:
+    """Intervalo bootstrap por bloques de cierres; descriptivo, no prueba causal.
+
+    Conserva algo de dependencia entre cierres consecutivos. No se presenta como
+    DSR/PBO ni corrige la selección entre múltiples símbolos/intervalos.
+    """
+    n = len(pnls)
+    if n < 2:
+        return dict(sample=n, mean=pnls[0] if n else None, lower95=None, upper95=None,
+                    method='circular-trade-block-bootstrap', selectionAdjusted=False)
+    rng = random.Random(seed)
+    block = max(2, int(math.sqrt(n)))
+    means = []
+    for _ in range(samples):
+        draw = []
+        while len(draw) < n:
+            offset = rng.randrange(n)
+            draw.extend(pnls[(offset + j) % n] for j in range(block))
+        means.append(statistics.fmean(draw[:n]))
+    means.sort()
+    return dict(sample=n, mean=statistics.fmean(pnls), lower95=means[int(samples * .025)],
+                upper95=means[min(samples - 1, int(samples * .975))], blockLength=block,
+                method='circular-trade-block-bootstrap', selectionAdjusted=False,
+                warning='Intervalo descriptivo; no corrige selección ni garantiza independencia')
+
+
+def compact_metrics(metrics: dict) -> dict:
+    return {k: v for k, v in metrics.items() if k not in ('tradePnls', 'costModel')}
+
+
+def stressed_costs(model: dict, multiplier: float = 2) -> dict:
+    return {**model, **{key: min(.99, model.get(key, 0) * multiplier)
+                        for key in ('feeRate', 'slippageRate', 'spreadPct', 'carryDailyRate')}}
 
 
 def optimize(
@@ -377,25 +498,36 @@ def optimize(
     risk_amount: float,
     notional_cap: float,
     overext_atr: float = float("inf"),
+    cost_model: dict | None = None,
+    allow_short: bool = True,
 ) -> dict:
     extensions = extension_series(candles)
-    split = int(len(candles) * TRAIN_SPLIT)
+    protocol = temporal_protocol(len(candles), max_hold_bars)
+    split = protocol['selection'][1]
     min_trades = MIN_TRAIN_TRADES.get(bot_id, 8)
+    model = dict(cost_model or cost_profile('lab', 'cripto'))
+    model['spreadPct'] = spread_pct
+    if any(hi - lo < 10 for lo, hi in protocol['folds'] + [protocol['holdout']]):
+        return dict(ok=False, applied=False, engineVersion=ENGINE_VERSION,
+                    reason='Histórico insuficiente para tres bloques y holdout con embargo', protocol=protocol)
+
+    def evaluate(cfg: tuple, lo: int, hi: int, costs: dict | None = None) -> dict:
+        th, sl, tp, tr = cfg
+        return simulate(candles, scores, atrs, spread_pct, th, sl, tp, tr,
+                        max_hold_bars, cooldown_bars, risk_amount, notional_cap,
+                        lo, hi, extensions, overext_atr, costs or model, allow_short)
 
     best_cfg: tuple | None = None
     best_score = float("-inf")
     best_train: dict | None = None
+    trials = 0
     for th, sl, tp, tr in product(GRID_THRESHOLD, GRID_SL, GRID_TP, GRID_TRAIL):
         # recompensa >= riesgo inicial, salvo en reversión a la media (su perfil
         # clásico es ganancia corta y frecuente con stop amplio)
         if tp < sl and bot_id != "meanrev":
             continue
-        m = simulate(
-            candles, scores, atrs, spread_pct, th, sl, tp, tr,
-            max_hold_bars, cooldown_bars, risk_amount, notional_cap,
-            0, split,
-            extensions, overext_atr,
-        )
+        trials += 1
+        m = evaluate((th, sl, tp, tr), 0, split)
         if m["trades"] < min_trades:
             continue
         pf = m["profitFactor"] if m["profitFactor"] is not None else (3.0 if m["pnl"] > 0 else 0.0)
@@ -407,40 +539,47 @@ def optimize(
             best_score, best_cfg, best_train = score, (th, sl, tp, tr), m
 
     if best_cfg is None:
-        return {"ok": False, "engineVersion": ENGINE_VERSION, "reason": "ninguna configuración rentable en el tramo de entrenamiento"}
+        return dict(ok=False, applied=False, engineVersion=ENGINE_VERSION, costVersion=ECONOMICS_VERSION,
+                    protocol=protocol, trials=trials, costModel=model,
+                    reason='ninguna configuración rentable neta en el tramo de selección')
 
     th, sl, tp, tr = best_cfg
-    val = simulate(
-        candles, scores, atrs, spread_pct, th, sl, tp, tr,
-        max_hold_bars, cooldown_bars, risk_amount, notional_cap,
-        min(split + EMBARGO_BARS, len(candles)), len(candles),
-        extensions, overext_atr,
-    )
-    val_start = min(split + EMBARGO_BARS, len(candles))
-    middle = (val_start + len(candles)) // 2
-    segments = [simulate(
-        candles, scores, atrs, spread_pct, th, sl, tp, tr,
-        max_hold_bars, cooldown_bars, risk_amount, notional_cap, lo, hi,
-        extensions, overext_atr,
-    ) for lo, hi in ((val_start, middle), (middle, len(candles)))]
-    stress = simulate(
-        candles, scores, atrs, spread_pct * 2, th, sl, tp, tr,
-        max_hold_bars, cooldown_bars, risk_amount, notional_cap, val_start, len(candles),
-        extensions, overext_atr,
-    )
-    accepted = (val["pnl"] > 0 and val["trades"] >= MIN_VALIDATION_TRADES
-                and all(m["pnl"] > 0 and m["trades"] >= 2 for m in segments)
-                and stress["pnl"] > 0 and stress["trades"] >= MIN_VALIDATION_TRADES)
+    segments = [evaluate(best_cfg, lo, hi) for lo, hi in protocol['folds']]
+    stress_segments = [evaluate(best_cfg, lo, hi, stressed_costs(model)) for lo, hi in protocol['folds']]
+    # Los vecinos se comprueban solo antes del holdout, sin elegir el mejor vecino.
+    neighbor_configs = [(th * .9, sl, tp, tr), (min(.95, th * 1.1), sl, tp, tr),
+                        (th, sl * 1.1, tp * 1.1, tr)]
+    neighbors = [dict(params=dict(entryThreshold=c[0], slAtr=c[1], tpAtr=c[2], trailAtr=c[3]),
+                      pnl=sum(evaluate(c, lo, hi)['pnl'] for lo, hi in protocol['folds']))
+                 for c in neighbor_configs]
+    uncertainty = expectancy_uncertainty([p for m in segments for p in m['tradePnls']])
+    # Única consulta del tramo final una vez congelados configuración y pruebas.
+    val = evaluate(best_cfg, *protocol['holdout'])
+    stress = evaluate(best_cfg, *protocol['holdout'], stressed_costs(model))
+    accepted = (val['pnl'] > 0 and val['trades'] >= MIN_VALIDATION_TRADES
+                and sum(m['trades'] for m in segments) >= 20
+                and all(m['pnl'] > 0 and m['trades'] >= 2 for m in segments)
+                and all(m['pnl'] > 0 for m in stress_segments)
+                and stress['pnl'] > 0 and stress['trades'] >= MIN_VALIDATION_TRADES
+                and sum(n['pnl'] > 0 for n in neighbors) >= 2
+                and uncertainty.get('lower95') is not None and uncertainty['lower95'] > 0)
     return {
         "ok": True,
         "params": {"entryThreshold": th, "slAtr": sl, "tpAtr": tp, "trailAtr": tr},
-        "train": best_train,
-        "validation": val,
+        "train": compact_metrics(best_train),
+        "validation": compact_metrics(val),
         "applied": accepted,
-        "segments": segments,
-        "stress": stress,
+        "segments": [compact_metrics(m) for m in segments],
+        "stress": compact_metrics(stress),
+        "stressSegments": [compact_metrics(m) for m in stress_segments],
+        "neighbors": neighbors,
+        "uncertainty": uncertainty,
+        "protocol": protocol,
+        "trials": trials,
+        "costModel": model,
+        "costVersion": ECONOMICS_VERSION,
         "engineVersion": ENGINE_VERSION,
-        "reason": "Validación y costes reforzados superados" if accepted else "Muestra, consistencia temporal o costes insuficientes",
+        "reason": "Tres bloques, holdout neto, incertidumbre y costes reforzados superados" if accepted else "Muestra, consistencia, incertidumbre, vecindad o costes insuficientes",
         "bars": len(candles),
     }
 
@@ -480,6 +619,7 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
             risk_amount=cfg.initial_balance * cfg.risk_pct,
             notional_cap=cfg.initial_balance * cfg.max_leverage,
             overext_atr=cfg.overext_atr,
+            cost_model=cost_profile('lab', sym.category),
         )
 
     result = await asyncio.to_thread(_run)
@@ -501,7 +641,7 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
                 (
                     cfg.id, sym.id,
                     json.dumps(result["params"]),
-                    json.dumps({k: result.get(k) for k in ("train", "validation", "segments", "stress", "engineVersion", "reason", "source", "proxy")}),
+                    json.dumps({k: result.get(k) for k in ("train", "validation", "segments", "stress", "stressSegments", "neighbors", "uncertainty", "protocol", "trials", "costModel", "costVersion", "engineVersion", "reason", "source", "proxy")}),
                     int(result["applied"]), int(time.time()),
                 ),
             )

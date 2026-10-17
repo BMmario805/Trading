@@ -6,6 +6,8 @@ Los demás bots mantienen sus escuelas específicas. Las funciones devuelven
 una puntuación en [-1, 1] por vela y solo usan información ya disponible.
 """
 
+import math
+
 from .flow import flow_scores, chaikin_money_flow
 
 from .indicators import (
@@ -76,6 +78,37 @@ TREND_STEP = {
 
 def _clip(v: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, v))
+
+
+def volatility_risk_series(candles: list[dict], short: int = 24, long: int = 120) -> list[float]:
+    """Reduce riesgo cuando sube la volatilidad reciente; nunca añade palanca.
+
+    Ventanas fijas de retornos logarítmicos ya observados. Es una regla de
+    investigación, no una estimación de probabilidad de éxito. Las unidades
+    son velas: sus resultados intradía requieren validación independiente.
+    """
+    if short < 2 or long <= short:
+        raise ValueError('Ventanas de volatilidad inválidas')
+    returns = [0.0]
+    for previous, current in zip(candles, candles[1:]):
+        returns.append(math.log(current['close'] / previous['close']))
+    total, squared = [0.0], [0.0]
+    for value in returns:
+        total.append(total[-1] + value)
+        squared.append(squared[-1] + value * value)
+    def variance(lo: int, hi: int) -> float:
+        n = hi - lo
+        mean = (total[hi] - total[lo]) / n
+        return max(0.0, (squared[hi] - squared[lo]) / n - mean * mean)
+    out = []
+    for i in range(len(candles)):
+        if i < long:
+            out.append(1.0)
+            continue
+        recent = variance(i - short + 1, i + 1)
+        baseline = variance(i - long + 1, i + 1)
+        out.append(_clip(math.sqrt(baseline / recent), .25, 1.0) if recent > 1e-16 else 1.0)
+    return out
 
 
 def resample(candles: list[dict], step: int) -> list[dict]:

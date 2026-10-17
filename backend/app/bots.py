@@ -8,6 +8,7 @@ El sentimiento se conserva como contexto y en los snapshots.
 import asyncio
 import json
 import logging
+import math
 import sqlite3
 import time
 from dataclasses import dataclass, field, replace
@@ -26,6 +27,7 @@ from .training import ENGINE_VERSION
 from .indicators import atr
 from .strategy import confirmations as strategy_confirmations
 from .strategy import extension_atr, score_series
+from .economics import cost_profile, execution_fill, net_outcome, planned_trade
 
 log = logging.getLogger("bots")
 
@@ -311,7 +313,8 @@ def _conn() -> sqlite3.Connection:
         )"""
     )
     # migraciones: v1 -> atr_entry/best_price, v2 -> snapshot (velas + análisis)
-    for col in ("atr_entry REAL", "best_price REAL", "snapshot TEXT", "initial_risk_dist REAL", "trail_multiple REAL", "quote_to_account REAL"):
+    for col in ("atr_entry REAL", "best_price REAL", "snapshot TEXT", "initial_risk_dist REAL", "trail_multiple REAL", "quote_to_account REAL",
+                "execution_costs TEXT", "entry_fee REAL", "exit_fee REAL", "carry_cost REAL", "economic_risk_dist REAL"):
         try:
             con.execute(f"ALTER TABLE bot_trades ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -352,10 +355,46 @@ class Position:
     reasons: list[str] = field(default_factory=list)
     last_price: float = 0.0
     quote_to_account: float = 1.0
+    execution_costs: dict | None = None  # None conserva el contrato de costes antiguo
+    entry_fee: float = 0.0              # importes en moneda cotizada
+    economic_risk_dist: float | None = None
+
+    def exit_fill(self, price: float) -> float:
+        if self.execution_costs is None:
+            sym = SYMBOLS_BY_ID[self.symbol]
+            return execution_fill(price, self.direction, False,
+                                  SPREAD_PCT.get(sym.category, .0003), 0.0)
+        return execution_fill(price, self.direction, False,
+                              self.execution_costs["spreadPct"], self.execution_costs["slippageRate"])
+
+    def carry_cost(self, now: float | None = None) -> float:
+        if not self.execution_costs:
+            return 0.0
+        elapsed = max(0.0, (time.time() if now is None else now) - self.entry_time)
+        return self.entry_price * self.qty * self.execution_costs["carryDailyRate"] * elapsed / 86400
+
+    def initial_risk(self) -> float:
+        dist = self.economic_risk_dist if self.economic_risk_dist is not None else self.r_dist
+        return self.qty * dist * self.quote_to_account
+
+    def break_even_price(self) -> float | None:
+        """Precio medio de salida que cubre las fricciones actuales del contrato."""
+        if not self.execution_costs:
+            return None  # conservar el trailing histórico de posiciones antiguas
+        fee = self.execution_costs["feeRate"]
+        per_unit = (self.entry_fee + self.carry_cost()) / self.qty
+        sign = 1 if self.direction == "long" else -1
+        fill = (sign * self.entry_price + per_unit) / (sign - fee)
+        factor = self.exit_fill(1.0)
+        return max(0.0, fill / factor)
 
     def unrealized(self, price: float | None = None) -> float:
         p = price if price is not None else self.last_price
         sign = 1.0 if self.direction == "long" else -1.0
+        if self.execution_costs is not None:
+            return net_outcome(self.entry_price, self.exit_fill(p), self.qty, sign,
+                               self.entry_fee, self.execution_costs["feeRate"],
+                               self.quote_to_account, self.carry_cost())
         return (p - self.entry_price) * self.qty * sign * self.quote_to_account
 
     def to_dict(self) -> dict:
@@ -371,6 +410,12 @@ class Position:
             "lastPrice": self.last_price,
             "unrealizedPnl": round(self.unrealized(), 2),
             "reasons": self.reasons,
+            "quoteToAccount": self.quote_to_account,
+            "executionMode": (self.execution_costs or {}).get("mode", "legacy-spread-only"),
+            "costAssumptions": self.execution_costs,
+            "pnlBasis": "estimated-net" if self.execution_costs is not None else "gross",
+            "entryFee": self.entry_fee * self.quote_to_account,
+            "carryCost": self.carry_cost() * self.quote_to_account,
         }
 
 
@@ -523,7 +568,8 @@ class TradingBot:
                 )
             open_rows = con.execute(
                 """SELECT id, symbol, direction, qty, entry_price, entry_time,
-                          sl, tp, reasons, atr_entry, best_price, initial_risk_dist, trail_multiple, quote_to_account FROM bot_trades
+                          sl, tp, reasons, atr_entry, best_price, initial_risk_dist, trail_multiple, quote_to_account,
+                          execution_costs, entry_fee, economic_risk_dist FROM bot_trades
                    WHERE bot = ? AND status = 'open'""",
                 (self.cfg.id,),
             ).fetchall()
@@ -538,6 +584,9 @@ class TradingBot:
                 r_dist=r[11] if r[11] is not None else (r[9] * self.cfg.sl_atr if r[9] else abs(r[4] - r[6])),
                 last_price=r[4],
                 quote_to_account=r[13] if r[13] is not None else 1.0,
+                execution_costs=json.loads(r[14]) if r[14] else None,
+                entry_fee=r[15] or 0.0,
+                economic_risk_dist=r[16],
             )
             self.positions[pos.symbol] = pos
             if any(str(r).startswith("A prueba") for r in pos.reasons):
@@ -603,10 +652,10 @@ class TradingBot:
 
             if pos.direction == "long":
                 if price <= pos.sl:
-                    self._close(pos, price - half_spread, "stop-loss")
+                    self._close(pos, pos.exit_fill(price), "stop-loss")
                     continue
                 if price >= pos.tp:
-                    self._close(pos, pos.tp - half_spread, "take-profit")
+                    self._close(pos, pos.exit_fill(pos.tp), "take-profit")
                     continue
                 pos.best_price = max(pos.best_price, price)
                 # tras avanzar 1R: stop a breakeven y trailing por ATR.
@@ -616,35 +665,45 @@ class TradingBot:
                     trail = pos.trail_atr
                     if pos.best_price >= pos.entry_price + 2 * pos.r_dist:
                         trail *= 0.75
+                    break_even = pos.break_even_price()
+                    if break_even is None:
+                        break_even = pos.entry_price + 2 * half_spread
+                    elif break_even > price:
+                        break_even = pos.sl  # no colocar un stop por delante del mercado
                     new_sl = max(
                         pos.sl,
-                        pos.entry_price + 2 * half_spread,
+                        break_even,
                         pos.best_price - trail * pos.atr_entry,
                     )
                     if new_sl > pos.sl:
                         self._update_stop(pos, new_sl)
             else:
                 if price >= pos.sl:
-                    self._close(pos, price + half_spread, "stop-loss")
+                    self._close(pos, pos.exit_fill(price), "stop-loss")
                     continue
                 if price <= pos.tp:
-                    self._close(pos, pos.tp + half_spread, "take-profit")
+                    self._close(pos, pos.exit_fill(pos.tp), "take-profit")
                     continue
                 pos.best_price = min(pos.best_price, price)
                 if pos.best_price <= pos.entry_price - pos.r_dist:
                     trail = pos.trail_atr
                     if pos.best_price <= pos.entry_price - 2 * pos.r_dist:
                         trail *= 0.75
+                    break_even = pos.break_even_price()
+                    if break_even is None:
+                        break_even = pos.entry_price - 2 * half_spread
+                    elif break_even < price:
+                        break_even = pos.sl
                     new_sl = min(
                         pos.sl,
-                        pos.entry_price - 2 * half_spread,
+                        break_even,
                         pos.best_price + trail * pos.atr_entry,
                     )
                     if new_sl < pos.sl:
                         self._update_stop(pos, new_sl)
 
             if time.time() - pos.entry_time >= self.cfg.max_hold_seconds:
-                exit_p = price - half_spread if pos.direction == "long" else price + half_spread
+                exit_p = pos.exit_fill(price)
                 self._close(pos, exit_p, "tiempo agotado")
 
     def _update_stop(self, pos: Position, new_sl: float) -> None:
@@ -732,7 +791,7 @@ class TradingBot:
                         continue
                     price = tick["price"]
                     half_spread = price * self.spread_pct(sym) / 2
-                    exit_p = price - half_spread if pos.direction == "long" else price + half_spread
+                    exit_p = pos.exit_fill(price)
                     self._close(pos, exit_p, "señal contraria")
                 continue
 
@@ -922,22 +981,37 @@ class TradingBot:
         p_win: float | None = None, meta_note: str | None = None,
         probation_why: str | None = None,
     ) -> None:
+        if not all(math.isfinite(v) for v in (price, atr_val, sl_m, tp_m, trail_m)) or min(price, atr_val, sl_m, tp_m) <= 0:
+            self.diagnostics[sym.id] = {"reason": "Precio, ATR o distancias inválidos", "at": int(time.time())}
+            return
         reasons: list[str] = list(signal["reasons"])
         if sym.id in self.manual_params:
             reasons.append("Parámetros ajustados manualmente; pendientes de revalidación")
-        half_spread = price * self.spread_pct(sym) / 2
-        entry = price + half_spread if direction == "long" else price - half_spread
+        costs = {**cost_profile("lab", sym.category), "spreadPct": self.spread_pct(sym)}
+        entry = execution_fill(price, direction, True, costs["spreadPct"], costs["slippageRate"])
         sl_dist = atr_val * sl_m
         tp_dist = atr_val * tp_m
         if direction == "long":
             sl, tp = entry - sl_dist, entry + tp_dist
         else:
             sl, tp = entry + sl_dist, entry - tp_dist
+        if min(sl, tp) <= 0:
+            self.diagnostics[sym.id] = {"reason": "Stop u objetivo fuera del rango de precios", "at": int(time.time())}
+            return
+        # Escenario de margen simulado: comisión por lado, spread, slippage y
+        # financiación/préstamo sobre TODO el nominal (supuesto conservador).
+        # No acredita préstamo, contrato ni ejecución Spot de estos cortos.
+        horizon_carry = entry * costs["carryDailyRate"] * self.cfg.max_hold_seconds / 86400
+        economy = planned_trade(entry, sl, tp, 1.0, direction, costs["feeRate"],
+                                costs["slippageRate"], costs["spreadPct"], carry=horizon_carry)
+        if not economy["viable"]:
+            self.diagnostics[sym.id] = {"reason": "Objetivo neto no cubre comisión, spread, deslizamiento y financiación",
+                                       "at": int(time.time()), "economics": economy}
+            return
+        reasons.append("Margen simulado; costes conservadores de comisión, spread, deslizamiento y financiación/préstamo")
 
-        # tamaño: riesgo objetivo como fracción del balance (capitaliza según
-        # crece la cuenta), a la mitad tras 2 pérdidas seguidas y modulado por
-        # el multiplicador aprendido del símbolo. Sin topes de presupuesto por
-        # operación: el único límite físico es el margen libre × apalancamiento.
+        # El presupuesto incluye las fricciones previstas y sólo disminuye por
+        # racha, aprendizaje o exploración. El margen limita el nominal simulado.
         scale = self.risk_scale()
         if scale < 1.0:
             reasons.append(
@@ -951,11 +1025,11 @@ class TradingBot:
         if probation_why:
             prob_mult = learning.PROBATION_SIZE
             reasons.insert(0, f"A prueba ({learning.PROBATION_SIZE:.0%} del tamaño): {probation_why}")
-        # tamaño por convicción del meta-modelo (Kelly fraccionado sobre la
-        # probabilidad estimada de éxito de la señal)
+        # Una probabilidad de acierto no mide el beneficio/pérdida esperado.
+        # Sin calibración monetaria sólo puede reducir el riesgo, nunca subirlo.
         meta_mult = 1.0
         if p_win is not None:
-            meta_mult = max(0.5, min(1.4, 0.5 + (p_win - 0.35) * 2.5))
+            meta_mult = max(0.5, min(1.0, 0.5 + (p_win - 0.35) * 2.5))
             reasons.append(
                 f"Meta-modelo: p(éxito)={p_win:.0%} → tamaño ×{meta_mult:.2f}"
                 + (f" ({meta_note})" if meta_note else "")
@@ -968,15 +1042,15 @@ class TradingBot:
                 self.diagnostics[sym.id]={'reason':'Sin conversión a EUR para este mercado','at':int(time.time())}
                 return
         equity = max(0.0, self.balance + sum(p.unrealized() for p in self.positions.values()))
-        open_risk = sum(p.qty * p.r_dist * p.quote_to_account for p in self.positions.values())
-        size_mult = scale * learn_mult * meta_mult
+        open_risk = sum(p.initial_risk() for p in self.positions.values())
+        size_mult = scale * min(1.0, learn_mult) * meta_mult
         if probation_why:
             # El aprendizaje puede reducir el riesgo exploratorio, nunca
             # elevarlo por encima de PROBATION_SIZE del presupuesto habitual.
             size_mult = min(1.0, size_mult) * prob_mult
         budget = min(equity * self.cfg.risk_pct * size_mult,
                      max(0.0, equity * self.cfg.max_open_risk_pct - open_risk))
-        qty = budget / ((sl_dist + half_spread)*conversion)
+        qty = budget / (economy["netRisk"] * conversion)
         used_margin = sum(
             p.qty * p.entry_price * p.quote_to_account for p in self.positions.values()
         ) / self.cfg.max_leverage
@@ -985,6 +1059,9 @@ class TradingBot:
         if qty * entry * conversion < 1.0:
             self.diagnostics[sym.id] = {"reason": "Sin margen o presupuesto de riesgo", "at": int(time.time())}
             return
+        economy = planned_trade(entry, sl, tp, qty, direction, costs["feeRate"],
+                                costs["slippageRate"], costs["spreadPct"], conversion,
+                                horizon_carry * qty)
 
         # instantánea del análisis: velas + trazados de los sistemas tal y como
         # estaban al entrar, para poder redibujar el gráfico de la decisión
@@ -998,28 +1075,48 @@ class TradingBot:
             "overlays": systems.chart_overlays(
                 window, intraday=self.cfg.work_interval in ("1m", "5m", "15m")
             ),
+            "executionCosts": costs,
+            "economics": economy,
         }
-
+        from . import portfolio_risk
+        assessment = None
+        if (self.session or {}).get("currency") == "EUR":
+            assessment = portfolio_risk.assess(sym.id, direction, economy["netRisk"],
+                                              qty * entry * conversion, "lab", self.cfg.id, reserve=True)
+            if not assessment["allowed"]:
+                self.diagnostics[sym.id] = {"reason": assessment["reason"], "at": int(time.time()),
+                                           "portfolioRisk": assessment}
+                return
+            snapshot["portfolioRisk"] = {k: v for k, v in assessment.items() if k != "token"}
         now = int(time.time())
-        with _conn() as con:
-            cur = con.execute(
-                """INSERT INTO bot_trades
-                   (bot, symbol, direction, qty, entry_price, entry_time,
-                    sl, tp, reasons, atr_entry, best_price, snapshot, initial_risk_dist, trail_multiple, quote_to_account)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (self.cfg.id, sym.id, direction, qty, entry, now, sl, tp,
-                 json.dumps(reasons, ensure_ascii=False), atr_val, entry,
-                 json.dumps(snapshot, ensure_ascii=False), sl_dist, trail_m, conversion),
+        try:
+            with _conn() as con:
+                cur = con.execute(
+                    """INSERT INTO bot_trades
+                       (bot, symbol, direction, qty, entry_price, entry_time,
+                        sl, tp, reasons, atr_entry, best_price, snapshot, initial_risk_dist, trail_multiple, quote_to_account,
+                        execution_costs, entry_fee, economic_risk_dist)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (self.cfg.id, sym.id, direction, qty, entry, now, sl, tp,
+                     json.dumps(reasons, ensure_ascii=False), atr_val, entry,
+                     json.dumps(snapshot, ensure_ascii=False), sl_dist, trail_m, conversion,
+                     json.dumps(costs, ensure_ascii=False), entry * qty * costs["feeRate"],
+                     economy["netRisk"] / qty / conversion),
+                )
+                trade_id = cur.lastrowid
+            pos = Position(
+                id=trade_id, symbol=sym.id, direction=direction, qty=qty,
+                entry_price=entry, entry_time=now, sl=sl, tp=tp,
+                atr_entry=atr_val, best_price=entry, trail_atr=trail_m,
+                r_dist=sl_dist, reasons=reasons, last_price=price,
+                quote_to_account=conversion,
+                execution_costs=costs, entry_fee=entry * qty * costs["feeRate"],
+                economic_risk_dist=economy["netRisk"] / qty / conversion,
             )
-            trade_id = cur.lastrowid
-        pos = Position(
-            id=trade_id, symbol=sym.id, direction=direction, qty=qty,
-            entry_price=entry, entry_time=now, sl=sl, tp=tp,
-            atr_entry=atr_val, best_price=entry, trail_atr=trail_m,
-            r_dist=sl_dist, reasons=reasons, last_price=entry,
-            quote_to_account=conversion,
-        )
-        self.positions[sym.id] = pos
+            self.positions[sym.id] = pos
+        finally:
+            if assessment:
+                portfolio_risk.release(assessment.get("token"))
         self.diagnostics[sym.id] = {"reason": "Operación abierta (simulada)", "at": now}
         if probation_why:
             self.probation_open.add(sym.id)
@@ -1031,16 +1128,23 @@ class TradingBot:
 
     def _close(self, pos: Position, exit_price: float, reason: str) -> None:
         sign = 1.0 if pos.direction == "long" else -1.0
-        pnl = (exit_price - pos.entry_price) * pos.qty * sign * pos.quote_to_account
+        # exit_price ya es un fill: los llamadores aplican spread/slippage una vez.
+        now = int(time.time())
+        exit_fee = exit_price * pos.qty * (pos.execution_costs or {}).get("feeRate", 0.0)
+        carry = pos.carry_cost(now)
+        pnl = net_outcome(pos.entry_price, exit_price, pos.qty, sign, pos.entry_fee,
+                          (pos.execution_costs or {}).get("feeRate", 0.0), pos.quote_to_account, carry)
         self._roll_day()
         new_balance = self.balance + pnl
-        now = int(time.time())
         with _conn() as con:
-            con.execute(
+            cur = con.execute(
                 """UPDATE bot_trades SET exit_price = ?, exit_time = ?,
-                   exit_reason = ?, pnl = ?, status = 'closed' WHERE id = ?""",
-                (exit_price, now, reason, pnl, pos.id),
+                   exit_reason = ?, pnl = ?, exit_fee = ?, carry_cost = ?, status = 'closed'
+                   WHERE id = ? AND status = 'open'""",
+                (exit_price, now, reason, pnl, exit_fee, carry, pos.id),
             )
+            if not cur.rowcount:
+                return  # un cierre repetido no puede abonar el PnL dos veces
             con.execute("UPDATE bot_state SET balance = ? WHERE bot = ?", (new_balance, self.cfg.id))
         self.balance = new_balance
         self.positions.pop(pos.symbol, None)
@@ -1128,7 +1232,7 @@ class TradingBot:
                 "realizedPnl": round(realized, 2),
             },
             "risk": {
-                "openRisk": round(sum(p.qty * p.r_dist for p in self.positions.values()), 2),
+                "openRisk": round(sum(p.initial_risk() for p in self.positions.values()), 2),
                 "maxOpenRiskPct": self.cfg.max_open_risk_pct * 100,
                 "dailyPnl": round(self.daily_pnl(), 2),
                 "dailyLossLimit": round(
@@ -1161,6 +1265,8 @@ class TradingBot:
                 "maxPositions": self.cfg.max_positions,
                 "maxHoldSeconds": self.cfg.max_hold_seconds,
                 "sentimentWeight": self.cfg.weight_senti * 100,
+                "executionMode": "simulated-margin",
+                "costAssumption": "Escenario conservador sin tarifas de cuenta verificadas; no ejecución Spot",
             },
         }
 
@@ -1168,7 +1274,8 @@ class TradingBot:
         with _conn() as con:
             rows = con.execute(
                 """SELECT id, symbol, direction, qty, entry_price, entry_time,
-                          sl, tp, exit_price, exit_time, exit_reason, pnl, reasons
+                          sl, tp, exit_price, exit_time, exit_reason, pnl, reasons,
+                          execution_costs, entry_fee, exit_fee, carry_cost, quote_to_account
                    FROM bot_trades WHERE bot = ? AND status = 'closed'
                    ORDER BY exit_time DESC LIMIT ?""",
                 (self.cfg.id, limit),
@@ -1180,6 +1287,12 @@ class TradingBot:
                 "sl": r[6], "tp": r[7], "exitPrice": r[8], "exitTime": r[9],
                 "exitReason": r[10], "pnl": round(r[11], 2),
                 "reasons": json.loads(r[12]),
+                "executionMode": (json.loads(r[13]) if r[13] else {}).get("mode", "legacy-spread-only"),
+                "costAssumptions": json.loads(r[13]) if r[13] else None,
+                "pnlBasis": "net" if r[13] else "gross",
+                "entryFee": (r[14] or 0.0) * (r[17] if r[17] is not None else 1.0),
+                "exitFee": (r[15] or 0.0) * (r[17] if r[17] is not None else 1.0),
+                "carryCost": (r[16] or 0.0) * (r[17] if r[17] is not None else 1.0),
             }
             for r in rows
         ]

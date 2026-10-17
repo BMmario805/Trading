@@ -2,6 +2,7 @@
 
 import asyncio
 import math
+import json
 import time
 
 from . import market_data
@@ -9,8 +10,33 @@ from .config import Symbol
 
 _cache: dict[str, tuple[float, object]] = {}
 _lock = asyncio.Lock()
+_book_lock = asyncio.Lock()
+_book_cache: dict[tuple[str, ...], tuple[float, dict]] = {}
 MIN_QUOTE_VOLUME = 10_000_000  # USDT negociados en 24 h, no profundidad ejecutable
 MAX_SPREAD = .001
+
+
+async def execution_snapshot(symbols, reference):
+    """Libro breve e independiente: la vigilancia no espera el escaneo global."""
+    keys=tuple(sorted(set(symbols)))
+    if not keys or len(keys)>20:
+        raise ValueError('Lote de cotizaciones inválido')
+    async with _book_lock:
+        cached=_book_cache.get(keys)
+        if cached and time.time()-cached[0]<2:
+            return cached[1]
+        raw=await asyncio.wait_for(market_data._binance_get('/api/v3/ticker/bookTicker',
+                                  {'symbols':json.dumps(keys,separators=(',',':'))}),timeout=4)
+        books={row['symbol']:row for row in raw}
+        if any(key not in books for key in keys):
+            raise ValueError('Libro incompleto')
+        result=dict(metadata=reference.get('metadata',{}),tickers=reference.get('tickers',{}),
+                    books=books,at=time.time(),scope='execution-books')
+        _book_cache[keys]=(time.time(),result)
+        if len(_book_cache)>32:
+            oldest=min(_book_cache,key=lambda key:_book_cache[key][0])
+            _book_cache.pop(oldest,None)
+        return result
 
 
 async def snapshot() -> dict:

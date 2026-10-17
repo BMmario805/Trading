@@ -1,20 +1,25 @@
 # 📈 Panel de Trading en Tiempo Real
 
-> **Mesa Siete activa (14-10-2026):** [funcionamiento y límites](reports/MESA-SIETE.md).
-> Página inicial con Gemini como selector y seis roles deterministas, hasta 81
-> mercados, velas reales y libro independiente de 1.000 USDT simulados. Incluye
-> comparación con comprar y mantener, controles e historial persistente.
-> Es experimental: todavía no tiene una ventaja rentable demostrada.
+> **Estado actual (15-10-2026):** [mejoras económicas y arquitectura](reports/MEJORAS_ECONOMICAS_2026-10-15.md)
+> e [investigación con resultados reales](reports/INVESTIGACION_SISTEMAS_2026-10-15.md).
+> Mesa Siete recorre los mercados Spot USDT elegibles con cotizaciones reales y órdenes
+> simuladas. Conserva su sesión financiada desde 100 EUR, hasta tres posiciones,
+> máximo 1/6 por entrada y vigilancia de stops independiente del análisis de candidatos.
+> El Laboratorio mantiene siete cuentas independientes y MT5 un presupuesto virtual
+> de 100 EUR sobre una cuenta DEMO; el conjunto no es una única inversión de 100 EUR.
+> Costes netos, límites agregados y comparador de doce reglas visibles en el panel.
+> Ninguna regla nueva ha demostrado una ventaja suficiente para promoción.
 
 > **Gemini activo (14-10-2026):** [configuración y funcionamiento](reports/GEMINI.md).
 > Clasifica textos de oro/BTC/ETH en observación, con historial, caché y límites
 > persistentes. No cambia las órdenes ni las probabilidades del motor actual.
 
-> **Motor v3 (14-10-2026):** [cambios y comprobaciones](reports/MOTOR-V3.md).
-> Todos los bots exigen validación de esta versión; el modo «a prueba» ya no abre
-> entradas en la cuenta principal. Scalper/swing usan tres bloques 40/40/20 y el
-> backtest aplica el filtro de sobreextensión. XAUUSD prioriza MT5 DEMO conectado.
-> Estas reglas sustituyen las descripciones antiguas de exploración y señales.
+> **Motor v4 (15-10-2026):** costes completos bajo supuestos explícitos, tres bloques
+> cronológicos con embargo, holdout reservado, costes dobles y vecinos. Las
+> validaciones de versiones anteriores ya no autorizan parámetros. El modo a prueba
+> mantiene tamaño reducido; no equivale a una estrategia validada. El replay MT5
+> exige contrato, margen, lotes, costes y conversión verificables para validar.
+> Los informes anteriores, incluido [motor v3](reports/MOTOR-V3.md), son históricos.
 > [Agentes: alta, costes y funcionamiento continuo](reports/AGENTES.md).
 
 > **MetaTrader 5 demo:** [conexión, activación y límites](reports/METATRADER-DEMO.md).
