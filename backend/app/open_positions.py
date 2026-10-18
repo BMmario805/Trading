@@ -35,6 +35,8 @@ def _book(data, symbol, side, now):
         return None, None
     stamp = _number(data.get('at'), positive=True)
     book = data.get('books', {}).get(symbol, {})
+    if 'referenceAt' in book:
+        stamp=_number(book['referenceAt'],positive=True)
     bid = _number(book.get('bidPrice'), positive=True)
     ask = _number(book.get('askPrice'), positive=True)
     if not _fresh(stamp, now) or bid is None or ask is None or ask < bid:
@@ -66,11 +68,13 @@ def _source(source, label, mode, available, updated_at=None, stale=False, messag
                 updatedAt=updated_at, stale=stale, message=message)
 
 
-def _desk_positions(now):
-    engine = desk.DESK
+def _desk_positions(now, engine=None):
+    engine = engine or desk.DESK
     if engine is None:
         return [], _source('desk', 'Mesa Siete', 'paper', False, message='Mesa no iniciada')
     state = engine.state
+    desk_id=getattr(engine,'desk_id','crypto')
+    label='Mesa Siete' if desk_id=='crypto' else f'Mesa Siete · {"Forex" if desk_id=="forex" else "Acciones"}'
     data = engine.last_data
     risk_data=getattr(engine,'last_risk_data',None)
     stamp = max(_number((data or {}).get('at'), positive=True) or 0,
@@ -94,10 +98,10 @@ def _desk_positions(now):
         pnl = (_number(qty * price * (1 - cost.get('slippageRate',desk.SLIPPAGE)) * (1 - cost.get('feeRate',desk.FEE)) - notional - fee)
                if None not in (qty, price, notional, fee) else None)
         positions.append(dict(
-            id=f"desk:{p.get('entryKey', p['symbol'])}", source='desk', sourceLabel='Mesa Siete',
-            botId='desk', botName='Mesa Siete', symbol=p['symbol'], side='long',
+            id=f"desk:{'' if desk_id=='crypto' else desk_id+':'}{p.get('entryKey', p['symbol'])}", source='desk', sourceLabel=label,
+            botId='desk' if desk_id=='crypto' else desk_id, botName=label, symbol=p['symbol'], side='long',
             quantity=qty, quantityUnit='units', entryPrice=_number(p.get('entry'), positive=True),
-            currentPrice=price, notional=notional, unrealizedPnl=pnl, currency='USDT',
+            currentPrice=price, notional=notional, unrealizedPnl=pnl, currency=getattr(engine,'currency','USDT'),
             openedAt=_number(p.get('entryTime'), positive=True),
             stopLoss=_number(p.get('sl'), positive=True), takeProfit=_number(p.get('tp'), positive=True),
             priceFresh=fresh, priceUpdatedAt=price_at, accountMode='paper', pnlBasis='estimated-net',
@@ -192,6 +196,10 @@ def snapshot():
     cached = opportunities._cache.get('quotes')
     data = cached[1] if cached else (desk.DESK.last_data if desk.DESK else None)
     desk_rows, desk_source = _desk_positions(now)
+    for key,engine in desk.DESKS.items():
+        if key=='crypto': continue
+        rows,_=_desk_positions(now,engine)
+        desk_rows.extend(rows)
     lab_rows, lab_source = _lab_positions(now, data)
     mt5_rows, mt5_source = _mt5_positions(now)
     positions = desk_rows + lab_rows + mt5_rows

@@ -27,8 +27,9 @@ def instrument(symbol):
 def factor(symbol):
     key=instrument(symbol)
     if key=='GOLD': return 'gold'
-    if key in ('AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','SPY','QQQ','ES','NQ'): return 'us-equities'
-    if key in ('EURUSD','GBPUSD','USDJPY'): return 'fx'
+    if key in ('AAPL','MSFT','NVDA','TSLA','AMZN','META','GOOGL','SPY','QQQ','ES','NQ',
+               'AMD','AVGO','JPM','V','MA','COST','WMT','XOM','UNH','NFLX','PLTR'): return 'us-equities'
+    if key in ('EURUSD','GBPUSD','USDJPY','AUDUSD','NZDUSD','USDCHF','USDCAD'): return 'fx'
     if key=='CL': return 'energy'
     return 'crypto'
 
@@ -53,15 +54,18 @@ def _collect():
             rows.append(dict(source='lab',bot=bot.cfg.id,symbol=instrument(p.symbol),factor=factor(p.symbol),
                 direction=p.direction,riskEUR=max(0,-p.unrealized(p.sl)),
                 notionalEUR=p.qty*p.entry_price*p.quote_to_account))
-    engine=desk.DESK
-    if engine and (engine.state.get('funding') or {}).get('netQuotePerEuro',0)>0:
+    engines=dict(desk.DESKS)
+    if desk.DESK: engines['crypto']=desk.DESK
+    for key,engine in engines.items():
+        if not engine or (engine.state.get('funding') or {}).get('netQuotePerEuro',0)<=0: continue
+        bot_id='desk' if key=='crypto' else key
         rate=engine.state['funding']['netQuotePerEuro']
-        accounts.append(dict(source='desk',bot='desk',equityEUR=max(0,engine.equity()/rate),initialEUR=engine.state['funding']['amount']))
+        accounts.append(dict(source='desk',bot=bot_id,equityEUR=max(0,engine.equity()/rate),initialEUR=engine.state['funding']['amount']))
         for p in list(engine.state['positions']):
             fee=(p.get('costPolicy') or {}).get('feeRate',desk.FEE)
             slip=(p.get('costPolicy') or {}).get('slippageRate',desk.SLIPPAGE)
             risk=max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-slip)*(1-fee))
-            rows.append(dict(source='desk',bot='desk',symbol=instrument(p['symbol']),factor=factor(p['symbol']),
+            rows.append(dict(source='desk',bot=bot_id,symbol=instrument(p['symbol']),factor=factor(p['symbol']),
                              direction='long',riskEUR=risk/rate,notionalEUR=p['notional']/rate))
     state=dict(mt5_demo.STATE)
     session=state.get('session') or {}

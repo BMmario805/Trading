@@ -449,6 +449,8 @@ class TradingBot:
         self.trained_params: dict[str, dict] = {}   # símbolo -> params validados
         self.manual_params: dict[str, dict] = {}    # ajustes explícitos a prueba
         self._task: asyncio.Task | None = None
+        self._risk_task: asyncio.Task | None = None
+        self.risk_monitor=dict(independent=True,lastCompletedAt=None,durationSeconds=None,unavailable=[])
         self._last_scan = 0.0
         self._scan_cursor = 0
         self.diagnostics: dict[str, dict] = {}
@@ -608,21 +610,23 @@ class TradingBot:
     def start_task(self) -> None:
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._run(), name=f"bot-{self.cfg.id}")
+        if self._risk_task is None or self._risk_task.done():
+            self._risk_task=asyncio.create_task(self._run_risk(),name=f'bot-risk-{self.cfg.id}')
 
     async def stop_task(self) -> None:
-        if self._task:
-            self._task.cancel()
+        tasks=[task for task in (self._task,self._risk_task) if task is not None]
+        for task in tasks: task.cancel()
+        for task in tasks:
             try:
-                await self._task
+                await task
             except asyncio.CancelledError:
                 pass
-            self._task = None
+        self._task=self._risk_task=None
 
     async def _run(self) -> None:
         log.info("%s arrancado (running=%s)", self.cfg.name, self.running)
         while True:
             try:
-                await self._manage_positions()
                 if self.running:
                     now = time.time()
                     if now - self._last_scan >= self.cfg.scan_seconds:
@@ -634,18 +638,38 @@ class TradingBot:
                 log.warning("%s: error en el ciclo: %s", self.cfg.id, exc)
             await asyncio.sleep(self.cfg.tick_seconds)
 
+    async def _run_risk(self) -> None:
+        while True:
+            started=time.monotonic()
+            try:
+                await self._manage_positions()
+                self.risk_monitor.update(lastCompletedAt=time.time(),durationSeconds=time.monotonic()-started)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning('%s: vigilancia sin actualizar: %s',self.cfg.id,exc)
+                self.risk_monitor['error']=type(exc).__name__
+            await asyncio.sleep(min(5,self.cfg.tick_seconds))
+
     # -------------------- vigilancia de posiciones --------------------
 
     async def _manage_positions(self) -> None:
-        for pos in list(self.positions.values()):
+        positions=list(self.positions.values())
+        semaphore=asyncio.Semaphore(4)
+        async def observe(pos):
+            async with semaphore:
+                try:
+                    tick=await asyncio.wait_for(market_data.get_price(SYMBOLS_BY_ID[pos.symbol]),timeout=6)
+                    return tick if valid_tick(tick,time.time()) else None
+                except Exception:
+                    return None
+        quotes=await asyncio.gather(*(observe(pos) for pos in positions))
+        self.risk_monitor['unavailable']=[p.symbol for p,tick in zip(positions,quotes) if tick is None]
+        self.risk_monitor.pop('error',None)
+        for pos,tick in zip(positions,quotes):
+            # Puede haber cerrado por señal mientras se esperaba a la fuente.
+            if tick is None or self.positions.get(pos.symbol) is not pos: continue
             sym = SYMBOLS_BY_ID[pos.symbol]
-            try:
-                tick = await market_data.get_price(sym)
-            except Exception as exc:
-                log.debug("%s: sin precio de %s: %s", self.cfg.id, pos.symbol, exc)
-                continue
-            if not valid_tick(tick, time.time()):
-                continue
             price = tick["price"]
             pos.last_price = price
             half_spread = price * self.spread_pct(sym) / 2
@@ -781,7 +805,8 @@ class TradingBot:
                 # señal claramente contraria a la posición abierta -> cerrar.
                 # Histéresis a 0.75×umbral: el 0.5 anterior generaba un churn
                 # de salidas prematuras (el mayor coste del scalper en vivo).
-                pos = self.positions[symbol_id]
+                pos = self.positions.get(symbol_id)
+                if pos is None: continue  # el monitor de riesgo cerró durante el análisis
                 against = (pos.direction == "long" and score <= -0.75 * threshold) or (
                     pos.direction == "short" and score >= 0.75 * threshold
                 )
@@ -890,6 +915,11 @@ class TradingBot:
                 self.diagnostics[symbol_id]["reason"] = "Precio alejado más de 1 ATR de la señal"
                 continue
             price = tick["price"]
+            if (not self.running or symbol_id in self.positions or self.entries_paused()
+                    or time.time()<self.cooldown_until.get(symbol_id,0)
+                    or len(self.positions)>=self.cfg.max_positions):
+                self.diagnostics[symbol_id]['reason']='Control de riesgo actualizado durante el análisis; entrada bloqueada'
+                continue
             self._open(
                 sym, direction, price, atr_val, score, signal, sl_m, tp_m, trail_m,
                 p_win=p_win, meta_note=meta_note,
@@ -1246,6 +1276,7 @@ class TradingBot:
                 "overextAtr": self.cfg.overext_atr,
             },
             "diagnostics": self.diagnostics,
+            "monitoring": dict(self.risk_monitor),
             "trainedSymbols": sorted(self.trained_params),
             "learning": learn,
             "config": {

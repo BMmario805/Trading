@@ -26,7 +26,7 @@ async def execution_snapshot(symbols, reference):
         if cached and time.time()-cached[0]<2:
             return cached[1]
         raw=await asyncio.wait_for(market_data._binance_get('/api/v3/ticker/bookTicker',
-                                  {'symbols':json.dumps(keys,separators=(',',':'))}),timeout=4)
+                                  {'symbols':json.dumps(keys,separators=(',',':'),ensure_ascii=False)}),timeout=4)
         books={row['symbol']:row for row in raw}
         if any(key not in books for key in keys):
             raise ValueError('Libro incompleto')
@@ -59,7 +59,7 @@ async def snapshot() -> dict:
         return result
 
 
-def assess(sym: Symbol, data: dict) -> dict:
+def assess(sym: Symbol, data: dict, *, min_quote_volume=MIN_QUOTE_VOLUME) -> dict:
     key = sym.source_symbol
     meta, ticker, book = (data[k].get(key, {}) for k in ('metadata', 'tickers', 'books'))
     out = dict(symbol=sym.id, source='Binance Spot', at=data['at'], eligible=False)
@@ -75,7 +75,7 @@ def assess(sym: Symbol, data: dict) -> dict:
     out.update(spreadPct=spread * 100, quoteVolume24h=volume, bid=bid, ask=ask)
     if spread > MAX_SPREAD:
         return dict(out, reason='Spread observado demasiado amplio')
-    if volume < MIN_QUOTE_VOLUME:
+    if volume < min_quote_volume:
         return dict(out, reason='Volumen negociado insuficiente')
     return dict(out, eligible=True, reason='Spread y volumen aceptables')
 

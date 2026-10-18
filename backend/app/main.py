@@ -18,7 +18,7 @@ from . import desk
 from . import mt5_demo
 from . import mt5_performance
 from . import open_positions
-from . import portfolio_risk, research_jobs
+from . import portfolio_risk, research_jobs, performance_review, runtime_guard
 from .sentiment import get_opinions, get_sentiment
 
 logging.basicConfig(level=logging.INFO)
@@ -27,25 +27,36 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    bots.start_all()
-    learning.start_scheduler()   # reentrenamiento walk-forward automático
-    mt5_demo.start()
-    gemini_agent.start()
-    desk.start()
-    yield
-    await research_jobs.stop()
-    await desk.stop()
-    await gemini_agent.stop()
-    await mt5_demo.stop()
-    await learning.stop_scheduler()
-    await training.stop_all()
-    await bots.stop_all()
-    await market_data.close_client()
-    await sentiment_mod.close_session()
-    await tradingview.close_session()
+    runtime_guard.acquire()
+    try:
+        bots.start_all()
+        learning.start_scheduler()
+        mt5_demo.start()
+        gemini_agent.start()
+        desk.start()
+        try:
+            yield
+        finally:
+            await research_jobs.stop()
+            await desk.stop()
+            await gemini_agent.stop()
+            await mt5_demo.stop()
+            await learning.stop_scheduler()
+            await training.stop_all()
+            await bots.stop_all()
+            await market_data.close_client()
+            await sentiment_mod.close_session()
+            await tradingview.close_session()
+    finally:
+        runtime_guard.release()
 
 
 app = FastAPI(title="Trading Dashboard API", lifespan=lifespan)
+
+
+@app.get('/api/performance/review')
+async def performance_review_status():
+    return performance_review.snapshot()
 
 
 @app.get('/api/portfolio/risk')
@@ -66,6 +77,24 @@ async def research_start():
 @app.get('/api/desk')
 async def desk_status():
     return desk.DESK.public() if desk.DESK else {'mode':'paper','enabled':False}
+
+
+@app.get('/api/desks')
+async def desks_status():
+    return [engine.public() for engine in desk.DESKS.values()]
+
+
+@app.get('/api/desks/{market}')
+async def market_desk_status(market: str):
+    if market not in desk.DESKS: raise HTTPException(404,'Mesa desconocida')
+    return desk.DESKS[market].public()
+
+
+@app.post('/api/desks/{market}/{action}')
+async def market_desk_control(market: str, action: str):
+    if market not in desk.DESKS: raise HTTPException(404,'Mesa desconocida')
+    if action not in ('start','pause','close'): raise HTTPException(400,'Acción inválida')
+    return await desk.DESKS[market].control(action)
 
 
 @app.get('/api/positions/open')

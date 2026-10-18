@@ -72,7 +72,7 @@ class SizingTests(unittest.TestCase):
         extra=dict(time=now,open=1,high=99999,low=1,close=9999,volume=100)
         self.assertEqual(base,desk.tape(rows+[extra],now))
 
-    def test_tape_accepts_nearby_moving_averages_during_a_moderate_impulse(self):
+    def test_tape_rejects_a_bounce_below_the_slow_average(self):
         now=100000
         rows=[dict(time=now-desk.CANDLE_SECONDS*(80-i),open=99,high=101,low=98,close=99,volume=100) for i in range(80)]
         rows[-1].update(close=100)
@@ -80,8 +80,8 @@ class SizingTests(unittest.TestCase):
              patch.object(desk,'atr',return_value=2), patch.object(desk,'rsi',return_value=[78]*80):
             analysis=desk.tape(rows,now)
         self.assertLess(analysis['ema20'],analysis['ema50'])
-        self.assertTrue(analysis['trend'])
-        self.assertTrue(analysis['momentum'])
+        self.assertFalse(analysis['trend'])
+        self.assertFalse(analysis['entryAllowed'])
 
 
 class DeskTests(unittest.IsolatedAsyncioTestCase):
@@ -208,13 +208,13 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         await self.entry()
         self.assertIsNotNone(self.engine.state['position'])
 
-    async def test_low_rsi_rebound_can_enter(self):
+    async def test_low_rsi_without_confirmed_recovery_cannot_enter(self):
         self.analysis['rsi']=18
         await self.entry()
-        self.assertIsNotNone(self.engine.state['position'])
+        self.assertIsNone(self.engine.state['position'])
 
     async def test_moderate_impulse_can_enter_without_a_pullback(self):
-        self.analysis.update(rsi=78,pullback=False,momentum=True,ema20=96)
+        self.analysis.update(rsi=68,pullback=False,momentum=True,ema20=98)
         await self.entry()
         self.assertIsNotNone(self.engine.state['position'])
         self.assertEqual(self.engine.state['roles']['Price']['status'],'ready')

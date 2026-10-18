@@ -56,7 +56,7 @@ ENGINE_VERSION = 4
 VALIDATION_PROTOCOL = 'fixed-origin-3-blocks-holdout20-net-v1'
 
 # Segundos por vela de cada intervalo de trabajo
-WORK_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400}
+WORK_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
 
 # Histórico descargable por fuente e intervalo
 BINANCE_DAYS = {"1m": 21, "5m": 60, "15m": 90, "1h": 365, "1d": 730}

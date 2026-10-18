@@ -22,8 +22,8 @@ from .research_strategies import REGISTRY, ResearchStrategy, risk_series, signal
 from .training import (ENGINE_VERSION, WORK_SECONDS, compact_metrics,
                        expectancy_uncertainty, simulate, stressed_costs, temporal_protocol)
 
-RESEARCH_VERSION = 'simple-families-spot-v1'
-INTERVALS = ('5m', '15m', '1h')
+RESEARCH_VERSION = 'simple-families-spot-v2'
+INTERVALS = ('5m', '15m', '1h', '4h')
 
 
 def _benchmark(candles: list[dict], start: int, end: int, model: dict, capital: float = 100) -> dict:
@@ -150,7 +150,7 @@ async def _bounded_history(source_symbol: str, interval: str, days: int, max_bar
     return closed_candles(collected, WORK_SECONDS[interval], now)[-max_bars:]
 
 
-async def run_research(symbols=('BTC', 'ETH', 'SOL'), intervals=INTERVALS, days=30, max_bars=9000) -> dict:
+async def run_research(symbols=('BTC', 'ETH', 'SOL'), intervals=('5m','15m','1h'), days=30, max_bars=9000) -> dict:
     """Trabajo acotado y de solo lectura, apto para API o CLI.
 
     Hasta cinco instrumentos Spot y tres intervalos; cada dataset tiene hasta
@@ -160,9 +160,9 @@ async def run_research(symbols=('BTC', 'ETH', 'SOL'), intervals=INTERVALS, days=
     if not 1 <= len(symbols) <= 5 or not 1 <= len(intervals) <= 3:
         raise ValueError('Admite entre uno y cinco símbolos y hasta tres intervalos')
     if any(interval not in INTERVALS for interval in intervals):
-        raise ValueError('Intervalos permitidos: 5m, 15m, 1h')
-    if not isinstance(days, int) or not 1 <= days <= 365 or not isinstance(max_bars, int) or not 600 <= max_bars <= 10000:
-        raise ValueError('Días entre 1 y 365; barras entre 600 y 10000')
+        raise ValueError('Intervalos permitidos: 5m, 15m, 1h, 4h')
+    if not isinstance(days, int) or not 1 <= days <= 1095 or not isinstance(max_bars, int) or not 600 <= max_bars <= 10000:
+        raise ValueError('Días entre 1 y 1095; barras entre 600 y 10000')
     now = time.time()
     results = []
     for symbol_id in symbols:
@@ -196,7 +196,7 @@ async def run_research(symbols=('BTC', 'ETH', 'SOL'), intervals=INTERVALS, days=
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--symbols', nargs='+', default=['BTC', 'ETH', 'SOL'])
-    parser.add_argument('--intervals', nargs='+', default=list(INTERVALS))
+    parser.add_argument('--intervals', nargs='+', default=['1h','4h'])
     parser.add_argument('--days', type=int, default=30)
     parser.add_argument('--max-bars', type=int, default=9000)
     parser.add_argument('--output', type=Path)

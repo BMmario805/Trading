@@ -1,0 +1,3066 @@
+{
+  "version": "simple-families-spot-v2",
+  "engineVersion": 4,
+  "costVersion": "net-costs-v1",
+  "generatedAt": 1792352047,
+  "request": {
+    "symbols": [
+      "BTC",
+      "ETH",
+      "SOL"
+    ],
+    "intervals": [
+      "4h"
+    ],
+    "days": 1095,
+    "maxBars": 9000
+  },
+  "assumptions": [
+    "Costes conservadores no verificados con cuenta",
+    "Spot largo sin apalancamiento",
+    "Riesgo fijo, sin capitalización; referencia 100 USDT",
+    "Tiempos efectivos pueden diferir si se alcanza el límite de barras",
+    "Holdout observado una vez por informe; reutilizar datos no crea nueva evidencia",
+    "Intervalos bootstrap descriptivos, sin corrección por selección múltiple",
+    "La evidencia mensual de tendencia no demuestra ventaja intradía",
+    "Toda promoción exige seguimiento posterior al informe"
+  ],
+  "results": [
+    {
+      "symbol": "BTC",
+      "interval": "4h",
+      "source": "Binance Spot USDT",
+      "bars": 6569,
+      "dataStart": 1697745600,
+      "dataEnd": 1792339200,
+      "datasetHash": "fbca274be724dd53cbf1b549d114e07aa7f3ae370877a17f84ddd712088faf9e",
+      "protocol": {
+        "version": "fixed-origin-3-blocks-holdout20-net-v1",
+        "selection": [
+          0,
+          2956
+        ],
+        "folds": [
+          [
+            3004,
+            3722
+          ],
+          [
+            3770,
+            4488
+          ],
+          [
+            4536,
+            5255
+          ]
+        ],
+        "holdout": [
+          5303,
+          6569
+        ],
+        "embargo": 48,
+        "finalHoldoutFraction": 0.2,
+        "selectionFrozenBeforeValidation": true
+      },
+      "costModel": {
+        "version": "net-costs-v1",
+        "feeRate": 0.001,
+        "slippageRate": 0.0002,
+        "spreadPct": 0.0005,
+        "carryDailyRate": 0.0,
+        "mode": "spot",
+        "verified": false,
+        "assumption": "Escenario conservador; costes de cuenta sin verificar"
+      },
+      "promotionApplied": false,
+      "candidateEligible": false,
+      "researchVersion": "simple-families-spot-v2",
+      "engineVersion": 4,
+      "trialCount": 12,
+      "execution": "next-open; stop-first; long-only; fixed-risk",
+      "capitalReference": {
+        "amount": 100,
+        "currency": "USDT",
+        "riskPerTrade": 1,
+        "maximumNotional": 100,
+        "compounded": false
+      },
+      "ok": true,
+      "candidates": [
+        {
+          "strategy": {
+            "id": "donchian-20",
+            "family": "donchian",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -7.11,
+          "trades": 38,
+          "maxBlockDrawdown": 7.41,
+          "discoveryStressPnl": -10.16,
+          "positiveBlocks": 0,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.1316,
+              "trades": 13,
+              "wins": 5,
+              "pnl": -1.71,
+              "winRate": 38.5,
+              "profitFactor": 0.76,
+              "maxDrawdown": 3.37,
+              "fees": 1.028467,
+              "carry": 0.0,
+              "turnover": 1028.4674
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.0565,
+              "trades": 12,
+              "wins": 7,
+              "pnl": -0.68,
+              "winRate": 58.3,
+              "profitFactor": 0.86,
+              "maxDrawdown": 5.17,
+              "fees": 1.173044,
+              "carry": 0.0,
+              "turnover": 1173.044
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.3634,
+              "trades": 13,
+              "wins": 5,
+              "pnl": -4.72,
+              "winRate": 38.5,
+              "profitFactor": 0.41,
+              "maxDrawdown": 7.41,
+              "fees": 0.905627,
+              "carry": 0.0,
+              "turnover": 905.6268
+            }
+          ],
+          "uncertainty": {
+            "sample": 38,
+            "mean": -0.18718167829184595,
+            "lower95": -0.4029640180630151,
+            "upper95": 0.04897750253908231,
+            "blockLength": 6,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -10.815
+        },
+        {
+          "strategy": {
+            "id": "donchian-40",
+            "family": "donchian",
+            "lookback": 40,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 3.04,
+          "trades": 20,
+          "maxBlockDrawdown": 2.78,
+          "discoveryStressPnl": 0.63,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.1914,
+              "trades": 8,
+              "wins": 4,
+              "pnl": 1.53,
+              "winRate": 50.0,
+              "profitFactor": 1.65,
+              "maxDrawdown": 2.21,
+              "fees": 0.626725,
+              "carry": 0.0,
+              "turnover": 626.7254
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.5149,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 3.09,
+              "winRate": 66.7,
+              "profitFactor": 2.54,
+              "maxDrawdown": 1.6,
+              "fees": 0.594224,
+              "carry": 0.0,
+              "turnover": 594.224
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.2632,
+              "trades": 6,
+              "wins": 2,
+              "pnl": -1.58,
+              "winRate": 33.3,
+              "profitFactor": 0.51,
+              "maxDrawdown": 2.78,
+              "fees": 0.40972,
+              "carry": 0.0,
+              "turnover": 409.7197
+            }
+          ],
+          "uncertainty": {
+            "sample": 20,
+            "mean": 0.15204847897565996,
+            "lower95": -0.24099587355320895,
+            "upper95": 0.5302564594146005,
+            "blockLength": 4,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 1.65
+        },
+        {
+          "strategy": {
+            "id": "donchian-60",
+            "family": "donchian",
+            "lookback": 60,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 4.81,
+          "trades": 12,
+          "maxBlockDrawdown": 1.74,
+          "discoveryStressPnl": 3.01,
+          "positiveBlocks": 3,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.5798,
+              "trades": 5,
+              "wins": 4,
+              "pnl": 2.9,
+              "winRate": 80.0,
+              "profitFactor": 3.9,
+              "maxDrawdown": 1.74,
+              "fees": 0.475972,
+              "carry": 0.0,
+              "turnover": 475.9721
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.308,
+              "trades": 4,
+              "wins": 3,
+              "pnl": 1.23,
+              "winRate": 75.0,
+              "profitFactor": 2.23,
+              "maxDrawdown": 1.26,
+              "fees": 0.406921,
+              "carry": 0.0,
+              "turnover": 406.9207
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.226,
+              "trades": 3,
+              "wins": 2,
+              "pnl": 0.68,
+              "winRate": 66.7,
+              "profitFactor": 1.68,
+              "maxDrawdown": 1.68,
+              "fees": 0.226634,
+              "carry": 0.0,
+              "turnover": 226.6336
+            }
+          ],
+          "uncertainty": {
+            "sample": 12,
+            "mean": 0.4007695368753288,
+            "lower95": -0.025605438763903757,
+            "upper95": 0.8743695260241321,
+            "blockLength": 3,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 3.94
+        },
+        {
+          "strategy": {
+            "id": "momentum-12",
+            "family": "momentum",
+            "lookback": 12,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -3.43,
+          "trades": 46,
+          "maxBlockDrawdown": 7.7,
+          "discoveryStressPnl": -9.68,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.012,
+              "trades": 16,
+              "wins": 8,
+              "pnl": -0.19,
+              "winRate": 50.0,
+              "profitFactor": 0.97,
+              "maxDrawdown": 3.23,
+              "fees": 1.237904,
+              "carry": 0.0,
+              "turnover": 1237.9036
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.1804,
+              "trades": 14,
+              "wins": 8,
+              "pnl": 2.53,
+              "winRate": 57.1,
+              "profitFactor": 1.66,
+              "maxDrawdown": 3.57,
+              "fees": 1.498905,
+              "carry": 0.0,
+              "turnover": 1498.9054
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.3606,
+              "trades": 16,
+              "wins": 6,
+              "pnl": -5.77,
+              "winRate": 37.5,
+              "profitFactor": 0.4,
+              "maxDrawdown": 7.7,
+              "fees": 1.155985,
+              "carry": 0.0,
+              "turnover": 1155.9854
+            }
+          ],
+          "uncertainty": {
+            "sample": 46,
+            "mean": -0.07467218052248543,
+            "lower95": -0.32805589848867944,
+            "upper95": 0.1693627680794906,
+            "blockLength": 6,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -7.28
+        },
+        {
+          "strategy": {
+            "id": "momentum-20",
+            "family": "momentum",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 1.76,
+          "trades": 33,
+          "maxBlockDrawdown": 4.11,
+          "discoveryStressPnl": -0.01,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.2045,
+              "trades": 11,
+              "wins": 7,
+              "pnl": 2.25,
+              "winRate": 63.6,
+              "profitFactor": 1.56,
+              "maxDrawdown": 3.21,
+              "fees": 0.846371,
+              "carry": 0.0,
+              "turnover": 846.3706
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.0386,
+              "trades": 12,
+              "wins": 5,
+              "pnl": -0.46,
+              "winRate": 41.7,
+              "profitFactor": 0.92,
+              "maxDrawdown": 4.11,
+              "fees": 1.157861,
+              "carry": 0.0,
+              "turnover": 1157.8611
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.003,
+              "trades": 10,
+              "wins": 5,
+              "pnl": -0.03,
+              "winRate": 50.0,
+              "profitFactor": 0.99,
+              "maxDrawdown": 2.82,
+              "fees": 0.747347,
+              "carry": 0.0,
+              "turnover": 747.3468
+            }
+          ],
+          "uncertainty": {
+            "sample": 33,
+            "mean": 0.05321384540277282,
+            "lower95": -0.1895424801606462,
+            "upper95": 0.2659831211690627,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -0.295
+        },
+        {
+          "strategy": {
+            "id": "momentum-30",
+            "family": "momentum",
+            "lookback": 30,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 4.07,
+          "trades": 29,
+          "maxBlockDrawdown": 4.07,
+          "discoveryStressPnl": 0.68,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.0774,
+              "trades": 13,
+              "wins": 6,
+              "pnl": -1.01,
+              "winRate": 46.2,
+              "profitFactor": 0.77,
+              "maxDrawdown": 4.07,
+              "fees": 1.056893,
+              "carry": 0.0,
+              "turnover": 1056.8931
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.1877,
+              "trades": 11,
+              "wins": 5,
+              "pnl": 2.06,
+              "winRate": 45.5,
+              "profitFactor": 1.34,
+              "maxDrawdown": 2.77,
+              "fees": 1.112439,
+              "carry": 0.0,
+              "turnover": 1112.4395
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.6036,
+              "trades": 5,
+              "wins": 4,
+              "pnl": 3.02,
+              "winRate": 80.0,
+              "profitFactor": 4.02,
+              "maxDrawdown": 1.72,
+              "fees": 0.435795,
+              "carry": 0.0,
+              "turnover": 435.7953
+            }
+          ],
+          "uncertainty": {
+            "sample": 29,
+            "mean": 0.1405817983105673,
+            "lower95": -0.11366872426531835,
+            "upper95": 0.39567705775787504,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 2.035
+        },
+        {
+          "strategy": {
+            "id": "momentum-vol-12",
+            "family": "momentum-vol",
+            "lookback": 12,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": true
+          },
+          "discoveryPnl": -3.02,
+          "trades": 46,
+          "maxBlockDrawdown": 7.0,
+          "discoveryStressPnl": -9.06,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.0083,
+              "trades": 16,
+              "wins": 8,
+              "pnl": -0.13,
+              "winRate": 50.0,
+              "profitFactor": 0.98,
+              "maxDrawdown": 3.01,
+              "fees": 1.156017,
+              "carry": 0.0,
+              "turnover": 1156.0172
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.1721,
+              "trades": 14,
+              "wins": 8,
+              "pnl": 2.41,
+              "winRate": 57.1,
+              "profitFactor": 1.67,
+              "maxDrawdown": 3.24,
+              "fees": 1.451797,
+              "carry": 0.0,
+              "turnover": 1451.7972
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.3314,
+              "trades": 16,
+              "wins": 6,
+              "pnl": -5.3,
+              "winRate": 37.5,
+              "profitFactor": 0.41,
+              "maxDrawdown": 7.0,
+              "fees": 1.109393,
+              "carry": 0.0,
+              "turnover": 1109.3925
+            }
+          ],
+          "uncertainty": {
+            "sample": 46,
+            "mean": -0.06576087410959464,
+            "lower95": -0.3041022858578129,
+            "upper95": 0.16676951403301685,
+            "blockLength": 6,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -6.52
+        },
+        {
+          "strategy": {
+            "id": "momentum-vol-20",
+            "family": "momentum-vol",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": true
+          },
+          "discoveryPnl": 1.57,
+          "trades": 33,
+          "maxBlockDrawdown": 3.98,
+          "discoveryStressPnl": -0.03,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.1803,
+              "trades": 11,
+              "wins": 7,
+              "pnl": 1.98,
+              "winRate": 63.6,
+              "profitFactor": 1.5,
+              "maxDrawdown": 3.21,
+              "fees": 0.809082,
+              "carry": 0.0,
+              "turnover": 809.0819
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.0484,
+              "trades": 12,
+              "wins": 5,
+              "pnl": -0.58,
+              "winRate": 41.7,
+              "profitFactor": 0.89,
+              "maxDrawdown": 3.98,
+              "fees": 1.088941,
+              "carry": 0.0,
+              "turnover": 1088.9415
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.0175,
+              "trades": 10,
+              "wins": 5,
+              "pnl": 0.17,
+              "winRate": 50.0,
+              "profitFactor": 1.04,
+              "maxDrawdown": 2.74,
+              "fees": 0.71385,
+              "carry": 0.0,
+              "turnover": 713.8495
+            }
+          ],
+          "uncertainty": {
+            "sample": 33,
+            "mean": 0.04780784508075298,
+            "lower95": -0.1857360172404281,
+            "upper95": 0.24651302547536721,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -0.42
+        },
+        {
+          "strategy": {
+            "id": "momentum-vol-30",
+            "family": "momentum-vol",
+            "lookback": 30,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": true
+          },
+          "discoveryPnl": 3.71,
+          "trades": 29,
+          "maxBlockDrawdown": 3.94,
+          "discoveryStressPnl": 0.5,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.0936,
+              "trades": 13,
+              "wins": 6,
+              "pnl": -1.22,
+              "winRate": 46.2,
+              "profitFactor": 0.72,
+              "maxDrawdown": 3.94,
+              "fees": 1.006277,
+              "carry": 0.0,
+              "turnover": 1006.277
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.1628,
+              "trades": 11,
+              "wins": 5,
+              "pnl": 1.79,
+              "winRate": 45.5,
+              "profitFactor": 1.31,
+              "maxDrawdown": 2.72,
+              "fees": 1.065304,
+              "carry": 0.0,
+              "turnover": 1065.3038
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.6282,
+              "trades": 5,
+              "wins": 4,
+              "pnl": 3.14,
+              "winRate": 80.0,
+              "profitFactor": 4.58,
+              "maxDrawdown": 1.6,
+              "fees": 0.425911,
+              "carry": 0.0,
+              "turnover": 425.9107
+            }
+          ],
+          "uncertainty": {
+            "sample": 29,
+            "mean": 0.12813094987135548,
+            "lower95": -0.1327762614235584,
+            "upper95": 0.38534795343521283,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 1.74
+        },
+        {
+          "strategy": {
+            "id": "range-20",
+            "family": "range-reversion",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 3.0,
+            "trail_atr": 1.5,
+            "max_hold_bars": 24,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -1.87,
+          "trades": 21,
+          "maxBlockDrawdown": 4.0,
+          "discoveryStressPnl": -3.72,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.2846,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 1.71,
+              "winRate": 66.7,
+              "profitFactor": 1.85,
+              "maxDrawdown": 1.85,
+              "fees": 0.492842,
+              "carry": 0.0,
+              "turnover": 492.8419
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.3032,
+              "trades": 7,
+              "wins": 3,
+              "pnl": -2.12,
+              "winRate": 42.9,
+              "profitFactor": 0.47,
+              "maxDrawdown": 4.0,
+              "fees": 0.607295,
+              "carry": 0.0,
+              "turnover": 607.2954
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.182,
+              "trades": 8,
+              "wins": 3,
+              "pnl": -1.46,
+              "winRate": 37.5,
+              "profitFactor": 0.64,
+              "maxDrawdown": 2.24,
+              "fees": 0.520599,
+              "carry": 0.0,
+              "turnover": 520.5995
+            }
+          ],
+          "uncertainty": {
+            "sample": 21,
+            "mean": -0.08908655573871609,
+            "lower95": -0.5047975312189494,
+            "upper95": 0.30284837167084344,
+            "blockLength": 4,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -3.87
+        },
+        {
+          "strategy": {
+            "id": "range-30",
+            "family": "range-reversion",
+            "lookback": 30,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 3.0,
+            "trail_atr": 1.5,
+            "max_hold_bars": 24,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -2.67,
+          "trades": 15,
+          "maxBlockDrawdown": 3.0,
+          "discoveryStressPnl": -3.86,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.124,
+              "trades": 2,
+              "wins": 1,
+              "pnl": 0.25,
+              "winRate": 50.0,
+              "profitFactor": 1.25,
+              "maxDrawdown": 1.28,
+              "fees": 0.140404,
+              "carry": 0.0,
+              "turnover": 140.4038
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.0013,
+              "trades": 5,
+              "wins": 3,
+              "pnl": -0.01,
+              "winRate": 60.0,
+              "profitFactor": 1.0,
+              "maxDrawdown": 2.0,
+              "fees": 0.418977,
+              "carry": 0.0,
+              "turnover": 418.9774
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.3643,
+              "trades": 8,
+              "wins": 3,
+              "pnl": -2.91,
+              "winRate": 37.5,
+              "profitFactor": 0.42,
+              "maxDrawdown": 3.0,
+              "fees": 0.55092,
+              "carry": 0.0,
+              "turnover": 550.9203
+            }
+          ],
+          "uncertainty": {
+            "sample": 15,
+            "mean": -0.1781952569009282,
+            "lower95": -0.6609579819833793,
+            "upper95": 0.30461853758649826,
+            "blockLength": 3,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -4.17
+        },
+        {
+          "strategy": {
+            "id": "range-40",
+            "family": "range-reversion",
+            "lookback": 40,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 3.0,
+            "trail_atr": 1.5,
+            "max_hold_bars": 24,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -2.9,
+          "trades": 9,
+          "maxBlockDrawdown": 2.0,
+          "discoveryStressPnl": -3.51,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.124,
+              "trades": 2,
+              "wins": 1,
+              "pnl": 0.25,
+              "winRate": 50.0,
+              "profitFactor": 1.25,
+              "maxDrawdown": 1.28,
+              "fees": 0.140404,
+              "carry": 0.0,
+              "turnover": 140.4038
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.4071,
+              "trades": 3,
+              "wins": 1,
+              "pnl": -1.22,
+              "winRate": 33.3,
+              "profitFactor": 0.39,
+              "maxDrawdown": 2.0,
+              "fees": 0.237472,
+              "carry": 0.0,
+              "turnover": 237.4717
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.4827,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -1.93,
+              "winRate": 25.0,
+              "profitFactor": 0.36,
+              "maxDrawdown": 2.0,
+              "fees": 0.251255,
+              "carry": 0.0,
+              "turnover": 251.2547
+            }
+          ],
+          "uncertainty": {
+            "sample": 9,
+            "mean": -0.3226692903740054,
+            "lower95": -0.8023710033777406,
+            "upper95": 0.14457428083520593,
+            "blockLength": 3,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -3.9
+        }
+      ],
+      "selected": {
+        "id": "donchian-60",
+        "family": "donchian",
+        "lookback": 60,
+        "threshold": 0.6,
+        "sl_atr": 2.0,
+        "tp_atr": 4.0,
+        "trail_atr": 2.0,
+        "max_hold_bars": 48,
+        "volatility_managed": false
+      },
+      "holdout": {
+        "expectancy": -0.3583,
+        "trades": 10,
+        "wins": 2,
+        "pnl": -3.58,
+        "winRate": 20.0,
+        "profitFactor": 0.49,
+        "maxDrawdown": 6.29,
+        "fees": 0.807332,
+        "carry": 0.0,
+        "turnover": 807.3323,
+        "stress": {
+          "expectancy": -0.5063,
+          "trades": 10,
+          "wins": 2,
+          "pnl": -5.06,
+          "winRate": 20.0,
+          "profitFactor": 0.37,
+          "maxDrawdown": 7.3,
+          "fees": 1.467949,
+          "carry": 0.0,
+          "turnover": 733.9745
+        },
+        "uncertainty": {
+          "sample": 10,
+          "mean": -0.3582877984823912,
+          "lower95": -0.9000000000000004,
+          "upper95": 0.3519489959204526,
+          "blockLength": 3,
+          "method": "circular-trade-block-bootstrap",
+          "selectionAdjusted": false,
+          "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+        },
+        "neighborsBeforeHoldout": [
+          {
+            "id": "donchian-20",
+            "pnl": -7.11,
+            "stressPnl": -10.16
+          },
+          {
+            "id": "donchian-40",
+            "pnl": 3.04,
+            "stressPnl": 0.63
+          }
+        ]
+      },
+      "benchmarks": {
+        "cash": {
+          "pnl": 0.0,
+          "maxDrawdown": 0.0,
+          "assumption": "Efectivo sin intereses"
+        },
+        "buyHold": {
+          "pnl": 14.601559,
+          "returnPct": 14.6016,
+          "maxDrawdown": 34.080399,
+          "notional": 100,
+          "fees": 0.214616
+        }
+      },
+      "reason": "No supera muestra, incertidumbre, consistencia o robustez; sin promoción",
+      "sourceSymbol": "BTCUSDT"
+    },
+    {
+      "symbol": "ETH",
+      "interval": "4h",
+      "source": "Binance Spot USDT",
+      "bars": 6569,
+      "dataStart": 1697745600,
+      "dataEnd": 1792339200,
+      "datasetHash": "9713c0b342445da21b2afa62f0854bdbe8d30d3e8157fc5128ab303dc343e454",
+      "protocol": {
+        "version": "fixed-origin-3-blocks-holdout20-net-v1",
+        "selection": [
+          0,
+          2956
+        ],
+        "folds": [
+          [
+            3004,
+            3722
+          ],
+          [
+            3770,
+            4488
+          ],
+          [
+            4536,
+            5255
+          ]
+        ],
+        "holdout": [
+          5303,
+          6569
+        ],
+        "embargo": 48,
+        "finalHoldoutFraction": 0.2,
+        "selectionFrozenBeforeValidation": true
+      },
+      "costModel": {
+        "version": "net-costs-v1",
+        "feeRate": 0.001,
+        "slippageRate": 0.0002,
+        "spreadPct": 0.0005,
+        "carryDailyRate": 0.0,
+        "mode": "spot",
+        "verified": false,
+        "assumption": "Escenario conservador; costes de cuenta sin verificar"
+      },
+      "promotionApplied": false,
+      "candidateEligible": false,
+      "researchVersion": "simple-families-spot-v2",
+      "engineVersion": 4,
+      "trialCount": 12,
+      "execution": "next-open; stop-first; long-only; fixed-risk",
+      "capitalReference": {
+        "amount": 100,
+        "currency": "USDT",
+        "riskPerTrade": 1,
+        "maximumNotional": 100,
+        "compounded": false
+      },
+      "ok": true,
+      "candidates": [
+        {
+          "strategy": {
+            "id": "donchian-20",
+            "family": "donchian",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -3.14,
+          "trades": 37,
+          "maxBlockDrawdown": 6.33,
+          "discoveryStressPnl": -4.81,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.3579,
+              "trades": 15,
+              "wins": 3,
+              "pnl": -5.37,
+              "winRate": 20.0,
+              "profitFactor": 0.44,
+              "maxDrawdown": 6.33,
+              "fees": 0.707675,
+              "carry": 0.0,
+              "turnover": 707.6745
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.568,
+              "trades": 9,
+              "wins": 6,
+              "pnl": 5.11,
+              "winRate": 66.7,
+              "profitFactor": 2.7,
+              "maxDrawdown": 2.43,
+              "fees": 0.479831,
+              "carry": 0.0,
+              "turnover": 479.8309
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.2214,
+              "trades": 13,
+              "wins": 6,
+              "pnl": -2.88,
+              "winRate": 46.2,
+              "profitFactor": 0.58,
+              "maxDrawdown": 4.79,
+              "fees": 0.714324,
+              "carry": 0.0,
+              "turnover": 714.3237
+            }
+          ],
+          "uncertainty": {
+            "sample": 37,
+            "mean": -0.0847171532877788,
+            "lower95": -0.4024393131191963,
+            "upper95": 0.27293876739408,
+            "blockLength": 6,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -6.305
+        },
+        {
+          "strategy": {
+            "id": "donchian-40",
+            "family": "donchian",
+            "lookback": 40,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 2.77,
+          "trades": 21,
+          "maxBlockDrawdown": 2.52,
+          "discoveryStressPnl": 1.19,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.1792,
+              "trades": 7,
+              "wins": 3,
+              "pnl": -1.25,
+              "winRate": 42.9,
+              "profitFactor": 0.69,
+              "maxDrawdown": 2.52,
+              "fees": 0.344679,
+              "carry": 0.0,
+              "turnover": 344.6789
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.79,
+              "trades": 7,
+              "wins": 5,
+              "pnl": 5.53,
+              "winRate": 71.4,
+              "profitFactor": 3.77,
+              "maxDrawdown": 1.25,
+              "fees": 0.394126,
+              "carry": 0.0,
+              "turnover": 394.1255
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.2156,
+              "trades": 7,
+              "wins": 4,
+              "pnl": -1.51,
+              "winRate": 57.1,
+              "profitFactor": 0.5,
+              "maxDrawdown": 2.33,
+              "fees": 0.349334,
+              "carry": 0.0,
+              "turnover": 349.3345
+            }
+          ],
+          "uncertainty": {
+            "sample": 21,
+            "mean": 0.13173597948473084,
+            "lower95": -0.26445012001654833,
+            "upper95": 0.595612672877832,
+            "blockLength": 4,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 1.51
+        },
+        {
+          "strategy": {
+            "id": "donchian-60",
+            "family": "donchian",
+            "lookback": 60,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 1.18,
+          "trades": 17,
+          "maxBlockDrawdown": 3.47,
+          "discoveryStressPnl": -0.04,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.1491,
+              "trades": 5,
+              "wins": 3,
+              "pnl": 0.75,
+              "winRate": 60.0,
+              "profitFactor": 1.37,
+              "maxDrawdown": 1.13,
+              "fees": 0.262102,
+              "carry": 0.0,
+              "turnover": 262.1023
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.5633,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 3.38,
+              "winRate": 66.7,
+              "profitFactor": 2.69,
+              "maxDrawdown": 1.54,
+              "fees": 0.343247,
+              "carry": 0.0,
+              "turnover": 343.2475
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.4917,
+              "trades": 6,
+              "wins": 2,
+              "pnl": -2.95,
+              "winRate": 33.3,
+              "profitFactor": 0.26,
+              "maxDrawdown": 3.47,
+              "fees": 0.301833,
+              "carry": 0.0,
+              "turnover": 301.8333
+            }
+          ],
+          "uncertainty": {
+            "sample": 17,
+            "mean": 0.06911384674958984,
+            "lower95": -0.4137547935677981,
+            "upper95": 0.6180548719020839,
+            "blockLength": 4,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -0.555
+        },
+        {
+          "strategy": {
+            "id": "momentum-12",
+            "family": "momentum",
+            "lookback": 12,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 4.74,
+          "trades": 42,
+          "maxBlockDrawdown": 4.38,
+          "discoveryStressPnl": 3.58,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.0816,
+              "trades": 16,
+              "wins": 6,
+              "pnl": -1.31,
+              "winRate": 37.5,
+              "profitFactor": 0.79,
+              "maxDrawdown": 3.94,
+              "fees": 0.818575,
+              "carry": 0.0,
+              "turnover": 818.5754
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.2916,
+              "trades": 14,
+              "wins": 8,
+              "pnl": 4.08,
+              "winRate": 57.1,
+              "profitFactor": 1.68,
+              "maxDrawdown": 4.38,
+              "fees": 0.710252,
+              "carry": 0.0,
+              "turnover": 710.2523
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.1638,
+              "trades": 12,
+              "wins": 5,
+              "pnl": 1.97,
+              "winRate": 41.7,
+              "profitFactor": 1.35,
+              "maxDrawdown": 3.93,
+              "fees": 0.627886,
+              "carry": 0.0,
+              "turnover": 627.8857
+            }
+          ],
+          "uncertainty": {
+            "sample": 42,
+            "mean": 0.11290311960736817,
+            "lower95": -0.1304892676521505,
+            "upper95": 0.3522949912335969,
+            "blockLength": 6,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 2.55
+        },
+        {
+          "strategy": {
+            "id": "momentum-20",
+            "family": "momentum",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 5.93,
+          "trades": 28,
+          "maxBlockDrawdown": 3.26,
+          "discoveryStressPnl": 4.41,
+          "positiveBlocks": 3,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.1903,
+              "trades": 8,
+              "wins": 4,
+              "pnl": 1.52,
+              "winRate": 50.0,
+              "profitFactor": 1.51,
+              "maxDrawdown": 1.88,
+              "fees": 0.400928,
+              "carry": 0.0,
+              "turnover": 400.9284
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.1187,
+              "trades": 11,
+              "wins": 5,
+              "pnl": 1.31,
+              "winRate": 45.5,
+              "profitFactor": 1.22,
+              "maxDrawdown": 3.26,
+              "fees": 0.583201,
+              "carry": 0.0,
+              "turnover": 583.2007
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.3443,
+              "trades": 9,
+              "wins": 6,
+              "pnl": 3.1,
+              "winRate": 66.7,
+              "profitFactor": 2.03,
+              "maxDrawdown": 2.86,
+              "fees": 0.470392,
+              "carry": 0.0,
+              "turnover": 470.3921
+            }
+          ],
+          "uncertainty": {
+            "sample": 28,
+            "mean": 0.21165457608951202,
+            "lower95": -0.11670232939767275,
+            "upper95": 0.5231145729077118,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 4.3
+        },
+        {
+          "strategy": {
+            "id": "momentum-30",
+            "family": "momentum",
+            "lookback": 30,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 3.75,
+          "trades": 24,
+          "maxBlockDrawdown": 2.96,
+          "discoveryStressPnl": 1.05,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.1538,
+              "trades": 8,
+              "wins": 4,
+              "pnl": -1.23,
+              "winRate": 50.0,
+              "profitFactor": 0.69,
+              "maxDrawdown": 2.77,
+              "fees": 0.370621,
+              "carry": 0.0,
+              "turnover": 370.6206
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.0562,
+              "trades": 11,
+              "wins": 7,
+              "pnl": 0.62,
+              "winRate": 63.6,
+              "profitFactor": 1.15,
+              "maxDrawdown": 2.96,
+              "fees": 0.605421,
+              "carry": 0.0,
+              "turnover": 605.4211
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.8721,
+              "trades": 5,
+              "wins": 4,
+              "pnl": 4.36,
+              "winRate": 80.0,
+              "profitFactor": 5.36,
+              "maxDrawdown": 1.1,
+              "fees": 0.344171,
+              "carry": 0.0,
+              "turnover": 344.1706
+            }
+          ],
+          "uncertainty": {
+            "sample": 24,
+            "mean": 0.15618824013770619,
+            "lower95": -0.12341623944317892,
+            "upper95": 0.49615823287846234,
+            "blockLength": 4,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 2.27
+        },
+        {
+          "strategy": {
+            "id": "momentum-vol-12",
+            "family": "momentum-vol",
+            "lookback": 12,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": true
+          },
+          "discoveryPnl": 4.52,
+          "trades": 42,
+          "maxBlockDrawdown": 4.24,
+          "discoveryStressPnl": 2.97,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.1015,
+              "trades": 16,
+              "wins": 6,
+              "pnl": -1.62,
+              "winRate": 37.5,
+              "profitFactor": 0.74,
+              "maxDrawdown": 3.81,
+              "fees": 0.799796,
+              "carry": 0.0,
+              "turnover": 799.7963
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.2599,
+              "trades": 14,
+              "wins": 8,
+              "pnl": 3.64,
+              "winRate": 57.1,
+              "profitFactor": 1.63,
+              "maxDrawdown": 4.24,
+              "fees": 0.670419,
+              "carry": 0.0,
+              "turnover": 670.4188
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.2083,
+              "trades": 12,
+              "wins": 5,
+              "pnl": 2.5,
+              "winRate": 41.7,
+              "profitFactor": 1.5,
+              "maxDrawdown": 3.26,
+              "fees": 0.588755,
+              "carry": 0.0,
+              "turnover": 588.755
+            }
+          ],
+          "uncertainty": {
+            "sample": 42,
+            "mean": 0.10748928477169205,
+            "lower95": -0.11943732727054782,
+            "upper95": 0.3311904848270633,
+            "blockLength": 6,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 2.4
+        },
+        {
+          "strategy": {
+            "id": "momentum-vol-20",
+            "family": "momentum-vol",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": true
+          },
+          "discoveryPnl": 6.45,
+          "trades": 28,
+          "maxBlockDrawdown": 3.02,
+          "discoveryStressPnl": 4.98,
+          "positiveBlocks": 3,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.17,
+              "trades": 8,
+              "wins": 4,
+              "pnl": 1.36,
+              "winRate": 50.0,
+              "profitFactor": 1.45,
+              "maxDrawdown": 1.74,
+              "fees": 0.392322,
+              "carry": 0.0,
+              "turnover": 392.3223
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.1398,
+              "trades": 11,
+              "wins": 5,
+              "pnl": 1.54,
+              "winRate": 45.5,
+              "profitFactor": 1.27,
+              "maxDrawdown": 3.02,
+              "fees": 0.5697,
+              "carry": 0.0,
+              "turnover": 569.6998
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.3949,
+              "trades": 9,
+              "wins": 6,
+              "pnl": 3.55,
+              "winRate": 66.7,
+              "profitFactor": 2.44,
+              "maxDrawdown": 2.26,
+              "fees": 0.432606,
+              "carry": 0.0,
+              "turnover": 432.6058
+            }
+          ],
+          "uncertainty": {
+            "sample": 28,
+            "mean": 0.23042090793063827,
+            "lower95": -0.0863430366283167,
+            "upper95": 0.532758527267025,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 4.94
+        },
+        {
+          "strategy": {
+            "id": "momentum-vol-30",
+            "family": "momentum-vol",
+            "lookback": 30,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": true
+          },
+          "discoveryPnl": 3.85,
+          "trades": 24,
+          "maxBlockDrawdown": 2.77,
+          "discoveryStressPnl": 1.19,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.1576,
+              "trades": 8,
+              "wins": 4,
+              "pnl": -1.26,
+              "winRate": 50.0,
+              "profitFactor": 0.68,
+              "maxDrawdown": 2.77,
+              "fees": 0.364672,
+              "carry": 0.0,
+              "turnover": 364.6721
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.0621,
+              "trades": 11,
+              "wins": 7,
+              "pnl": 0.68,
+              "winRate": 63.6,
+              "profitFactor": 1.18,
+              "maxDrawdown": 2.7,
+              "fees": 0.585529,
+              "carry": 0.0,
+              "turnover": 585.5293
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.886,
+              "trades": 5,
+              "wins": 4,
+              "pnl": 4.43,
+              "winRate": 80.0,
+              "profitFactor": 5.76,
+              "maxDrawdown": 1.03,
+              "fees": 0.339955,
+              "carry": 0.0,
+              "turnover": 339.9554
+            }
+          ],
+          "uncertainty": {
+            "sample": 24,
+            "mean": 0.16053087042761774,
+            "lower95": -0.12143743806001572,
+            "upper95": 0.4981319146468994,
+            "blockLength": 4,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 2.465
+        },
+        {
+          "strategy": {
+            "id": "range-20",
+            "family": "range-reversion",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 3.0,
+            "trail_atr": 1.5,
+            "max_hold_bars": 24,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -2.18,
+          "trades": 11,
+          "maxBlockDrawdown": 2.74,
+          "discoveryStressPnl": -2.67,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.1149,
+              "trades": 4,
+              "wins": 3,
+              "pnl": 0.46,
+              "winRate": 75.0,
+              "profitFactor": 1.46,
+              "maxDrawdown": 1.44,
+              "fees": 0.177952,
+              "carry": 0.0,
+              "turnover": 177.9523
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.1908,
+              "trades": 2,
+              "wins": 1,
+              "pnl": -0.38,
+              "winRate": 50.0,
+              "profitFactor": 0.62,
+              "maxDrawdown": 1.21,
+              "fees": 0.088576,
+              "carry": 0.0,
+              "turnover": 88.576
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.4522,
+              "trades": 5,
+              "wins": 2,
+              "pnl": -2.26,
+              "winRate": 40.0,
+              "profitFactor": 0.25,
+              "maxDrawdown": 2.74,
+              "fees": 0.241757,
+              "carry": 0.0,
+              "turnover": 241.757
+            }
+          ],
+          "uncertainty": {
+            "sample": 11,
+            "mean": -0.1984519842046792,
+            "lower95": -0.47721956529781373,
+            "upper95": 0.08997339921115895,
+            "blockLength": 3,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -3.55
+        },
+        {
+          "strategy": {
+            "id": "range-30",
+            "family": "range-reversion",
+            "lookback": 30,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 3.0,
+            "trail_atr": 1.5,
+            "max_hold_bars": 24,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -2.4,
+          "trades": 6,
+          "maxBlockDrawdown": 2.0,
+          "discoveryStressPnl": -2.61,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.2007,
+              "trades": 3,
+              "wins": 2,
+              "pnl": 0.6,
+              "winRate": 66.7,
+              "profitFactor": 1.6,
+              "maxDrawdown": 1.29,
+              "fees": 0.128518,
+              "carry": 0.0,
+              "turnover": 128.5179
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -1.0,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -1.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.0,
+              "fees": 0.046172,
+              "carry": 0.0,
+              "turnover": 46.1721
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -1.0,
+              "trades": 2,
+              "wins": 0,
+              "pnl": -2.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 2.0,
+              "fees": 0.097385,
+              "carry": 0.0,
+              "turnover": 97.3853
+            }
+          ],
+          "uncertainty": {
+            "sample": 6,
+            "mean": -0.39965340161933655,
+            "lower95": -1.0,
+            "upper95": 0.21917394227855688,
+            "blockLength": 2,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -3.4
+        },
+        {
+          "strategy": {
+            "id": "range-40",
+            "family": "range-reversion",
+            "lookback": 40,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 3.0,
+            "trail_atr": 1.5,
+            "max_hold_bars": 24,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 1.05,
+          "trades": 4,
+          "maxBlockDrawdown": 1.0,
+          "discoveryStressPnl": 0.72,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.9251,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 1.85,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.81,
+              "fees": 0.095744,
+              "carry": 0.0,
+              "turnover": 95.7437
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.3989,
+              "trades": 2,
+              "wins": 1,
+              "pnl": -0.8,
+              "winRate": 50.0,
+              "profitFactor": 0.2,
+              "maxDrawdown": 1.0,
+              "fees": 0.09402,
+              "carry": 0.0,
+              "turnover": 94.0195
+            }
+          ],
+          "uncertainty": {
+            "sample": 4,
+            "mean": 0.2631193659887493,
+            "lower95": -0.39885614855961177,
+            "upper95": 0.9250948805371104,
+            "blockLength": 2,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 0.55
+        }
+      ],
+      "selected": {
+        "id": "momentum-vol-20",
+        "family": "momentum-vol",
+        "lookback": 20,
+        "threshold": 0.6,
+        "sl_atr": 2.0,
+        "tp_atr": 4.0,
+        "trail_atr": 2.0,
+        "max_hold_bars": 48,
+        "volatility_managed": true
+      },
+      "holdout": {
+        "expectancy": -0.1421,
+        "trades": 29,
+        "wins": 11,
+        "pnl": -4.12,
+        "winRate": 37.9,
+        "profitFactor": 0.69,
+        "maxDrawdown": 5.26,
+        "fees": 1.863393,
+        "carry": 0.0,
+        "turnover": 1863.3928,
+        "stress": {
+          "expectancy": -0.2059,
+          "trades": 29,
+          "wins": 11,
+          "pnl": -5.97,
+          "winRate": 37.9,
+          "profitFactor": 0.56,
+          "maxDrawdown": 6.78,
+          "fees": 3.433468,
+          "carry": 0.0,
+          "turnover": 1716.734
+        },
+        "uncertainty": {
+          "sample": 29,
+          "mean": -0.14207196268617295,
+          "lower95": -0.343487994822117,
+          "upper95": 0.04638521337144639,
+          "blockLength": 5,
+          "method": "circular-trade-block-bootstrap",
+          "selectionAdjusted": false,
+          "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+        },
+        "neighborsBeforeHoldout": [
+          {
+            "id": "momentum-vol-12",
+            "pnl": 4.52,
+            "stressPnl": 2.97
+          },
+          {
+            "id": "momentum-vol-30",
+            "pnl": 3.85,
+            "stressPnl": 1.19
+          }
+        ]
+      },
+      "benchmarks": {
+        "cash": {
+          "pnl": 0.0,
+          "maxDrawdown": 0.0,
+          "assumption": "Efectivo sin intereses"
+        },
+        "buyHold": {
+          "pnl": 10.095871,
+          "returnPct": 10.0959,
+          "maxDrawdown": 41.492763,
+          "notional": 100,
+          "fees": 0.210106
+        }
+      },
+      "reason": "No supera muestra, incertidumbre, consistencia o robustez; sin promoción",
+      "sourceSymbol": "ETHUSDT"
+    },
+    {
+      "symbol": "SOL",
+      "interval": "4h",
+      "source": "Binance Spot USDT",
+      "bars": 6569,
+      "dataStart": 1697745600,
+      "dataEnd": 1792339200,
+      "datasetHash": "bb3cfdf48daf0a19b498f07f90237c1fc6d473259e43f1d0cecdfb985b8bad24",
+      "protocol": {
+        "version": "fixed-origin-3-blocks-holdout20-net-v1",
+        "selection": [
+          0,
+          2956
+        ],
+        "folds": [
+          [
+            3004,
+            3722
+          ],
+          [
+            3770,
+            4488
+          ],
+          [
+            4536,
+            5255
+          ]
+        ],
+        "holdout": [
+          5303,
+          6569
+        ],
+        "embargo": 48,
+        "finalHoldoutFraction": 0.2,
+        "selectionFrozenBeforeValidation": true
+      },
+      "costModel": {
+        "version": "net-costs-v1",
+        "feeRate": 0.001,
+        "slippageRate": 0.0002,
+        "spreadPct": 0.0005,
+        "carryDailyRate": 0.0,
+        "mode": "spot",
+        "verified": false,
+        "assumption": "Escenario conservador; costes de cuenta sin verificar"
+      },
+      "promotionApplied": false,
+      "candidateEligible": false,
+      "researchVersion": "simple-families-spot-v2",
+      "engineVersion": 4,
+      "trialCount": 12,
+      "execution": "next-open; stop-first; long-only; fixed-risk",
+      "capitalReference": {
+        "amount": 100,
+        "currency": "USDT",
+        "riskPerTrade": 1,
+        "maximumNotional": 100,
+        "compounded": false
+      },
+      "ok": true,
+      "candidates": [
+        {
+          "strategy": {
+            "id": "donchian-20",
+            "family": "donchian",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -4.38,
+          "trades": 40,
+          "maxBlockDrawdown": 9.44,
+          "discoveryStressPnl": -6.24,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.0722,
+              "trades": 13,
+              "wins": 7,
+              "pnl": -0.94,
+              "winRate": 53.8,
+              "profitFactor": 0.84,
+              "maxDrawdown": 3.57,
+              "fees": 0.522647,
+              "carry": 0.0,
+              "turnover": 522.647
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.2917,
+              "trades": 14,
+              "wins": 7,
+              "pnl": 4.08,
+              "winRate": 50.0,
+              "profitFactor": 1.82,
+              "maxDrawdown": 2.83,
+              "fees": 0.644548,
+              "carry": 0.0,
+              "turnover": 644.5484
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.5787,
+              "trades": 13,
+              "wins": 4,
+              "pnl": -7.52,
+              "winRate": 30.8,
+              "profitFactor": 0.11,
+              "maxDrawdown": 9.44,
+              "fees": 0.600167,
+              "carry": 0.0,
+              "turnover": 600.1673
+            }
+          ],
+          "uncertainty": {
+            "sample": 40,
+            "mean": -0.10944687580784498,
+            "lower95": -0.4031680606059188,
+            "upper95": 0.22455822184680274,
+            "blockLength": 6,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -9.1
+        },
+        {
+          "strategy": {
+            "id": "donchian-40",
+            "family": "donchian",
+            "lookback": 40,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 6.83,
+          "trades": 22,
+          "maxBlockDrawdown": 5.29,
+          "discoveryStressPnl": 5.33,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.5379,
+              "trades": 7,
+              "wins": 6,
+              "pnl": 3.77,
+              "winRate": 85.7,
+              "profitFactor": 4.77,
+              "maxDrawdown": 1.7,
+              "fees": 0.29439,
+              "carry": 0.0,
+              "turnover": 294.3903
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 1.0214,
+              "trades": 8,
+              "wins": 7,
+              "pnl": 8.17,
+              "winRate": 87.5,
+              "profitFactor": 6947688426681327.0,
+              "maxDrawdown": 0.92,
+              "fees": 0.38828,
+              "carry": 0.0,
+              "turnover": 388.2803
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.7298,
+              "trades": 7,
+              "wins": 1,
+              "pnl": -5.11,
+              "winRate": 14.3,
+              "profitFactor": 0.0,
+              "maxDrawdown": 5.29,
+              "fees": 0.298247,
+              "carry": 0.0,
+              "turnover": 298.2471
+            }
+          ],
+          "uncertainty": {
+            "sample": 22,
+            "mean": 0.31039034986543257,
+            "lower95": -0.27016674683346503,
+            "upper95": 0.838902522039875,
+            "blockLength": 4,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": 4.185
+        },
+        {
+          "strategy": {
+            "id": "donchian-60",
+            "family": "donchian",
+            "lookback": 60,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -1.98,
+          "trades": 15,
+          "maxBlockDrawdown": 2.65,
+          "discoveryStressPnl": -2.59,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.3574,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 2.14,
+              "winRate": 66.7,
+              "profitFactor": 2.07,
+              "maxDrawdown": 2.24,
+              "fees": 0.268824,
+              "carry": 0.0,
+              "turnover": 268.8237
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.3532,
+              "trades": 6,
+              "wins": 2,
+              "pnl": -2.12,
+              "winRate": 33.3,
+              "profitFactor": 0.47,
+              "maxDrawdown": 2.19,
+              "fees": 0.293386,
+              "carry": 0.0,
+              "turnover": 293.3865
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.6667,
+              "trades": 3,
+              "wins": 1,
+              "pnl": -2.0,
+              "winRate": 33.3,
+              "profitFactor": 0.0,
+              "maxDrawdown": 2.65,
+              "fees": 0.129092,
+              "carry": 0.0,
+              "turnover": 129.0917
+            }
+          ],
+          "uncertainty": {
+            "sample": 15,
+            "mean": -0.13164922792937545,
+            "lower95": -0.5444155078725139,
+            "upper95": 0.45138287015856465,
+            "blockLength": 3,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -3.305
+        },
+        {
+          "strategy": {
+            "id": "momentum-12",
+            "family": "momentum",
+            "lookback": 12,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 0.42,
+          "trades": 50,
+          "maxBlockDrawdown": 5.63,
+          "discoveryStressPnl": -2.44,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.046,
+              "trades": 16,
+              "wins": 8,
+              "pnl": -0.74,
+              "winRate": 50.0,
+              "profitFactor": 0.9,
+              "maxDrawdown": 4.21,
+              "fees": 0.650365,
+              "carry": 0.0,
+              "turnover": 650.3655
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.2878,
+              "trades": 16,
+              "wins": 9,
+              "pnl": 4.6,
+              "winRate": 56.2,
+              "profitFactor": 1.79,
+              "maxDrawdown": 2.14,
+              "fees": 0.730332,
+              "carry": 0.0,
+              "turnover": 730.3317
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.191,
+              "trades": 18,
+              "wins": 7,
+              "pnl": -3.44,
+              "winRate": 38.9,
+              "profitFactor": 0.67,
+              "maxDrawdown": 5.63,
+              "fees": 0.803999,
+              "carry": 0.0,
+              "turnover": 803.9986
+            }
+          ],
+          "uncertainty": {
+            "sample": 50,
+            "mean": 0.00861817390578255,
+            "lower95": -0.2427006565518267,
+            "upper95": 0.2148292114723422,
+            "blockLength": 7,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -2.395
+        },
+        {
+          "strategy": {
+            "id": "momentum-20",
+            "family": "momentum",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -6.25,
+          "trades": 34,
+          "maxBlockDrawdown": 5.62,
+          "discoveryStressPnl": -8.67,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.399,
+              "trades": 13,
+              "wins": 5,
+              "pnl": -5.19,
+              "winRate": 38.5,
+              "profitFactor": 0.33,
+              "maxDrawdown": 5.62,
+              "fees": 0.518101,
+              "carry": 0.0,
+              "turnover": 518.1012
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.2716,
+              "trades": 10,
+              "wins": 6,
+              "pnl": 2.72,
+              "winRate": 60.0,
+              "profitFactor": 1.78,
+              "maxDrawdown": 2.24,
+              "fees": 0.427919,
+              "carry": 0.0,
+              "turnover": 427.9187
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.3439,
+              "trades": 11,
+              "wins": 5,
+              "pnl": -3.78,
+              "winRate": 45.5,
+              "profitFactor": 0.31,
+              "maxDrawdown": 4.96,
+              "fees": 0.450943,
+              "carry": 0.0,
+              "turnover": 450.9431
+            }
+          ],
+          "uncertainty": {
+            "sample": 34,
+            "mean": -0.18394991584583342,
+            "lower95": -0.44238182100438833,
+            "upper95": 0.10939377741123103,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -9.06
+        },
+        {
+          "strategy": {
+            "id": "momentum-30",
+            "family": "momentum",
+            "lookback": 30,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": false
+          },
+          "discoveryPnl": 1.9,
+          "trades": 28,
+          "maxBlockDrawdown": 3.82,
+          "discoveryStressPnl": 0.31,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.3655,
+              "trades": 10,
+              "wins": 3,
+              "pnl": -3.66,
+              "winRate": 30.0,
+              "profitFactor": 0.45,
+              "maxDrawdown": 3.82,
+              "fees": 0.422295,
+              "carry": 0.0,
+              "turnover": 422.2947
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.2793,
+              "trades": 15,
+              "wins": 9,
+              "pnl": 4.19,
+              "winRate": 60.0,
+              "profitFactor": 1.8,
+              "maxDrawdown": 2.95,
+              "fees": 0.691988,
+              "carry": 0.0,
+              "turnover": 691.9884
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.4579,
+              "trades": 3,
+              "wins": 3,
+              "pnl": 1.37,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.85,
+              "fees": 0.151198,
+              "carry": 0.0,
+              "turnover": 151.1976
+            }
+          ],
+          "uncertainty": {
+            "sample": 28,
+            "mean": 0.068161828480663,
+            "lower95": -0.22384269575504936,
+            "upper95": 0.44075160696161714,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -0.01
+        },
+        {
+          "strategy": {
+            "id": "momentum-vol-12",
+            "family": "momentum-vol",
+            "lookback": 12,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": true
+          },
+          "discoveryPnl": 1.22,
+          "trades": 50,
+          "maxBlockDrawdown": 5.32,
+          "discoveryStressPnl": -1.41,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.046,
+              "trades": 16,
+              "wins": 8,
+              "pnl": -0.74,
+              "winRate": 50.0,
+              "profitFactor": 0.9,
+              "maxDrawdown": 3.98,
+              "fees": 0.617624,
+              "carry": 0.0,
+              "turnover": 617.6242
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.2892,
+              "trades": 16,
+              "wins": 9,
+              "pnl": 4.63,
+              "winRate": 56.2,
+              "profitFactor": 1.85,
+              "maxDrawdown": 2.0,
+              "fees": 0.700117,
+              "carry": 0.0,
+              "turnover": 700.117
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.1482,
+              "trades": 18,
+              "wins": 7,
+              "pnl": -2.67,
+              "winRate": 38.9,
+              "profitFactor": 0.72,
+              "maxDrawdown": 5.32,
+              "fees": 0.75719,
+              "carry": 0.0,
+              "turnover": 757.1897
+            }
+          ],
+          "uncertainty": {
+            "sample": 50,
+            "mean": 0.024486164191061432,
+            "lower95": -0.2127418766613763,
+            "upper95": 0.22286177214547134,
+            "blockLength": 7,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -1.44
+        },
+        {
+          "strategy": {
+            "id": "momentum-vol-20",
+            "family": "momentum-vol",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": true
+          },
+          "discoveryPnl": -5.69,
+          "trades": 34,
+          "maxBlockDrawdown": 5.56,
+          "discoveryStressPnl": -8.02,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.3934,
+              "trades": 13,
+              "wins": 5,
+              "pnl": -5.11,
+              "winRate": 38.5,
+              "profitFactor": 0.33,
+              "maxDrawdown": 5.56,
+              "fees": 0.494575,
+              "carry": 0.0,
+              "turnover": 494.5751
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.258,
+              "trades": 10,
+              "wins": 6,
+              "pnl": 2.58,
+              "winRate": 60.0,
+              "profitFactor": 1.78,
+              "maxDrawdown": 2.24,
+              "fees": 0.403681,
+              "carry": 0.0,
+              "turnover": 403.6814
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.2869,
+              "trades": 11,
+              "wins": 5,
+              "pnl": -3.16,
+              "winRate": 45.5,
+              "profitFactor": 0.34,
+              "maxDrawdown": 4.33,
+              "fees": 0.408386,
+              "carry": 0.0,
+              "turnover": 408.3862
+            }
+          ],
+          "uncertainty": {
+            "sample": 34,
+            "mean": -0.16738181831355137,
+            "lower95": -0.41442057968832324,
+            "upper95": 0.10573805097259625,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -8.47
+        },
+        {
+          "strategy": {
+            "id": "momentum-vol-30",
+            "family": "momentum-vol",
+            "lookback": 30,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 4.0,
+            "trail_atr": 2.0,
+            "max_hold_bars": 48,
+            "volatility_managed": true
+          },
+          "discoveryPnl": 1.19,
+          "trades": 28,
+          "maxBlockDrawdown": 3.65,
+          "discoveryStressPnl": -0.31,
+          "positiveBlocks": 2,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.3653,
+              "trades": 10,
+              "wins": 3,
+              "pnl": -3.65,
+              "winRate": 30.0,
+              "profitFactor": 0.43,
+              "maxDrawdown": 3.65,
+              "fees": 0.39896,
+              "carry": 0.0,
+              "turnover": 398.9603
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": 0.2313,
+              "trades": 15,
+              "wins": 9,
+              "pnl": 3.47,
+              "winRate": 60.0,
+              "profitFactor": 1.67,
+              "maxDrawdown": 2.95,
+              "fees": 0.663293,
+              "carry": 0.0,
+              "turnover": 663.2934
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.4579,
+              "trades": 3,
+              "wins": 3,
+              "pnl": 1.37,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.85,
+              "fees": 0.151198,
+              "carry": 0.0,
+              "turnover": 151.1976
+            }
+          ],
+          "uncertainty": {
+            "sample": 28,
+            "mean": 0.04251901414764873,
+            "lower95": -0.22664042446582708,
+            "upper95": 0.37554878405859204,
+            "blockLength": 5,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -0.635
+        },
+        {
+          "strategy": {
+            "id": "range-20",
+            "family": "range-reversion",
+            "lookback": 20,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 3.0,
+            "trail_atr": 1.5,
+            "max_hold_bars": 24,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -1.89,
+          "trades": 17,
+          "maxBlockDrawdown": 2.39,
+          "discoveryStressPnl": -2.67,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": 0.0416,
+              "trades": 5,
+              "wins": 3,
+              "pnl": 0.21,
+              "winRate": 60.0,
+              "profitFactor": 1.1,
+              "maxDrawdown": 1.47,
+              "fees": 0.221665,
+              "carry": 0.0,
+              "turnover": 221.6654
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.23,
+              "trades": 6,
+              "wins": 3,
+              "pnl": -1.38,
+              "winRate": 50.0,
+              "profitFactor": 0.54,
+              "maxDrawdown": 1.9,
+              "fees": 0.22849,
+              "carry": 0.0,
+              "turnover": 228.4895
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": -0.1198,
+              "trades": 6,
+              "wins": 2,
+              "pnl": -0.72,
+              "winRate": 33.3,
+              "profitFactor": 0.77,
+              "maxDrawdown": 2.39,
+              "fees": 0.27626,
+              "carry": 0.0,
+              "turnover": 276.2604
+            }
+          ],
+          "uncertainty": {
+            "sample": 17,
+            "mean": -0.11124385632498758,
+            "lower95": -0.3831212257444433,
+            "upper95": 0.18123827367112333,
+            "blockLength": 4,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -3.085
+        },
+        {
+          "strategy": {
+            "id": "range-30",
+            "family": "range-reversion",
+            "lookback": 30,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 3.0,
+            "trail_atr": 1.5,
+            "max_hold_bars": 24,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -0.46,
+          "trades": 13,
+          "maxBlockDrawdown": 2.78,
+          "discoveryStressPnl": -1.08,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.3258,
+              "trades": 3,
+              "wins": 1,
+              "pnl": -0.98,
+              "winRate": 33.3,
+              "profitFactor": 0.51,
+              "maxDrawdown": 1.47,
+              "fees": 0.110661,
+              "carry": 0.0,
+              "turnover": 110.6607
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -0.5957,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -2.38,
+              "winRate": 25.0,
+              "profitFactor": 0.21,
+              "maxDrawdown": 2.78,
+              "fees": 0.151689,
+              "carry": 0.0,
+              "turnover": 151.6886
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.4828,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 2.9,
+              "winRate": 66.7,
+              "profitFactor": 3.68,
+              "maxDrawdown": 1.34,
+              "fees": 0.272781,
+              "carry": 0.0,
+              "turnover": 272.7814
+            }
+          ],
+          "uncertainty": {
+            "sample": 13,
+            "mean": -0.035609254905946616,
+            "lower95": -0.49341410260571966,
+            "upper95": 0.393074643930114,
+            "blockLength": 3,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -1.85
+        },
+        {
+          "strategy": {
+            "id": "range-40",
+            "family": "range-reversion",
+            "lookback": 40,
+            "threshold": 0.6,
+            "sl_atr": 2.0,
+            "tp_atr": 3.0,
+            "trail_atr": 1.5,
+            "max_hold_bars": 24,
+            "volatility_managed": false
+          },
+          "discoveryPnl": -0.03,
+          "trades": 11,
+          "maxBlockDrawdown": 2.0,
+          "discoveryStressPnl": -0.58,
+          "positiveBlocks": 1,
+          "folds": [
+            {
+              "start": 3004,
+              "end": 3722,
+              "expectancy": -0.3258,
+              "trades": 3,
+              "wins": 1,
+              "pnl": -0.98,
+              "winRate": 33.3,
+              "profitFactor": 0.51,
+              "maxDrawdown": 1.47,
+              "fees": 0.109756,
+              "carry": 0.0,
+              "turnover": 109.7564
+            },
+            {
+              "start": 3770,
+              "end": 4488,
+              "expectancy": -1.0,
+              "trades": 2,
+              "wins": 0,
+              "pnl": -2.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 2.0,
+              "fees": 0.07796,
+              "carry": 0.0,
+              "turnover": 77.9602
+            },
+            {
+              "start": 4536,
+              "end": 5255,
+              "expectancy": 0.4924,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 2.95,
+              "winRate": 66.7,
+              "profitFactor": 3.73,
+              "maxDrawdown": 1.88,
+              "fees": 0.277264,
+              "carry": 0.0,
+              "turnover": 277.2644
+            }
+          ],
+          "uncertainty": {
+            "sample": 11,
+            "mean": -0.002088295322786289,
+            "lower95": -0.49074343303482343,
+            "upper95": 0.39668197453950854,
+            "blockLength": 3,
+            "method": "circular-trade-block-bootstrap",
+            "selectionAdjusted": false,
+            "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+          },
+          "selectionScore": -1.03
+        }
+      ],
+      "selected": {
+        "id": "donchian-40",
+        "family": "donchian",
+        "lookback": 40,
+        "threshold": 0.6,
+        "sl_atr": 2.0,
+        "tp_atr": 4.0,
+        "trail_atr": 2.0,
+        "max_hold_bars": 48,
+        "volatility_managed": false
+      },
+      "holdout": {
+        "expectancy": 0.3754,
+        "trades": 8,
+        "wins": 5,
+        "pnl": 3.0,
+        "winRate": 62.5,
+        "profitFactor": 2.0,
+        "maxDrawdown": 2.2,
+        "fees": 0.493423,
+        "carry": 0.0,
+        "turnover": 493.4229,
+        "stress": {
+          "expectancy": 0.2649,
+          "trades": 8,
+          "wins": 5,
+          "pnl": 2.12,
+          "winRate": 62.5,
+          "profitFactor": 1.71,
+          "maxDrawdown": 2.29,
+          "fees": 0.912348,
+          "carry": 0.0,
+          "turnover": 456.1739
+        },
+        "uncertainty": {
+          "sample": 8,
+          "mean": 0.3754461526275192,
+          "lower95": -0.38018484338383407,
+          "upper95": 1.1074076983391277,
+          "blockLength": 2,
+          "method": "circular-trade-block-bootstrap",
+          "selectionAdjusted": false,
+          "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+        },
+        "neighborsBeforeHoldout": [
+          {
+            "id": "donchian-20",
+            "pnl": -4.38,
+            "stressPnl": -6.24
+          },
+          {
+            "id": "donchian-60",
+            "pnl": -1.98,
+            "stressPnl": -2.59
+          }
+        ]
+      },
+      "benchmarks": {
+        "cash": {
+          "pnl": 0.0,
+          "maxDrawdown": 0.0,
+          "assumption": "Efectivo sin intereses"
+        },
+        "buyHold": {
+          "pnl": 13.474299,
+          "returnPct": 13.4743,
+          "maxDrawdown": 40.570142,
+          "notional": 100,
+          "fees": 0.213488
+        }
+      },
+      "reason": "No supera muestra, incertidumbre, consistencia o robustez; sin promoción",
+      "sourceSymbol": "SOLUSDT"
+    }
+  ]
+}

@@ -1,0 +1,863 @@
+{
+  "at": 1792349945.660432,
+  "policy": "desk-confirmed-v2",
+  "interval": "15m",
+  "holdoutFrom": 1791744300,
+  "end": 1792349100,
+  "limitations": [
+    "Universo actual: sesgo de supervivencia",
+    "Cuentas por símbolo, no cartera conjunta",
+    "Spread supuesto de 2 pb; sin histórico de profundidad",
+    "Comparador legacy en 15m, no reproducción exacta del antiguo 5m",
+    "Diagnóstico, sin autorización de promoción ni garantía económica"
+  ],
+  "results": [
+    {
+      "symbol": "BTCUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -0.4344287921875889,
+        "closed": 3,
+        "wins": 0,
+        "profitFactor": 0.0,
+        "maxDrawdownPct": 0.43442879218758884,
+        "netRealized": -0.4344287921875891,
+        "strategies": {
+          "trend-pullback": 3
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "ETHUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -0.4126931557707678,
+        "closed": 6,
+        "wins": 1,
+        "profitFactor": 0.33670349186537024,
+        "maxDrawdownPct": 0.7179713244312389,
+        "netRealized": -0.41269315577075877,
+        "strategies": {
+          "trend-pullback": 6
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -0.2915161689162744,
+        "closed": 2,
+        "wins": 0,
+        "profitFactor": 0.0,
+        "maxDrawdownPct": 0.2915161689162744,
+        "netRealized": -0.2915161689162753,
+        "strategies": {
+          "trend-pullback": 2
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -0.1852404096364495,
+        "closed": 1,
+        "wins": 0,
+        "profitFactor": 0.0,
+        "maxDrawdownPct": 0.1852404096364495,
+        "netRealized": -0.18524040963645044,
+        "strategies": {
+          "legacy": 1
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "ZECUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -2.4534939219997796,
+        "closed": 35,
+        "wins": 13,
+        "profitFactor": 0.4520611142613957,
+        "maxDrawdownPct": 2.7228630223787262,
+        "netRealized": -2.4534939219997147,
+        "strategies": {
+          "trend-pullback": 26,
+          "recovery": 8,
+          "breakout": 1
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -1.7659206304509922,
+        "closed": 17,
+        "wins": 5,
+        "profitFactor": 0.31574985884581297,
+        "maxDrawdownPct": 1.8560724911018796,
+        "netRealized": -1.7659206304510282,
+        "strategies": {
+          "trend-pullback": 15,
+          "recovery": 2
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": -0.8530502120144803,
+        "closed": 4,
+        "wins": 1,
+        "profitFactor": 0.07798792649725972,
+        "maxDrawdownPct": 1.13532474822199,
+        "netRealized": -0.8530502120144781,
+        "strategies": {
+          "recovery": 2,
+          "trend-pullback": 2
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -9.788125790595814,
+        "closed": 140,
+        "wins": 42,
+        "profitFactor": 0.32218642225282473,
+        "maxDrawdownPct": 9.829863242503574,
+        "netRealized": -9.788125790595757,
+        "strategies": {
+          "legacy": 140
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "SOLUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -1.3874588221133166,
+        "closed": 14,
+        "wins": 3,
+        "profitFactor": 0.19948780374388292,
+        "maxDrawdownPct": 1.3874588221133166,
+        "netRealized": -1.387458822113359,
+        "strategies": {
+          "recovery": 5,
+          "trend-pullback": 9
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -0.38247614422155607,
+        "closed": 7,
+        "wins": 2,
+        "profitFactor": 0.4760928165086275,
+        "maxDrawdownPct": 0.5740893415894108,
+        "netRealized": -0.382476144221559,
+        "strategies": {
+          "trend-pullback": 6,
+          "recovery": 1
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -0.12465171204109993,
+        "closed": 11,
+        "wins": 5,
+        "profitFactor": 0.8657207031099696,
+        "maxDrawdownPct": 0.6343653816001084,
+        "netRealized": -0.1246517120410893,
+        "strategies": {
+          "legacy": 11
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "NEARUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -3.726739028515965,
+        "closed": 53,
+        "wins": 17,
+        "profitFactor": 0.6176487745988586,
+        "maxDrawdownPct": 4.857364091807115,
+        "netRealized": -3.645890135331241,
+        "strategies": {
+          "trend-pullback": 41,
+          "recovery": 12
+        },
+        "openAtEnd": true
+      },
+      "holdout": {
+        "returnPct": -1.8912629082147134,
+        "closed": 19,
+        "wins": 6,
+        "profitFactor": 0.4095027007857299,
+        "maxDrawdownPct": 2.2833919040519657,
+        "netRealized": -1.8912629082147068,
+        "strategies": {
+          "trend-pullback": 15,
+          "recovery": 4
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": -2.303328645622088,
+        "closed": 17,
+        "wins": 6,
+        "profitFactor": 0.32312768297319283,
+        "maxDrawdownPct": 2.5821293675287453,
+        "netRealized": -2.303328645622051,
+        "strategies": {
+          "trend-pullback": 13,
+          "recovery": 4
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -11.298864740862996,
+        "closed": 187,
+        "wins": 75,
+        "profitFactor": 0.4190602448767865,
+        "maxDrawdownPct": 11.298864740862996,
+        "netRealized": -11.298864740863003,
+        "strategies": {
+          "legacy": 187
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "XRPUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -1.7285093687299309,
+        "closed": 19,
+        "wins": 5,
+        "profitFactor": 0.28564036024433315,
+        "maxDrawdownPct": 1.7285093687299309,
+        "netRealized": -1.7285093687299278,
+        "strategies": {
+          "trend-pullback": 14,
+          "recovery": 5
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -0.14201671018189188,
+        "closed": 2,
+        "wins": 1,
+        "profitFactor": 0.15956562346579667,
+        "maxDrawdownPct": 0.2809858597071013,
+        "netRealized": -0.14201671018187734,
+        "strategies": {
+          "recovery": 1,
+          "trend-pullback": 1
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -0.3002924173360668,
+        "closed": 4,
+        "wins": 1,
+        "profitFactor": 0.3875648032502888,
+        "maxDrawdownPct": 0.5384879873006128,
+        "netRealized": -0.3002924173360576,
+        "strategies": {
+          "legacy": 4
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "BNBUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -0.27353028570539095,
+        "closed": 2,
+        "wins": 0,
+        "profitFactor": 0.0,
+        "maxDrawdownPct": 0.27353028570539095,
+        "netRealized": -0.2735302857053843,
+        "strategies": {
+          "trend-pullback": 2
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -1.3347033749157902,
+        "closed": 22,
+        "wins": 8,
+        "profitFactor": 0.44546680626775753,
+        "maxDrawdownPct": 1.3347033749157902,
+        "netRealized": -1.3347033749157446,
+        "strategies": {
+          "trend-pullback": 14,
+          "recovery": 8
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -0.8465483346262488,
+        "closed": 9,
+        "wins": 1,
+        "profitFactor": 0.022871987029268293,
+        "maxDrawdownPct": 0.8465483346262489,
+        "netRealized": -0.8465483346262509,
+        "strategies": {
+          "trend-pullback": 5,
+          "recovery": 4
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": -0.08219270006232193,
+        "closed": 1,
+        "wins": 0,
+        "profitFactor": 0.0,
+        "maxDrawdownPct": 0.1491610615884378,
+        "netRealized": -0.08219270006231788,
+        "strategies": {
+          "trend-pullback": 1
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": 0.34125777644808863,
+        "closed": 15,
+        "wins": 9,
+        "profitFactor": 1.363949236737223,
+        "maxDrawdownPct": 0.3831826431656637,
+        "netRealized": 0.34125777644810823,
+        "strategies": {
+          "legacy": 15
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "SNDKBUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -0.4772600355886567,
+        "closed": 10,
+        "wins": 4,
+        "profitFactor": 0.4422385861440035,
+        "maxDrawdownPct": 0.8392210439614017,
+        "netRealized": -0.4772600355886731,
+        "strategies": {
+          "recovery": 3,
+          "trend-pullback": 7
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -0.20159303469317535,
+        "closed": 10,
+        "wins": 4,
+        "profitFactor": 0.806635388722819,
+        "maxDrawdownPct": 0.9268290385303906,
+        "netRealized": -0.20159303469318657,
+        "strategies": {
+          "recovery": 3,
+          "trend-pullback": 7
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": 0.52062929275084,
+        "closed": 4,
+        "wins": 3,
+        "profitFactor": 2.7193680897463146,
+        "maxDrawdownPct": 0.4091690585579907,
+        "netRealized": 0.5206292927508236,
+        "strategies": {
+          "recovery": 3,
+          "trend-pullback": 1
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -1.493075861785556,
+        "closed": 44,
+        "wins": 18,
+        "profitFactor": 0.58352001422492,
+        "maxDrawdownPct": 1.7972917237160473,
+        "netRealized": -1.4930758617855338,
+        "strategies": {
+          "legacy": 44
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -0.9236345894948386,
+        "closed": 20,
+        "wins": 8,
+        "profitFactor": 0.5177990932739742,
+        "maxDrawdownPct": 1.0646609669017977,
+        "netRealized": -0.9236345894947896,
+        "strategies": {
+          "recovery": 5,
+          "trend-pullback": 15
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -0.610600613037235,
+        "closed": 6,
+        "wins": 1,
+        "profitFactor": 0.22379948572201894,
+        "maxDrawdownPct": 0.6423037324532767,
+        "netRealized": -0.6106006130372341,
+        "strategies": {
+          "recovery": 4,
+          "trend-pullback": 2
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": 0.0,
+        "closed": 0,
+        "wins": 0,
+        "profitFactor": null,
+        "maxDrawdownPct": 0.0,
+        "netRealized": 0,
+        "strategies": {},
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": 0.2334626946097842,
+        "closed": 7,
+        "wins": 4,
+        "profitFactor": 2.0600183244875923,
+        "maxDrawdownPct": 0.24645735018469875,
+        "netRealized": 0.23346269460979915,
+        "strategies": {
+          "legacy": 7
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "WLDUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -2.441295354661179,
+        "closed": 33,
+        "wins": 9,
+        "profitFactor": 0.5933004074883791,
+        "maxDrawdownPct": 3.4984624997911147,
+        "netRealized": -2.4412953546611713,
+        "strategies": {
+          "trend-pullback": 26,
+          "recovery": 7
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -0.8726601463282577,
+        "closed": 12,
+        "wins": 4,
+        "profitFactor": 0.5539768824409196,
+        "maxDrawdownPct": 0.9797665944742135,
+        "netRealized": -0.8726601463282682,
+        "strategies": {
+          "trend-pullback": 8,
+          "recovery": 4
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": -1.1255994972182748,
+        "closed": 9,
+        "wins": 3,
+        "profitFactor": 0.3576621282056783,
+        "maxDrawdownPct": 1.1643138319341801,
+        "netRealized": -1.1255994972182444,
+        "strategies": {
+          "trend-pullback": 7,
+          "recovery": 2
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -8.973782449623542,
+        "closed": 160,
+        "wins": 53,
+        "profitFactor": 0.43082151129042856,
+        "maxDrawdownPct": 8.973782449623542,
+        "netRealized": -8.86369193462736,
+        "strategies": {
+          "legacy": 160
+        },
+        "openAtEnd": true
+      }
+    },
+    {
+      "symbol": "SUIUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -3.922643634773536,
+        "closed": 45,
+        "wins": 14,
+        "profitFactor": 0.4049819504294304,
+        "maxDrawdownPct": 4.51241985034148,
+        "netRealized": -3.9226436347735056,
+        "strategies": {
+          "trend-pullback": 36,
+          "recovery": 9
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -1.7215239397780806,
+        "closed": 17,
+        "wins": 5,
+        "profitFactor": 0.06538565479411326,
+        "maxDrawdownPct": 1.7371424537549003,
+        "netRealized": -1.721523939778057,
+        "strategies": {
+          "trend-pullback": 12,
+          "recovery": 5
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": -0.3439097914826732,
+        "closed": 2,
+        "wins": 0,
+        "profitFactor": 0.0,
+        "maxDrawdownPct": 0.43531164476722495,
+        "netRealized": -0.3439097914826888,
+        "strategies": {
+          "recovery": 2
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -2.98505557724647,
+        "closed": 57,
+        "wins": 19,
+        "profitFactor": 0.4134367948185462,
+        "maxDrawdownPct": 2.997003189513322,
+        "netRealized": -2.985055577246447,
+        "strategies": {
+          "legacy": 57
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "HBARUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -2.1471083120282657,
+        "closed": 31,
+        "wins": 9,
+        "profitFactor": 0.5573711256283521,
+        "maxDrawdownPct": 3.7392263391972493,
+        "netRealized": -2.08374780465661,
+        "strategies": {
+          "trend-pullback": 27,
+          "recovery": 4
+        },
+        "openAtEnd": true
+      },
+      "holdout": {
+        "returnPct": -0.1677705783293959,
+        "closed": 17,
+        "wins": 9,
+        "profitFactor": 0.8618120696876534,
+        "maxDrawdownPct": 0.6999599912031279,
+        "netRealized": -0.1677705783294239,
+        "strategies": {
+          "trend-pullback": 14,
+          "recovery": 3
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": -0.243984880374029,
+        "closed": 4,
+        "wins": 2,
+        "profitFactor": 0.5923309194222027,
+        "maxDrawdownPct": 0.6248923126777505,
+        "netRealized": -0.24398488037402297,
+        "strategies": {
+          "trend-pullback": 4
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -1.5646245867826138,
+        "closed": 41,
+        "wins": 19,
+        "profitFactor": 0.5665017791275172,
+        "maxDrawdownPct": 1.5646245867826136,
+        "netRealized": -1.5646245867825752,
+        "strategies": {
+          "legacy": 41
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "SOXLBUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -1.2642854582287413,
+        "closed": 29,
+        "wins": 12,
+        "profitFactor": 0.6886200189064304,
+        "maxDrawdownPct": 1.4144837206798897,
+        "netRealized": -1.2642854582287493,
+        "strategies": {
+          "recovery": 8,
+          "trend-pullback": 21
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -1.0210112684185617,
+        "closed": 13,
+        "wins": 4,
+        "profitFactor": 0.554047495936882,
+        "maxDrawdownPct": 1.1309831109514703,
+        "netRealized": -1.021011268418539,
+        "strategies": {
+          "trend-pullback": 10,
+          "recovery": 3
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": -0.6883280324960168,
+        "closed": 9,
+        "wins": 4,
+        "profitFactor": 0.6154777891595848,
+        "maxDrawdownPct": 1.393188662756776,
+        "netRealized": -0.6883280324960045,
+        "strategies": {
+          "trend-pullback": 6,
+          "recovery": 3
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -15.063267625666825,
+        "closed": 154,
+        "wins": 44,
+        "profitFactor": 0.32836685797596826,
+        "maxDrawdownPct": 15.063267625666823,
+        "netRealized": -15.06326762566675,
+        "strategies": {
+          "legacy": 154
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "UNIUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -3.8345948975298825,
+        "closed": 41,
+        "wins": 10,
+        "profitFactor": 0.3387400798330669,
+        "maxDrawdownPct": 4.118240352954658,
+        "netRealized": -3.8345948975299153,
+        "strategies": {
+          "recovery": 13,
+          "trend-pullback": 28
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -1.715813213027559,
+        "closed": 21,
+        "wins": 6,
+        "profitFactor": 0.3277818783220146,
+        "maxDrawdownPct": 1.715813213027559,
+        "netRealized": -1.7158132130276178,
+        "strategies": {
+          "trend-pullback": 15,
+          "recovery": 5,
+          "breakout": 1
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": 0.029724197461618473,
+        "closed": 5,
+        "wins": 2,
+        "profitFactor": 1.0674420055752405,
+        "maxDrawdownPct": 0.5707599673868493,
+        "netRealized": 0.02972419746163099,
+        "strategies": {
+          "trend-pullback": 2,
+          "recovery": 3
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -3.012676727086898,
+        "closed": 75,
+        "wins": 26,
+        "profitFactor": 0.5442651634520064,
+        "maxDrawdownPct": 3.3532154571663164,
+        "netRealized": -3.012676727086806,
+        "strategies": {
+          "legacy": 75
+        },
+        "openAtEnd": false
+      }
+    },
+    {
+      "symbol": "ENAUSDT",
+      "rows": 2266,
+      "development": {
+        "returnPct": -1.7322261364585216,
+        "closed": 44,
+        "wins": 16,
+        "profitFactor": 0.7016670428094658,
+        "maxDrawdownPct": 1.9184123433181353,
+        "netRealized": -1.7322261364586107,
+        "strategies": {
+          "trend-pullback": 31,
+          "recovery": 13
+        },
+        "openAtEnd": false
+      },
+      "holdout": {
+        "returnPct": -2.5177839434990688,
+        "closed": 15,
+        "wins": 2,
+        "profitFactor": 0.03208268196733792,
+        "maxDrawdownPct": 2.8402184322121564,
+        "netRealized": -2.5177839434990754,
+        "strategies": {
+          "trend-pullback": 8,
+          "recovery": 7
+        },
+        "openAtEnd": false
+      },
+      "stress": {
+        "returnPct": -2.077898610473042,
+        "closed": 10,
+        "wins": 1,
+        "profitFactor": 0.013456253076374053,
+        "maxDrawdownPct": 2.3425850298679283,
+        "netRealized": -2.0778986104730084,
+        "strategies": {
+          "trend-pullback": 8,
+          "recovery": 2
+        },
+        "openAtEnd": false
+      },
+      "legacySame15m": {
+        "returnPct": -10.5695986196652,
+        "closed": 152,
+        "wins": 42,
+        "profitFactor": 0.3376194019845589,
+        "maxDrawdownPct": 10.699550906718503,
+        "netRealized": -10.569598619665166,
+        "strategies": {
+          "legacy": 152
+        },
+        "openAtEnd": false
+      }
+    }
+  ]
+}

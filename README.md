@@ -1,5 +1,19 @@
 # 📈 Panel de Trading en Tiempo Real
 
+> **Rendimiento y continuidad (18-10-2026):** [diagnóstico, mejoras y prioridades](reports/PLAN_RENDIMIENTO_2026-10-18.md).
+> Vigilancia independiente de stops también en el Laboratorio, reutilización de velas
+> cerradas, consultas de libro por lote y diagnóstico económico con resultados netos.
+> Protección temporal contra suspensión automática en Windows mientras vive el servicio;
+> las suspensiones explícitas y apagados siguen interrumpiendo la ejecución local.
+> Comparación de un año en 1 h/4 h y exploración de tres años en 4 h: ninguna promoción.
+
+> **Tres Mesas Siete (18-10-2026):** [revisión de operaciones, cambios y límites](reports/REVISION_MESAS_2026-10-18.md).
+> Cripto, Forex y Acciones tienen siete roles, cuentas y controles independientes.
+> Cripto conserva su historial y opera en simulación con velas de 15 minutos,
+> universo Spot USDT dinámico y riesgo objetivo del 0,5 % por entrada.
+> Las otras dos mesas comienzan con 100 USD virtuales cada una y respetan la sesión.
+> El diagnóstico histórico sigue sin demostrar rentabilidad; no hay órdenes reales.
+
 > **Estado actual (15-10-2026):** [mejoras económicas y arquitectura](reports/MEJORAS_ECONOMICAS_2026-10-15.md)
 > e [investigación con resultados reales](reports/INVESTIGACION_SISTEMAS_2026-10-15.md).
 > Mesa Siete recorre los mercados Spot USDT elegibles con cotizaciones reales y órdenes

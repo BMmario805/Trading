@@ -25,8 +25,9 @@ def status():
 
 async def _run():
     try:
-        # Presupuesto fijo: 9 datasets, 12 variantes, nunca envía órdenes.
-        result=await research.run_research(days=30,max_bars=9000)
+        # Seis datasets y doce variantes fijadas antes de observar sus resultados.
+        # Un año permite examinar regímenes distintos sin forzar promoción.
+        result=await research.run_research(intervals=('1h','4h'),days=365,max_bars=9000)
         content=json.dumps(result,ensure_ascii=False,allow_nan=False,indent=2)
         RESULT_PATH.parent.mkdir(parents=True,exist_ok=True)
         archive=RESULT_PATH.with_name(f'research-{time.time_ns()}.json')

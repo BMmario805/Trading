@@ -1,0 +1,19 @@
+.profit-review { margin:24px 0; padding:22px; border:1px solid #e2d7c5; border-radius:15px; background:#fffcf5; color:#514938; }
+.profit-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+.profit-heading h2 { margin:5px 0; font-size:24px; letter-spacing:-.5px; }
+.profit-heading p,.profit-review details>p { font-size:11px; color:#84745f; }
+.profit-heading>span { font-size:10px; color:#9b6345; padding:7px 10px; border:1px solid #e8cdb4; border-radius:20px; white-space:nowrap; }
+.profit-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0; }
+.profit-cards article { padding:17px; background:#f7f1e5; border:1px solid #e9decb; border-radius:10px; }
+.profit-cards small { display:block; font-size:10px; color:#80705d; }
+.profit-cards strong { display:block; font-size:29px; margin:8px 0; }
+.profit-cards em { font-size:12px; font-weight:400; font-style:normal; }
+.profit-cards p,.profit-priorities p,.profit-review details>p { font-size:11px; line-height:1.6; color:#877760; }
+.profit-review summary { cursor:pointer; font-size:12px; font-weight:650; padding:10px 0; }
+.profit-table { overflow-x:auto; }
+.profit-table table { min-width:820px; }
+.profit-table small { display:block; font-size:9px; color:#95856d; max-width:190px; }
+.profit-priorities { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-top:15px; }
+.profit-priorities strong { font-size:12px; }
+.profit-risk-note { padding:12px; background:#fff0e5; border:1px solid #e9c9ad; border-radius:8px; color:#97563b; font-size:11px; line-height:1.6; }
+@media(max-width:700px) { .profit-review { padding:16px 12px; } .profit-heading { flex-direction:column; } .profit-cards,.profit-priorities { grid-template-columns:1fr; } .profit-heading h2 { font-size:22px; } }
