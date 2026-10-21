@@ -26,6 +26,20 @@ RESEARCH_VERSION = 'simple-families-spot-v2'
 INTERVALS = ('5m', '15m', '1h', '4h')
 
 
+def validation_checks(final, stress, uncertainty, selected, neighbors):
+    """Desglosa los controles existentes; no relaja el examen tras ver sus resultados."""
+    stable=sum(n['pnl']>0 and n['stressPnl']>0 for n in neighbors)
+    lower=uncertainty.get('lower95')
+    return [
+        dict(id='sample',label='Muestra final suficiente',observed=final['trades'],required=20,passed=final['trades']>=20),
+        dict(id='net',label='Resultado neto positivo',observed=final['pnl'],required=0,passed=final['pnl']>0),
+        dict(id='stress',label='Resultado positivo a doble coste',observed=stress['pnl'],required=0,passed=stress['pnl']>0),
+        dict(id='uncertainty',label='Límite inferior de expectativa positivo',observed=lower,required=0,passed=lower is not None and lower>0),
+        dict(id='blocks',label='Tres bloques de descubrimiento positivos',observed=selected['positiveBlocks'],required=3,passed=selected['positiveBlocks']==3),
+        dict(id='neighbors',label='Parámetros vecinos robustos',observed=stable,required=1,passed=stable>=1),
+    ]
+
+
 def _benchmark(candles: list[dict], start: int, end: int, model: dict, capital: float = 100) -> dict:
     if end <= start:
         return dict(cash=dict(pnl=0.0), buyHold=None)
@@ -117,17 +131,15 @@ def evaluate_dataset(candles: list[dict], symbol: str, interval: str, model: dic
     neighbors = [s for s in REGISTRY if s.family == strategy.family and s.id != strategy.id]
     neighbor_metrics = [dict(id=s.id, pnl=metrics_by_id[s.id]['discoveryPnl'],
                              stressPnl=metrics_by_id[s.id]['discoveryStressPnl']) for s in neighbors]
-    robust_neighbors = sum(n['pnl'] > 0 and n['stressPnl'] > 0 for n in neighbor_metrics) >= 1
     # Solo ahora se abre el holdout para un candidato ya congelado.
     final = replay(strategy, *protocol['holdout'], costs)
     final_stress = replay(strategy, *protocol['holdout'], stressed_costs(costs))
     uncertainty = expectancy_uncertainty(final['tradePnls'])
-    candidate_ok = (final['trades'] >= 20 and final['pnl'] > 0 and final_stress['pnl'] > 0
-                    and uncertainty.get('lower95') is not None and uncertainty['lower95'] > 0
-                    and selected['positiveBlocks'] == 3 and robust_neighbors)
+    checks=validation_checks(final,final_stress,uncertainty,selected,neighbor_metrics)
+    candidate_ok=all(check['passed'] for check in checks)
     return {**base, 'ok': True, 'candidates': candidates, 'selected': strategy.description(),
             'holdout': {**compact_metrics(final), 'stress': compact_metrics(final_stress),
-                        'uncertainty': uncertainty, 'neighborsBeforeHoldout': neighbor_metrics},
+                        'uncertainty': uncertainty, 'neighborsBeforeHoldout': neighbor_metrics,'validationChecks':checks},
             'benchmarks': _benchmark(candles, *protocol['holdout'], costs),
             'candidateEligible': candidate_ok,
             'reason': ('Candidato para seguimiento futuro; sin promoción automática' if candidate_ok else

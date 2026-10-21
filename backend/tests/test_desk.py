@@ -407,12 +407,12 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(set(reviewed)),26)
         self.assertIsNone(self.engine.state['position'])
 
-    async def test_gemini_only_receives_bounded_eligible_shortlist_and_no_fake_fallback_confidence(self):
+    async def test_gemini_only_receives_bounded_ready_setups_and_no_fake_fallback_confidence(self):
         d=add_markets(data(),[f'COIN{i}' for i in range(120)])
         d['tickers']['COIN0USDT']['quoteVolume']='1'
         agent=AsyncMock()
         agent.choose_market.return_value=None
-        with patch.object(desk.gemini_agent,'AGENT',agent),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=dict(self.analysis,trend=False)):
+        with patch.object(desk.gemini_agent,'AGENT',agent),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
             await self.engine.scan(d)
             await self.engine.scan(d)
         agent.choose_market.assert_awaited_once()
@@ -420,8 +420,30 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(shortlist),50)
         self.assertLess(len(json.dumps(shortlist).encode()),12000)
         self.assertTrue(all(c['eligible'] for c in shortlist))
+        self.assertTrue(all(c['netRewardRisk']>=desk.MIN_NET_REWARD_RISK and 'atrPct' in c and 'extensionAtr' in c for c in shortlist))
+        self.assertFalse(any(k in c for c in shortlist for k in ('cash','balance','positions','qty','notional')))
         self.assertNotIn('confidence',self.engine.state['selection'])
         self.assertEqual(self.engine.state['roles']['Selector']['provider'],'Reglas deterministas')
+
+    async def test_no_technical_setups_never_spend_selector_calls(self):
+        self.engine.state['selectionAt']=0
+        agent=AsyncMock()
+        with patch.object(desk.gemini_agent,'AGENT',agent),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=dict(self.analysis,trend=False)):
+            await self.engine.scan(data())
+        agent.choose_market.assert_not_awaited()
+        self.assertEqual(self.engine.state['selectionAt'],0)
+        self.assertEqual(self.engine.state['positions'],[])
+
+    async def test_pause_during_model_request_blocks_previously_valid_setup(self):
+        agent=AsyncMock()
+        async def pause(_):
+            self.engine.state['enabled']=False
+            return dict(symbol='SOLUSDT',reason='Prioridad técnica',confidence=.9)
+        agent.choose_market.side_effect=pause
+        with patch.object(desk.gemini_agent,'AGENT',agent),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
+            await self.engine.scan(data())
+        agent.choose_market.assert_awaited_once()
+        self.assertEqual(self.engine.state['positions'],[])
 
     async def test_stale_or_malformed_market_never_opens_a_trade(self):
         for field,value in [('bidPrice','nan'),('askPrice','-1'),('askQty','nan')]:

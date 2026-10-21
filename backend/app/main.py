@@ -20,6 +20,8 @@ from . import mt5_performance
 from . import open_positions
 from . import portfolio_risk, research_jobs, performance_review, runtime_guard
 from .sentiment import get_opinions, get_sentiment
+from .cloud_runtime import health_snapshot, mount_frontend
+from .book_stream import BOOKS
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('httpx').setLevel(logging.WARNING)
@@ -29,6 +31,7 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 async def lifespan(_: FastAPI):
     runtime_guard.acquire()
     try:
+        BOOKS.start()
         bots.start_all()
         learning.start_scheduler()
         mt5_demo.start()
@@ -44,6 +47,7 @@ async def lifespan(_: FastAPI):
             await learning.stop_scheduler()
             await training.stop_all()
             await bots.stop_all()
+            await BOOKS.stop()
             await market_data.close_client()
             await sentiment_mod.close_session()
             await tradingview.close_session()
@@ -52,6 +56,16 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Trading Dashboard API", lifespan=lifespan)
+
+
+@app.get('/api/health')
+async def health_status():
+    return health_snapshot()
+
+
+@app.get('/api/market-feed')
+async def market_feed_status():
+    return BOOKS.status()
 
 
 @app.get('/api/performance/review')
@@ -412,3 +426,7 @@ async def markets_quality():
     from . import opportunities
     data = await opportunities.snapshot()
     return {"updatedAt": data["at"], "markets": [opportunities.assess(s, data) for s in SYMBOLS if s.source == "binance"]}
+
+
+# Las rutas API y WebSocket se registran antes del panel estático.
+mount_frontend(app)

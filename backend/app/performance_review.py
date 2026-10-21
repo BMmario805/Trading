@@ -11,6 +11,7 @@ import statistics
 import time
 
 from . import bots,desk,runtime_guard
+from .book_stream import BOOKS
 
 
 def metrics(trades):
@@ -104,7 +105,7 @@ def snapshot():
                 currency=(bot.session or {}).get('currency','USD'),initial=bot.cfg.initial_balance,
                 equity=bot.balance+sum(p.unrealized() for p in bot.positions.values()),performance=metrics(trades),
                 monitoring=dict(bot.risk_monitor)))
-    return dict(updatedAt=time.time(),accounts=accounts,runtime=runtime_guard.status(),
+    return dict(updatedAt=time.time(),accounts=accounts,runtime=runtime_guard.status(),marketFeed=BOOKS.status(),
         scope='Cuentas independientes; importes en su propia divisa, sin total mixto',
         interpretation='Expectativa y factor de beneficio descriptivos; no prueban una ventaja futura',
         priorities=[dict(id='edge',title='Validar una expectativa neta positiva',detail='Mantener el riesgo experimental hasta obtener evidencia fuera de muestra y seguimiento futuro'),

@@ -1,0 +1,9 @@
+# Versiones directas ya usadas por el proyecto; MetaTrader se excluye en Linux.
+-r requirements.txt
+fastapi==0.139.0
+uvicorn[standard]==0.51.0
+httpx==0.28.1
+vaderSentiment==3.3.2
+curl_cffi==0.15.0
+tzdata==2026.3
+websockets==16.0

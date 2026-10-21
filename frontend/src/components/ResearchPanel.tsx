@@ -22,7 +22,7 @@ interface Dataset {
   symbol: string; interval: string; source?: string; bars?: number; ok: boolean; reason: string
   dataStart?: number; dataEnd?: number; selected?: Strategy | null; candidates?: Candidate[]
   candidateEligible?: boolean; trialCount?: number; datasetHash?: string
-  holdout?: (Metrics & { stress: Metrics; uncertainty: { lower95: number | null; upper95: number | null; sample: number } }) | null
+  holdout?: (Metrics & { stress: Metrics; uncertainty: { lower95: number | null; upper95: number | null; sample: number }; validationChecks?: { id: string; label: string; observed: number | null; required: number; passed: boolean }[] }) | null
   benchmarks?: { cash: Metrics; buyHold: Metrics | null } | null
   costModel?: { feeRate: number; slippageRate: number; spreadPct: number; carryDailyRate: number; verified: boolean }
 }
@@ -74,6 +74,7 @@ function DatasetReport({ row }: { row: Dataset }) {
           <div><span>Mayor caída del tramo</span><strong>{amount(final.maxDrawdown)} <small>USDT</small></strong><small>Comisiones: {amount(final.fees)} · Financiación: {amount(final.carry)}</small></div>
         </div>
         <p className="research-small">Expectativa por operación, intervalo descriptivo del 95 %: {final.uncertainty.lower95 == null ? 'muestra insuficiente' : `${amount(final.uncertainty.lower95)} a ${amount(final.uncertainty.upper95)} USDT`}. No corrige la selección entre múltiples mercados.</p>
+        {final.validationChecks && <ul className="research-validation">{final.validationChecks.map(check => <li key={check.id} className={check.passed ? 'positive' : 'negative'}>{check.passed ? '✓' : 'Pendiente'} · {check.label}: {amount(check.observed)}{['sample', 'blocks', 'neighbors'].includes(check.id) ? ` / ${check.required}` : ''}</li>)}</ul>}
       </>}
       {row.benchmarks && <div className="research-benchmarks"><strong>Mismo tramo · referencia 100 USDT</strong><span>Efectivo: {signed(row.benchmarks.cash.pnl)} USDT</span><span>Comprar y mantener: {signed(row.benchmarks.buyHold?.pnl)} USDT</span><small>La exposición de las estrategias puede ser menor.</small></div>}
       {cost && <p className="research-costs">Escenario por entrada y salida: comisión {percent(cost.feeRate)}, deslizamiento {percent(cost.slippageRate)} y spread completo {percent(cost.spreadPct)}. Spot largo, sin apalancamiento ni préstamo. Tarifas de cuenta {cost.verified ? 'verificadas' : 'sin verificar'}.</p>}

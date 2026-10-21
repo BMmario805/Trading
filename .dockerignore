@@ -1,0 +1,16 @@
+.git
+.claude
+.runtime
+**/.venv
+**/__pycache__
+**/node_modules
+frontend/dist
+reports
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.env
+**/.env*
+**/*private*key*
+state
+backend/tests

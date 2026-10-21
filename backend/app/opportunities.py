@@ -7,6 +7,7 @@ import time
 
 from . import market_data
 from .config import Symbol
+from .book_stream import BOOKS
 
 _cache: dict[str, tuple[float, object]] = {}
 _lock = asyncio.Lock()
@@ -21,17 +22,44 @@ async def execution_snapshot(symbols, reference):
     keys=tuple(sorted(set(symbols)))
     if not keys or len(keys)>20:
         raise ValueError('Lote de cotizaciones inválido')
+    BOOKS.watch(keys)
+    live=BOOKS.fresh(keys)
+    if len(live)==len(keys):
+        BOOKS.hits+=len(keys)
+        return dict(metadata=reference.get('metadata',{}),tickers=reference.get('tickers',{}),
+                    books=live,at=min(row['receivedAt'] for row in live.values()),scope='execution-books',provider='websocket')
     async with _book_lock:
         cached=_book_cache.get(keys)
         if cached and time.time()-cached[0]<2:
             return cached[1]
+        live=BOOKS.fresh(keys)
+        if len(live)==len(keys):
+            BOOKS.hits+=len(keys)
+            return dict(metadata=reference.get('metadata',{}),tickers=reference.get('tickers',{}),
+                        books=live,at=min(row['receivedAt'] for row in live.values()),scope='execution-books',provider='websocket')
+        missing=[key for key in keys if key not in live]
         raw=await asyncio.wait_for(market_data._binance_get('/api/v3/ticker/bookTicker',
-                                  {'symbols':json.dumps(keys,separators=(',',':'),ensure_ascii=False)}),timeout=4)
-        books={row['symbol']:row for row in raw}
+                                  {'symbols':json.dumps(missing,separators=(',',':'),ensure_ascii=False)}),timeout=4)
+        received=time.time()
+        # Releer el stream después de la espera: un libro que caducó durante
+        # REST no se rejuvenece asignándole la fecha de la respuesta nueva.
+        live=BOOKS.fresh(keys)
+        books={**{row['symbol']:row for row in raw},**live}
+        rest_count=len(raw)
+        if any(key not in books for key in keys):
+            raw=await asyncio.wait_for(market_data._binance_get('/api/v3/ticker/bookTicker',
+                                      {'symbols':json.dumps(keys,separators=(',',':'),ensure_ascii=False)}),timeout=4)
+            received=time.time()
+            live={}
+            books={row['symbol']:row for row in raw}
+            rest_count+=len(raw)
         if any(key not in books for key in keys):
             raise ValueError('Libro incompleto')
+        BOOKS.fallbacks+=rest_count
+        BOOKS.hits+=len(live)
         result=dict(metadata=reference.get('metadata',{}),tickers=reference.get('tickers',{}),
-                    books=books,at=time.time(),scope='execution-books')
+                    books=books,at=min([received]+[row['receivedAt'] for row in live.values()]),
+                    scope='execution-books',provider='mixed' if live else 'rest')
         _book_cache[keys]=(time.time(),result)
         if len(_book_cache)>32:
             oldest=min(_book_cache,key=lambda key:_book_cache[key][0])

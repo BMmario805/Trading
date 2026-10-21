@@ -4,7 +4,9 @@ import asyncio
 import json
 import logging
 import math
+import os
 import sqlite3
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -582,6 +584,10 @@ async def _run(config):
 
 def start():
     global _task
+    if os.getenv('TRADING_MT5_ENABLED', '1') == '0' or sys.platform != 'win32':
+        STATE.update(configured=False, connected=False, tradingAllowed=False,
+                     message='MT5 desactivado en este servidor; requiere el terminal de Windows')
+        return
     if CONFIG_PATH.exists() and (_task is None or _task.done()):
         config = json.loads(CONFIG_PATH.read_text(encoding='utf-8'))
         _task = asyncio.create_task(_run(config), name='mt5-demo')

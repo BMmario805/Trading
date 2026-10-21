@@ -1,0 +1,2188 @@
+{
+  "version": "desk-exit-experiments-v1",
+  "generatedAt": 1792355147.0104785,
+  "days": 90,
+  "trialCount": 72,
+  "results": [
+    {
+      "symbol": "BTC",
+      "interval": "15m",
+      "bars": 8927,
+      "evaluationStart": 1784579400,
+      "evaluationEnd": 1792354500,
+      "datasetHash": "43b0eef3fed7d4273626ae02bc7370af13142f65c175afe337c8a7a0e54b97c0",
+      "variants": [
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -0.985359,
+            "trades": 19,
+            "wins": 5,
+            "profitFactor": 0.41744183736875984,
+            "maxDrawdownUSDT": 1.259864,
+            "fees": 0.618076,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 19,
+              "mean": -0.05186098613412606,
+              "lower95": -0.10645867729155549,
+              "upper95": 0.013654829422636613,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": 0.0,
+            "trades": 0,
+            "wins": 0,
+            "profitFactor": null,
+            "maxDrawdownUSDT": 0.0,
+            "fees": 0,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 0,
+              "mean": null,
+              "lower95": null,
+              "upper95": null,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -0.511435,
+            "trades": 18,
+            "wins": 6,
+            "profitFactor": 0.6764593391570041,
+            "maxDrawdownUSDT": 1.058393,
+            "fees": 0.58595,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 18,
+              "mean": -0.028413065251647964,
+              "lower95": -0.08524098774898332,
+              "upper95": 0.027935041496212842,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": 0.0,
+            "trades": 0,
+            "wins": 0,
+            "profitFactor": null,
+            "maxDrawdownUSDT": 0.0,
+            "fees": 0,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 0,
+              "mean": null,
+              "lower95": null,
+              "upper95": null,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 0.934489,
+            "trades": 13,
+            "wins": 4,
+            "profitFactor": 1.674931687379552,
+            "maxDrawdownUSDT": 0.733555,
+            "fees": 0.430652,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 13,
+              "mean": 0.07188376781714566,
+              "lower95": -0.07295671017411502,
+              "upper95": 0.2542543796338589,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 0.0,
+            "trades": 0,
+            "wins": 0,
+            "profitFactor": null,
+            "maxDrawdownUSDT": 0.0,
+            "fees": 0,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 0,
+              "mean": null,
+              "lower95": null,
+              "upper95": null,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 0.925919,
+            "trades": 13,
+            "wins": 4,
+            "profitFactor": 1.6687420702558178,
+            "maxDrawdownUSDT": 0.733555,
+            "fees": 0.430644,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 13,
+              "mean": 0.07122454110054711,
+              "lower95": -0.07295671017411502,
+              "upper95": 0.25368150777389575,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 0.0,
+            "trades": 0,
+            "wins": 0,
+            "profitFactor": null,
+            "maxDrawdownUSDT": 0.0,
+            "fees": 0,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 0,
+              "mean": null,
+              "lower95": null,
+              "upper95": null,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false
+            },
+            "promotionApplied": false
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "BTC",
+      "interval": "1h",
+      "bars": 2423,
+      "evaluationStart": 1784581200,
+      "evaluationEnd": 1792353600,
+      "datasetHash": "e5f41c9b9aaf883872dfcda76df26b6aaa399567beda6359686fb6c091553eb4",
+      "variants": [
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.275041,
+            "trades": 59,
+            "wins": 20,
+            "profitFactor": 0.48019597133123837,
+            "maxDrawdownUSDT": 2.388523,
+            "fees": 1.896657,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 59,
+              "mean": -0.038560017931170046,
+              "lower95": -0.06539640193346587,
+              "upper95": -0.012662309392542127,
+              "blockLength": 7,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -0.467189,
+            "trades": 5,
+            "wins": 1,
+            "profitFactor": 0.4410101062144042,
+            "maxDrawdownUSDT": 0.567047,
+            "fees": 0.323767,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 5,
+              "mean": -0.0934377643430141,
+              "lower95": -0.2515259861884652,
+              "upper95": 0.13530273983322083,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -1.828052,
+            "trades": 41,
+            "wins": 16,
+            "profitFactor": 0.5904317823991923,
+            "maxDrawdownUSDT": 2.112373,
+            "fees": 1.320539,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 41,
+              "mean": -0.04458663323097591,
+              "lower95": -0.08257431539911152,
+              "upper95": -0.006188401875420007,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -0.544975,
+            "trades": 4,
+            "wins": 1,
+            "profitFactor": 0.40345955833457703,
+            "maxDrawdownUSDT": 0.567047,
+            "fees": 0.25852,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 4,
+              "mean": -0.13624385394326097,
+              "lower95": -0.31475535031860913,
+              "upper95": 0.042267642432087194,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -1.027952,
+            "trades": 30,
+            "wins": 9,
+            "profitFactor": 0.7278796656541117,
+            "maxDrawdownUSDT": 1.891426,
+            "fees": 0.973074,
+            "partials": 6,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 30,
+              "mean": -0.0342650595166224,
+              "lower95": -0.10180910456188454,
+              "upper95": 0.059484506979481315,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.640251,
+            "trades": 2,
+            "wins": 0,
+            "profitFactor": 0.0,
+            "maxDrawdownUSDT": 0.640251,
+            "fees": 0.130451,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 2,
+              "mean": -0.3201254547838253,
+              "lower95": -0.3201254547838253,
+              "upper95": -0.3201254547838253,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -1.357138,
+            "trades": 29,
+            "wins": 7,
+            "profitFactor": 0.6504849828399033,
+            "maxDrawdownUSDT": 2.112632,
+            "fees": 0.935744,
+            "partials": 7,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 29,
+              "mean": -0.04679786010490841,
+              "lower95": -0.10678559410199986,
+              "upper95": 0.04003389038863241,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.640251,
+            "trades": 2,
+            "wins": 0,
+            "profitFactor": 0.0,
+            "maxDrawdownUSDT": 0.640251,
+            "fees": 0.130451,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 2,
+              "mean": -0.3201254547838253,
+              "lower95": -0.3201254547838253,
+              "upper95": -0.3201254547838253,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "BTC",
+      "interval": "4h",
+      "bars": 791,
+      "evaluationStart": 1784592000,
+      "evaluationEnd": 1792353600,
+      "datasetHash": "b6805d92298653b697f2d11b960bc7e45c6abcc0d9b7b35f88f913767b9ea29e",
+      "variants": [
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -1.161075,
+            "trades": 40,
+            "wins": 16,
+            "profitFactor": 0.6405480525083441,
+            "maxDrawdownUSDT": 1.526373,
+            "fees": 1.295264,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 40,
+              "mean": -0.029026863900381443,
+              "lower95": -0.06282725014514061,
+              "upper95": 0.005850009972770581,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.864294,
+            "trades": 32,
+            "wins": 8,
+            "profitFactor": 0.2461854731462207,
+            "maxDrawdownUSDT": 3.094554,
+            "fees": 2.053105,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 32,
+              "mean": -0.08950917438394192,
+              "lower95": -0.12677179636359975,
+              "upper95": -0.053122434268204066,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -1.416621,
+            "trades": 26,
+            "wins": 10,
+            "profitFactor": 0.6108520769876024,
+            "maxDrawdownUSDT": 1.90972,
+            "fees": 0.837679,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 26,
+              "mean": -0.054485421571383585,
+              "lower95": -0.13350753655915046,
+              "upper95": 0.04335238003549824,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.146838,
+            "trades": 23,
+            "wins": 8,
+            "profitFactor": 0.428450576193859,
+            "maxDrawdownUSDT": 2.41634,
+            "fees": 1.47901,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 23,
+              "mean": -0.09334079264104371,
+              "lower95": -0.1693871735756062,
+              "upper95": -0.0035657782047456565,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 1.096094,
+            "trades": 24,
+            "wins": 9,
+            "profitFactor": 1.3327110355659348,
+            "maxDrawdownUSDT": 1.122294,
+            "fees": 0.792771,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 24,
+              "mean": 0.04567059706597978,
+              "lower95": -0.11401663823182549,
+              "upper95": 0.24428441623501354,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -1.502414,
+            "trades": 21,
+            "wins": 6,
+            "profitFactor": 0.5794380801006499,
+            "maxDrawdownUSDT": 1.776364,
+            "fees": 1.35581,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 21,
+              "mean": -0.07154351958362758,
+              "lower95": -0.18431224052729808,
+              "upper95": 0.07390429374552458,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.041998,
+            "trades": 17,
+            "wins": 4,
+            "profitFactor": 0.9893346589163327,
+            "maxDrawdownUSDT": 1.43648,
+            "fees": 0.552667,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 17,
+              "mean": -0.0024704904522982168,
+              "lower95": -0.2140324546375983,
+              "upper95": 0.2221893349526558,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -2.573328,
+            "trades": 14,
+            "wins": 2,
+            "profitFactor": 0.36244166514462395,
+            "maxDrawdownUSDT": 2.84283,
+            "fees": 0.891527,
+            "partials": 2,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 14,
+              "mean": -0.18380916347794904,
+              "lower95": -0.3392512553852075,
+              "upper95": 0.011225954908938728,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "ETH",
+      "interval": "15m",
+      "bars": 8927,
+      "evaluationStart": 1784579400,
+      "evaluationEnd": 1792354500,
+      "datasetHash": "d3fdd0d013ce9c999c3259411db426676e07f047094c31390c17be660205c7cb",
+      "variants": [
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.666994,
+            "trades": 68,
+            "wins": 24,
+            "profitFactor": 0.5479616902085923,
+            "maxDrawdownUSDT": 3.375974,
+            "fees": 2.229941,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 68,
+              "mean": -0.03922050450499619,
+              "lower95": -0.07849097964450066,
+              "upper95": -0.003771814094107323,
+              "blockLength": 8,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -0.610481,
+            "trades": 2,
+            "wins": 0,
+            "profitFactor": 0.0,
+            "maxDrawdownUSDT": 0.610481,
+            "fees": 0.131137,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 2,
+              "mean": -0.30524035563521024,
+              "lower95": -0.30524035563521024,
+              "upper95": -0.30524035563521024,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -1.767722,
+            "trades": 66,
+            "wins": 23,
+            "profitFactor": 0.7031956572345185,
+            "maxDrawdownUSDT": 2.740255,
+            "fees": 2.173982,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 66,
+              "mean": -0.026783666557397334,
+              "lower95": -0.0691893514805285,
+              "upper95": 0.018296457472732872,
+              "blockLength": 8,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -0.610481,
+            "trades": 2,
+            "wins": 0,
+            "profitFactor": 0.0,
+            "maxDrawdownUSDT": 0.610481,
+            "fees": 0.131137,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 2,
+              "mean": -0.30524035563521024,
+              "lower95": -0.30524035563521024,
+              "upper95": -0.30524035563521024,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.37145,
+            "trades": 46,
+            "wins": 16,
+            "profitFactor": 0.9227438430728176,
+            "maxDrawdownUSDT": 1.908354,
+            "fees": 1.523232,
+            "partials": 16,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 46,
+              "mean": -0.008075001027989668,
+              "lower95": -0.08211834498794439,
+              "upper95": 0.06096258056876457,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.610481,
+            "trades": 2,
+            "wins": 0,
+            "profitFactor": 0.0,
+            "maxDrawdownUSDT": 0.610481,
+            "fees": 0.131137,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 2,
+              "mean": -0.30524035563521024,
+              "lower95": -0.30524035563521024,
+              "upper95": -0.30524035563521024,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.37145,
+            "trades": 46,
+            "wins": 16,
+            "profitFactor": 0.9227438430728176,
+            "maxDrawdownUSDT": 1.908354,
+            "fees": 1.523232,
+            "partials": 16,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 46,
+              "mean": -0.008075001027989668,
+              "lower95": -0.08211834498794439,
+              "upper95": 0.06096258056876457,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.610481,
+            "trades": 2,
+            "wins": 0,
+            "profitFactor": 0.0,
+            "maxDrawdownUSDT": 0.610481,
+            "fees": 0.131137,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 2,
+              "mean": -0.30524035563521024,
+              "lower95": -0.30524035563521024,
+              "upper95": -0.30524035563521024,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "ETH",
+      "interval": "1h",
+      "bars": 2423,
+      "evaluationStart": 1784581200,
+      "evaluationEnd": 1792353600,
+      "datasetHash": "235ad4ffc802e7fa4faeea68a139a5d26c2b871dff2cda82ef969cab1841d911",
+      "variants": [
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -5.062769,
+            "trades": 88,
+            "wins": 24,
+            "profitFactor": 0.3584965771110502,
+            "maxDrawdownUSDT": 5.330858,
+            "fees": 2.83041,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 88,
+              "mean": -0.057531469261771176,
+              "lower95": -0.08963703285738266,
+              "upper95": -0.02996291129921519,
+              "blockLength": 9,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.468106,
+            "trades": 22,
+            "wins": 4,
+            "profitFactor": 0.11039724404266016,
+            "maxDrawdownUSDT": 2.56858,
+            "fees": 1.435497,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 22,
+              "mean": -0.11218663341597317,
+              "lower95": -0.1481998423059894,
+              "upper95": -0.07146267039012548,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.861454,
+            "trades": 60,
+            "wins": 20,
+            "profitFactor": 0.6195128340629298,
+            "maxDrawdownUSDT": 3.374501,
+            "fees": 1.95573,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 60,
+              "mean": -0.04769089188418006,
+              "lower95": -0.0984240319691795,
+              "upper95": 0.0018155874241602933,
+              "blockLength": 7,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.006152,
+            "trades": 17,
+            "wins": 5,
+            "profitFactor": 0.4116733090383278,
+            "maxDrawdownUSDT": 2.006152,
+            "fees": 1.112588,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 17,
+              "mean": -0.11800892930296189,
+              "lower95": -0.21750519046654418,
+              "upper95": -0.023218185953566894,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -1.788158,
+            "trades": 47,
+            "wins": 12,
+            "profitFactor": 0.7384133677898007,
+            "maxDrawdownUSDT": 2.286286,
+            "fees": 1.544051,
+            "partials": 11,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 47,
+              "mean": -0.03804591318820906,
+              "lower95": -0.11911900926446845,
+              "upper95": 0.046529275384000326,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -1.940545,
+            "trades": 15,
+            "wins": 3,
+            "profitFactor": 0.41885548211933543,
+            "maxDrawdownUSDT": 1.940545,
+            "fees": 0.981028,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 15,
+              "mean": -0.12936964740401527,
+              "lower95": -0.2341886235346604,
+              "upper95": 0.003493056338496566,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -1.616503,
+            "trades": 41,
+            "wins": 11,
+            "profitFactor": 0.737538361719082,
+            "maxDrawdownUSDT": 2.061701,
+            "fees": 1.347602,
+            "partials": 11,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 41,
+              "mean": -0.03942690490392894,
+              "lower95": -0.13070725536276084,
+              "upper95": 0.0552693985363945,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -2.237167,
+            "trades": 15,
+            "wins": 3,
+            "profitFactor": 0.367064312286393,
+            "maxDrawdownUSDT": 2.237167,
+            "fees": 0.979424,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 15,
+              "mean": -0.14914449062209645,
+              "lower95": -0.24988037308908942,
+              "upper95": -0.01525750790255969,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "ETH",
+      "interval": "4h",
+      "bars": 791,
+      "evaluationStart": 1784592000,
+      "evaluationEnd": 1792353600,
+      "datasetHash": "1a805d226c5c9695980a11dedef4f9f7e7ac9f03404785f78354c16c6861ce9b",
+      "variants": [
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -1.726549,
+            "trades": 46,
+            "wins": 16,
+            "profitFactor": 0.5614587525801821,
+            "maxDrawdownUSDT": 2.077014,
+            "fees": 1.500665,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 46,
+              "mean": -0.03753367769612135,
+              "lower95": -0.08059979497730285,
+              "upper95": 0.004689315429079303,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -3.828174,
+            "trades": 42,
+            "wins": 11,
+            "profitFactor": 0.26284582811638074,
+            "maxDrawdownUSDT": 4.091115,
+            "fees": 2.701188,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 42,
+              "mean": -0.09114699223845789,
+              "lower95": -0.13221847235654374,
+              "upper95": -0.04903626380709082,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -1.602288,
+            "trades": 28,
+            "wins": 11,
+            "profitFactor": 0.6647947949748999,
+            "maxDrawdownUSDT": 3.158261,
+            "fees": 0.909852,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 28,
+              "mean": -0.05722455979422587,
+              "lower95": -0.16411970724556108,
+              "upper95": 0.06926207045452751,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.964417,
+            "trades": 27,
+            "wins": 9,
+            "profitFactor": 0.4806468118513029,
+            "maxDrawdownUSDT": 4.259725,
+            "fees": 1.733278,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 27,
+              "mean": -0.10979323256900944,
+              "lower95": -0.21443475573322204,
+              "upper95": -0.0017416691342827598,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 0.304974,
+            "trades": 28,
+            "wins": 11,
+            "profitFactor": 1.059226175040043,
+            "maxDrawdownUSDT": 2.950792,
+            "fees": 0.920447,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 28,
+              "mean": 0.010891946349552322,
+              "lower95": -0.1664134207360201,
+              "upper95": 0.23196072454102926,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.324535,
+            "trades": 26,
+            "wins": 9,
+            "profitFactor": 0.940153578133908,
+            "maxDrawdownUSDT": 2.904273,
+            "fees": 1.693259,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 26,
+              "mean": -0.01248210930097358,
+              "lower95": -0.20897842197555727,
+              "upper95": 0.18936164257615837,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 2.609879,
+            "trades": 9,
+            "wins": 3,
+            "profitFactor": 2.145040279056552,
+            "maxDrawdownUSDT": 1.628134,
+            "fees": 0.297476,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 9,
+              "mean": 0.2899865047197141,
+              "lower95": -0.22606700301749683,
+              "upper95": 0.9602152671854783,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 2.461944,
+            "trades": 9,
+            "wins": 3,
+            "profitFactor": 1.99914404118755,
+            "maxDrawdownUSDT": 1.815183,
+            "fees": 0.588916,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 9,
+              "mean": 0.27354938216892083,
+              "lower95": -0.25616728496001306,
+              "upper95": 0.9832064783211553,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "SOL",
+      "interval": "15m",
+      "bars": 8927,
+      "evaluationStart": 1784579400,
+      "evaluationEnd": 1792354500,
+      "datasetHash": "167d39a85b845341a548e6b5a29be57e9f3b0759208cee5f17393353c7523f9a",
+      "variants": [
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -4.966309,
+            "trades": 119,
+            "wins": 43,
+            "profitFactor": 0.5899394492247015,
+            "maxDrawdownUSDT": 5.510232,
+            "fees": 3.874019,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 119,
+              "mean": -0.04173368921851414,
+              "lower95": -0.06910574751311907,
+              "upper95": -0.010980621530998186,
+              "blockLength": 10,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -1.604536,
+            "trades": 15,
+            "wins": 6,
+            "profitFactor": 0.4313215666567049,
+            "maxDrawdownUSDT": 2.167322,
+            "fees": 0.978194,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 15,
+              "mean": -0.10696905178412433,
+              "lower95": -0.25316704452407784,
+              "upper95": 0.034305710429353056,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -3.963091,
+            "trades": 114,
+            "wins": 43,
+            "profitFactor": 0.6711685208877299,
+            "maxDrawdownUSDT": 4.942535,
+            "fees": 3.740588,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 114,
+              "mean": -0.034763958097005075,
+              "lower95": -0.06767421625130442,
+              "upper95": -0.004855931583414183,
+              "blockLength": 10,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -1.460829,
+            "trades": 14,
+            "wins": 4,
+            "profitFactor": 0.48225399870424807,
+            "maxDrawdownUSDT": 2.167322,
+            "fees": 0.913441,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 14,
+              "mean": -0.10434493299923561,
+              "lower95": -0.2846480285025904,
+              "upper95": 0.06250519820813454,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -1.24965,
+            "trades": 82,
+            "wins": 23,
+            "profitFactor": 0.8818745572665491,
+            "maxDrawdownUSDT": 2.721434,
+            "fees": 2.71339,
+            "partials": 23,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 82,
+              "mean": -0.015239628554273093,
+              "lower95": -0.06788693525415075,
+              "upper95": 0.042600918020520254,
+              "blockLength": 9,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.656907,
+            "trades": 14,
+            "wins": 3,
+            "profitFactor": 0.7924311687566417,
+            "maxDrawdownUSDT": 2.302764,
+            "fees": 0.915949,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 14,
+              "mean": -0.04692191779879506,
+              "lower95": -0.2854009532818208,
+              "upper95": 0.19214979197244975,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -1.091532,
+            "trades": 80,
+            "wins": 23,
+            "profitFactor": 0.8936401451327758,
+            "maxDrawdownUSDT": 2.721434,
+            "fees": 2.648163,
+            "partials": 23,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 80,
+              "mean": -0.01364415615212974,
+              "lower95": -0.07090798107540403,
+              "upper95": 0.059283139946526654,
+              "blockLength": 8,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.816948,
+            "trades": 14,
+            "wins": 3,
+            "profitFactor": 0.7418614304882021,
+            "maxDrawdownUSDT": 2.302764,
+            "fees": 0.915629,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 14,
+              "mean": -0.058353446742349886,
+              "lower95": -0.2854009532818208,
+              "upper95": 0.1594763036667321,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "SOL",
+      "interval": "1h",
+      "bars": 2423,
+      "evaluationStart": 1784581200,
+      "evaluationEnd": 1792353600,
+      "datasetHash": "c17733afae73c6544f1973ce092d12d7e27c6cb6c1b52d546747b27cc27c68b1",
+      "variants": [
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.633342,
+            "trades": 95,
+            "wins": 34,
+            "profitFactor": 0.685569075021884,
+            "maxDrawdownUSDT": 2.754311,
+            "fees": 3.097245,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 95,
+              "mean": -0.027719389078986405,
+              "lower95": -0.06722311342714361,
+              "upper95": 0.020555513004055476,
+              "blockLength": 9,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.464112,
+            "trades": 42,
+            "wins": 13,
+            "profitFactor": 0.525188035441126,
+            "maxDrawdownUSDT": 3.224684,
+            "fees": 2.74139,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 42,
+              "mean": -0.058669337153174086,
+              "lower95": -0.14545991380968665,
+              "upper95": 0.03080331382372184,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -0.776192,
+            "trades": 57,
+            "wins": 24,
+            "profitFactor": 0.8909722654726289,
+            "maxDrawdownUSDT": 2.537539,
+            "fees": 1.884856,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 57,
+              "mean": -0.013617404284041392,
+              "lower95": -0.09270445806058768,
+              "upper95": 0.07170633711890137,
+              "blockLength": 7,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -0.948575,
+            "trades": 28,
+            "wins": 11,
+            "profitFactor": 0.8019094574681269,
+            "maxDrawdownUSDT": 2.171857,
+            "fees": 1.842678,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 28,
+              "mean": -0.03387768355591604,
+              "lower95": -0.1891819185557993,
+              "upper95": 0.10638901210269598,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 1.082079,
+            "trades": 47,
+            "wins": 15,
+            "profitFactor": 1.1498073168057257,
+            "maxDrawdownUSDT": 2.708365,
+            "fees": 1.571579,
+            "partials": 13,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 47,
+              "mean": 0.023022957098089426,
+              "lower95": -0.10670263267986838,
+              "upper95": 0.16209839566833859,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 0.821267,
+            "trades": 24,
+            "wins": 7,
+            "profitFactor": 1.1584195421417507,
+            "maxDrawdownUSDT": 2.238051,
+            "fees": 1.599724,
+            "partials": 7,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 24,
+              "mean": 0.03421944183841506,
+              "lower95": -0.1691234163381203,
+              "upper95": 0.24216948895256776,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 1.630146,
+            "trades": 40,
+            "wins": 12,
+            "profitFactor": 1.240960920688328,
+            "maxDrawdownUSDT": 2.109633,
+            "fees": 1.335254,
+            "partials": 12,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 40,
+              "mean": 0.04075364267900062,
+              "lower95": -0.11868742813928208,
+              "upper95": 0.24763529882076094,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 0.785629,
+            "trades": 22,
+            "wins": 7,
+            "profitFactor": 1.161740345665151,
+            "maxDrawdownUSDT": 1.861526,
+            "fees": 1.461577,
+            "partials": 7,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 22,
+              "mean": 0.03571039737823186,
+              "lower95": -0.15664700348046806,
+              "upper95": 0.2475102936753493,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      ]
+    },
+    {
+      "symbol": "SOL",
+      "interval": "4h",
+      "bars": 791,
+      "evaluationStart": 1784592000,
+      "evaluationEnd": 1792353600,
+      "datasetHash": "375581c5b304de954259b37ea4aed66681fa581481aab2ef041bbdc53a583a54",
+      "variants": [
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.356429,
+            "trades": 30,
+            "wins": 9,
+            "profitFactor": 0.29684648844519096,
+            "maxDrawdownUSDT": 2.487578,
+            "fees": 0.93211,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 30,
+              "mean": -0.07854763268656638,
+              "lower95": -0.13595943219152173,
+              "upper95": -0.01245112622964874,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-6h",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -3.596746,
+            "trades": 30,
+            "wins": 6,
+            "profitFactor": 0.15352441221330587,
+            "maxDrawdownUSDT": 3.69491,
+            "fees": 1.80284,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 30,
+              "mean": -0.11989152457998535,
+              "lower95": -0.17580545088173016,
+              "upper95": -0.053559319052720364,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -1.587821,
+            "trades": 20,
+            "wins": 6,
+            "profitFactor": 0.685888065135209,
+            "maxDrawdownUSDT": 2.209967,
+            "fees": 0.624041,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 20,
+              "mean": -0.07939106199062582,
+              "lower95": -0.2629662073153356,
+              "upper95": 0.1198283703394076,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "fixed-48h",
+              "max_hold_seconds": 172800,
+              "partial": false,
+              "trail_atr": 1.5
+            },
+            "pnl": -2.317095,
+            "trades": 20,
+            "wins": 6,
+            "profitFactor": 0.5727615562383442,
+            "maxDrawdownUSDT": 2.428794,
+            "fees": 1.215005,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 20,
+              "mean": -0.1158547555987762,
+              "lower95": -0.2950726530482698,
+              "upper95": 0.07980286534260683,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 0.270688,
+            "trades": 19,
+            "wins": 6,
+            "profitFactor": 1.0581608436394538,
+            "maxDrawdownUSDT": 1.876698,
+            "fees": 0.600265,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 19,
+              "mean": 0.014246731399386814,
+              "lower95": -0.2373232192356166,
+              "upper95": 0.2966870458055288,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-48h",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": -0.30056,
+            "trades": 19,
+            "wins": 6,
+            "profitFactor": 0.939978775020272,
+            "maxDrawdownUSDT": 1.990344,
+            "fees": 1.170892,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 19,
+              "mean": -0.015818921235123986,
+              "lower95": -0.27246371638999234,
+              "upper95": 0.2612386664341219,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        {
+          "normal": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 1.064901,
+            "trades": 14,
+            "wins": 4,
+            "profitFactor": 1.2588759036185755,
+            "maxDrawdownUSDT": 1.912005,
+            "fees": 0.447634,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 14,
+              "mean": 0.07606437180172763,
+              "lower95": -0.35640153208097364,
+              "upper95": 0.5894395068922547,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "partial-trail-unlimited",
+              "max_hold_seconds": null,
+              "partial": true,
+              "trail_atr": 2.5
+            },
+            "pnl": 0.513688,
+            "trades": 14,
+            "wins": 4,
+            "profitFactor": 1.1173849763483905,
+            "maxDrawdownUSDT": 2.005135,
+            "fees": 0.875628,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 14,
+              "mean": 0.03669200636206636,
+              "lower95": -0.3885446028821979,
+              "upper95": 0.5468119338178942,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      ]
+    }
+  ],
+  "promotionApplied": false,
+  "assumptions": [
+    "Exploración en periodos ya observados; no es holdout independiente ni decide promoción.",
+    "Cada símbolo y política usa 100 USDT propios; no se suman como una cartera.",
+    "Riesgo 0,5%, nominal máximo 1/6, largo Spot, sin préstamos y costes taker completos.",
+    "Parcial: señal al cierre y ejecución a la apertura siguiente; no garantiza asegurar 1,5R.",
+    "Stops primero en velas ambiguas; gaps, mínimos de lote y comisiones en cada salida.",
+    "Spread supuesto 2 puntos básicos; filtros actuales, sin libro histórico ni selección histórica.",
+    "Se fuerza liquidación al terminar la muestra y se publica cada variante y su estrés."
+  ]
+}

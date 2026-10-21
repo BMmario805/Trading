@@ -1,0 +1,29 @@
+name: mesa-siete
+services:
+  trading:
+    build: .
+    image: mesa-siete:local
+    container_name: mesa-siete
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 75s
+    # El panel se accede mediante un túnel SSH; nunca se publica la API sin protección.
+    ports:
+      - "127.0.0.1:8080:8000"
+    volumes:
+      - ./state/runtime:/app/.runtime
+      - ./state/data:/var/lib/trading
+      - ./state/backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

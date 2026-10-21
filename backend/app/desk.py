@@ -17,6 +17,7 @@ from .database import Connection
 from .execution import closed_candles
 from .indicators import atr, ema, rsi
 from .economics import planned_trade,ECONOMICS_VERSION
+from .book_stream import BOOKS
 
 DB_PATH = Path(__file__).resolve().parents[2]/'.runtime'/'desk.sqlite'
 INITIAL = 1000.0
@@ -111,9 +112,9 @@ def universe(data):
     return sorted(candidates,key=lambda c:(-c['volumeUSD'],c['symbol']))
 
 
-def tape(rows, now):
-    rows=closed_candles(rows,CANDLE_SECONDS,now)
-    if len(rows)<60 or now-rows[-1]['time']>3*CANDLE_SECONDS:
+def tape(rows, now, candle_seconds=CANDLE_SECONDS):
+    rows=closed_candles(rows,candle_seconds,now)
+    if len(rows)<60 or now-rows[-1]['time']>3*candle_seconds:
         return None
     closes=[c['close'] for c in rows]
     e20,e50=ema(closes,20),ema(closes,50)
@@ -163,6 +164,14 @@ def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage
                 sl=stop,tp=target,risk=qty*risk_per_unit,economics=plan,
                 costPolicy=dict(version=ECONOMICS_VERSION,feeRate=fee,slippageRate=slippage),policyVersion=POLICY_VERSION,
                 maxHoldSeconds=MAX_HOLD_S)
+
+
+def price_allowed(analysis, ask):
+    extension=(ask-analysis['ema20'])/analysis['atr']
+    setup=analysis.get('entryAllowed',analysis['pullback'] or analysis.get('momentum',False))
+    return (analysis['trend'] and setup and ENTRY_RSI_MIN<=analysis['rsi']<=ENTRY_RSI_MAX
+            and ENTRY_EXTENSION_MIN<=extension<=ENTRY_EXTENSION_MAX
+            and abs(ask-analysis['close'])<=2.0*analysis['atr'])
 
 
 class Desk:
@@ -406,6 +415,8 @@ class Desk:
     async def scan(self,data):
         now=time.time()
         candidates=self.market_universe(data)
+        if self.feed is None:
+            BOOKS.watch([c['symbol'] for c in candidates if c['eligible']]+[p['symbol'] for p in self.state['positions']])
         previous={c['symbol']:c for c in self.state['candidates']}
         for candidate in candidates:
             old=previous.get(candidate['symbol'],{})
@@ -448,26 +459,9 @@ class Desk:
         batch=rotated[:SCAN_BATCH_SIZE]
         agent=gemini_agent.AGENT if self.feed is None else None
         choice=None
-        if agent and (not self.state.get('selection') or now-self.state.get('selectionAt',0)>=SELECTION_INTERVAL):
-            self.state['selectionPending']=True
-            self.role('Selector','waiting',f'{len(candidates)} mercados examinados; Gemini prioriza un lote de {len(batch)}')
-            try:
-                # El universo completo permanece público, pero nunca se envían cientos de filas al modelo.
-                choice=await asyncio.wait_for(agent.choose_market([{k:c[k] for k in ('symbol','eligible','change24h','volumeUSD','spreadBp')} for c in batch]),timeout=8)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                choice=None  # Una fuente auxiliar no debe detener el resto del escaneo.
-            finally:
-                self.state['selectionPending']=False
-            self.state['selectionAt']=now
-        if choice and choice.get('symbol') in {c['symbol'] for c in batch}:
-            batch.sort(key=lambda c:c['symbol']!=choice['symbol'])
-        else:
-            choice=None
         # Descargas acotadas en paralelo; las decisiones y el libro se actualizan en serie.
         prefetched={}
-        if self.task is not None:
+        if self.task is not None or agent:
             semaphore=asyncio.Semaphore(4)
             async def download(candidate):
                 async with semaphore:
@@ -477,7 +471,7 @@ class Desk:
                     except Exception:
                         return candidate['symbol'],None
             prefetched=dict(await asyncio.gather(*(download(c) for c in batch)))
-            if self.feed is None:
+            if self.feed is None and self.task is not None:
                 # Un libro reciente compartido por el lote; el monitor de riesgo
                 # sigue teniendo su tarea independiente y su tiempo máximo.
                 try:
@@ -485,6 +479,36 @@ class Desk:
                     self.efficiency['bookBatches']+=1
                 except Exception:
                     log.warning('Libro del lote no disponible en %s; se consultan mercados individualmente',self.desk_id)
+        prepared={}
+        if agent and (not self.state.get('selection') or now-self.state.get('selectionAt',0)>=SELECTION_INTERVAL):
+            shortlist=[]
+            for candidate in batch:
+                try:
+                    context,analysis=await self.selector_setup(candidate,data,prefetched)
+                    prepared[candidate['symbol']]=analysis
+                    if context: shortlist.append(context)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    continue
+            if shortlist:
+                self.state['selectionPending']=True
+                self.role('Selector','waiting',f'Gemini compara {len(shortlist)} señales con tamaño y costes viables')
+                try:
+                    choice=await asyncio.wait_for(agent.choose_market(shortlist),timeout=8)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    choice=None
+                finally:
+                    self.state['selectionPending']=False
+                self.state['selectionAt']=now
+            if choice and choice.get('symbol') in {c['symbol'] for c in shortlist}:
+                choice={**choice,'selectorVersion':'setup-aware-v1','role':'ranking-only'}
+                batch.sort(key=lambda c:c['symbol']!=choice['symbol'])
+            else:
+                choice=None
+        self.state['selectionPending']=False
         for candidate in batch:
             self.state['scanReviewed']+=1
             consumed+=1
@@ -502,7 +526,7 @@ class Desk:
             self.role('Selector','selected',f'{candidate["symbol"]}: {selection["reason"]}',
                       provider='Gemini' if selected_by_ai else 'Reglas deterministas')
             try:
-                await asyncio.wait_for(self.review_candidate(candidate,data,prefetched),timeout=8)
+                await asyncio.wait_for(self.review_candidate(candidate,data,prefetched,prepared.get(candidate['symbol'])),timeout=8)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -521,7 +545,34 @@ class Desk:
             candidate.pop('retryAfter',None)
             candidate.pop('errorCount',None)
 
-    async def review_candidate(self,candidate,data,prefetched=None):
+    async def selector_setup(self,candidate,data,prefetched):
+        """Solo métricas públicas de setups viables; no entrega saldo ni posiciones al modelo."""
+        symbol=candidate['symbol']
+        q=self.quote(symbol,data)
+        if not q or self.state['cooldowns'].get(symbol,0)>time.time(): return None,None
+        rows=prefetched.get(symbol)
+        if rows is None: return None,None
+        analysis=tape(rows,time.time())
+        if analysis is None: return None,None
+        if not price_allowed(analysis,q[1]) or not (await self.wire(symbol,data))['ok']:
+            return None,analysis
+        open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-self.costs(p)[1])*(1-self.costs(p)[0])) for p in self.state['positions'])
+        order=size_order(self.equity(),self.state['cash'],q[1],analysis['atr'],data['metadata'][symbol],
+                         max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage)
+        if order is None: return None,analysis
+        available=float(data['books'][symbol].get('askQty',0))
+        if not math.isfinite(available) or order['qty']>available*.1: return None,analysis
+        with self.connect() as con:
+            if con.execute('SELECT 1 FROM trades WHERE entry_key=?',(f'{symbol}:{analysis["bar"]}',)).fetchone():
+                return None,analysis
+        context={k:candidate[k] for k in ('symbol','eligible','change24h','volumeUSD','spreadBp')}
+        context.update(strategy=analysis.get('strategy') or 'confirmed-setup',candleInterval=CANDLE_INTERVAL,
+                       signalBar=analysis['bar'],rsi=round(analysis['rsi'],2),
+                       atrPct=round(analysis['atr']/q[1]*100,4),extensionAtr=round((q[1]-analysis['ema20'])/analysis['atr'],3),
+                       relativeVolume=round(analysis.get('relativeVolume',0),3),netRewardRisk=round(order['economics']['netRewardRisk'],3))
+        return context,analysis
+
+    async def review_candidate(self,candidate,data,prefetched=None,prepared=None):
         symbol=candidate['symbol']
         meta=data['metadata'].get(symbol,{})
         base=meta.get('baseAsset','')
@@ -549,7 +600,9 @@ class Desk:
             self.state['benchmark']=dict(symbol=symbol,qty=self.initial/(ask*(1+self.slippage)*(1+self.fee)),lastBid=bid,startedAt=time.time())
         sym=self.market_symbol(symbol,data)
         rows=prefetched[symbol] if prefetched and symbol in prefetched else await self.candidate_candles(sym)
-        analysis=tape(rows or [],time.time())
+        analysis=prepared if prepared is not None else tape(rows or [],time.time())
+        if analysis and time.time()-analysis['bar']>3*CANDLE_SECONDS:
+            analysis=None
         if analysis is None:
             self.evaluated(candidate,'blocked','Velas cerradas insuficientes o antiguas')
             self.role('Tape','blocked','Velas cerradas insuficientes o antiguas')
@@ -574,10 +627,7 @@ class Desk:
                                  atrPct=round(analysis['atr']/ask*100,3),trend=analysis['trend'])
         self.role('Tape','ready' if analysis['trend'] else 'waiting',f'EMA20/50; RSI {analysis["rsi"]:.0f}; ATR {analysis["atr"]:.5g}')
         extension=(ask-analysis['ema20'])/analysis['atr']
-        setup_ok=analysis.get('entryAllowed',analysis['pullback'] or analysis.get('momentum',False))
-        price_ok=(analysis['trend'] and setup_ok and ENTRY_RSI_MIN<=analysis['rsi']<=ENTRY_RSI_MAX
-                  and ENTRY_EXTENSION_MIN<=extension<=ENTRY_EXTENSION_MAX
-                  and abs(ask-analysis['close'])<=2.0*analysis['atr'])
+        price_ok=price_allowed(analysis,ask)
         self.role('Price','ready' if price_ok else 'waiting',
                   f'Señal confirmada: {analysis.get("strategy") or "continuidad"}' if price_ok else 'Esperando recuperación o tendencia confirmada, RSI 35–72 y extensión moderada')
         existing=next((p for p in self.state['positions'] if p['symbol']==symbol),None)

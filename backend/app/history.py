@@ -4,13 +4,14 @@ Cada vez que se calcula sentimiento fresco (no cacheado) se guarda una fila;
 el frontend lo muestra como evolución temporal.
 """
 
+import os
 import sqlite3
 import time
 from pathlib import Path
 
 from .database import Connection
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data.db"
+DB_PATH = Path(os.getenv("TRADING_DATA_DB", str(Path(__file__).resolve().parent.parent / "data.db")))
 
 
 def _conn() -> sqlite3.Connection:
