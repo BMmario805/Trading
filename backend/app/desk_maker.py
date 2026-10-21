@@ -1,0 +1,168 @@
+"""Cola maker paper persistente. Los stops conservan prioridad y coste taker.
+
+La reserva vive en el estado y en el riesgo agregado; un reinicio o una laguna
+del stream cancela el remanente. Nunca rellena por tocar una cotización.
+"""
+from copy import deepcopy
+from dataclasses import asdict
+from decimal import Decimal
+import json
+import math
+import time
+
+from .book_stream import BOOKS
+from .maker_simulation import PostOnlyOrder
+from .economics import planned_trade
+
+TTL = 60
+
+
+def valid_lot(quantity,price,filters):
+    if not all(math.isfinite(v) and v>0 for v in (quantity,price)): return False
+    lot=next((f for f in filters if f['filterType']=='LOT_SIZE'),None)
+    if not lot: return False
+    step=Decimal(str(lot['stepSize']))
+    q=Decimal(str(quantity))
+    if step<=0 or q%step!=0 or q<Decimal(str(lot['minQty'])): return False
+    maximum=float(lot.get('maxQty',0))
+    if maximum and quantity>maximum: return False
+    for item in filters:
+        if item['filterType'] in ('MIN_NOTIONAL','NOTIONAL'):
+            if quantity*price<float(item.get('minNotional',0)): return False
+            ceiling=float(item.get('maxNotional',0))
+            if ceiling and quantity*price>ceiling: return False
+    return True
+
+
+class DeskMaker:
+    def __init__(self,desk):
+        self.desk=desk
+
+    @property
+    def orders(self):
+        return self.desk.state.setdefault('makerOrders',[])
+
+    def commit(self,mutate):
+        engine=self.desk
+        previous=deepcopy(engine.state)
+        try:
+            mutate()
+            engine.focus_position()
+            with engine.connect() as con:
+                for p in engine.state['positions']:
+                    con.execute('INSERT INTO trades(entry_key,payload) VALUES (?,?) ON CONFLICT(entry_key) DO UPDATE SET payload=excluded.payload',
+                                (p['entryKey'],json.dumps(p)))
+                con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(engine.state),))
+        except BaseException:
+            engine.state=previous
+            engine.focus_position()
+            raise
+
+    def post(self,position,side,quantity):
+        engine=self.desk
+        symbol=position['symbol']
+        if any(o['symbol']==symbol for o in self.orders): return False
+        books=BOOKS.fresh([symbol])
+        book=books.get(symbol)
+        if not book: return False
+        price=float(book['bidPrice' if side=='buy' else 'askPrice'])
+        if not valid_lot(quantity,price,position.get('marketFilters',[])): return False
+        BOOKS.watch_trades([symbol])
+        order=PostOnlyOrder.place(symbol,side,quantity,dict(book,at=book['receivedAt']),
+                                  now=time.time(),ttl=TTL,fee_rate=engine.costs(position)[0])
+        lot=next(f for f in position['marketFilters'] if f['filterType']=='LOT_SIZE')
+        order.quantity_step=float(lot['stepSize'])
+        row=dict(symbol=symbol,entryKey=position['entryKey'],side=side,order=asdict(order),
+                 generation=BOOKS.generation,accountedQty=0.0,template=deepcopy(position),
+                 reservedRisk=position['risk'] if side=='buy' else 0,
+                 reservedCash=position['notional']+position['fee'] if side=='buy' else 0)
+        self.commit(lambda:self.orders.append(row))
+        engine.role('Exec','pending','Orden limitada SIMULADA: cola observada, hasta 60 s; sin fill supuesto')
+        return True
+
+    def cancel(self,symbol):
+        # El llamador confirma la cancelación junto con su cambio de posición.
+        self.desk.state['makerOrders']=[o for o in self.orders if o['symbol']!=symbol]
+
+    def pending_entry(self):
+        return any(o['side']=='buy' for o in self.orders)
+
+    def _finish(self,row,order):
+        engine=self.desk
+        self.orders.remove(row)
+        history=engine.state.setdefault('makerHistory',[])
+        history.append(dict(symbol=row['symbol'],side=row['side'],at=time.time(),
+                            status=order.status,filled=order.filled,quantity=order.quantity,fee=order.fees,
+                            price=order.price,fills=order.fills,executionVerified=False,feeDiscountAssumed=False))
+        del history[:-25]
+        if row['side']=='buy' and order.filled==0:
+            engine.state.setdefault('makerFallback',{})[row['entryKey']]=order.expires_at
+            engine.state['makerFallback']=dict(list(engine.state['makerFallback'].items())[-100:])
+        elif row['side']=='sell':
+            p=next((p for p in engine.state['positions'] if p['entryKey']==row['entryKey']),None)
+            if p:
+                remaining=order.quantity-row['accountedQty']
+                p['makerPartialFallbackQty']=max(0,remaining)
+                p['makerPartialAttempted']=True
+
+    def reconcile(self,data):
+        engine=self.desk
+        if not self.orders: return
+        BOOKS.watch_trades([o['symbol'] for o in self.orders])
+        for row in list(self.orders):
+            order=PostOnlyOrder(**row['order'])
+            events=BOOKS.observed_trades(row['symbol'],order.placed_at,order.last_id,row['generation'])
+            if events is None:
+                order.disconnect()
+                events=[]
+            def update():
+                previous_fills=len(order.fills)
+                for event in events:
+                    order.trade(event)
+                # Flujos individuales observados, mismo precio límite y comisión
+                # explícita; nunca se descuenta una supuesta tarifa maker menor.
+                delta=float(Decimal(str(order.filled))-Decimal(str(row['accountedQty'])))
+                observed=order.fills[previous_fills:]
+                if delta>0:
+                    if row['side']=='buy': self._buy_fill(row,order,delta,data,observed)
+                    else:
+                        p=next((p for p in engine.state['positions'] if p['entryKey']==row['entryKey']),None)
+                        if p:
+                            engine.take_partial(p,order.price,data,qty_override=delta,
+                                                price_override=order.price,persist=False)
+                            p['partialExits'][-1]['observedFills']=observed
+                    row['accountedQty']=order.filled
+                order.advance(time.time())
+                if row['side']=='buy' and (not engine.state['enabled'] or engine.state.get('flatten') or engine.state['dailyStopped']):
+                    if order.status=='pending': order.status='cancelled-risk'
+                row['order']=asdict(order)
+                if order.status!='pending': self._finish(row,order)
+            self.commit(update)
+
+    def _buy_fill(self,row,order,quantity,data,observed):
+        engine=self.desk
+        template=row['template']
+        cost=quantity*order.price
+        fee=cost*order.fee_rate
+        p=next((p for p in engine.state['positions'] if p['entryKey']==row['entryKey']),None)
+        if p is None:
+            p=deepcopy(template)
+            p.update(qty=0.0,notional=0.0,fee=0.0,entryTime=order.fills[0]['at'],
+                     entryExecution='paper-maker-observed',executionVerified=False)
+            engine.state['positions'].append(p)
+        p['qty']=float(Decimal(str(p['qty']))+Decimal(str(quantity)))
+        p['notional']+=cost
+        p['fee']+=fee
+        p['entry']=p['notional']/p['qty']
+        p['initialDist']=p['entry']-p['sl']
+        rate,slip=engine.costs(p)
+        p['risk']=p['notional']+p['fee']-p['qty']*p['sl']*(1-slip)*(1-rate)
+        p['economics']=planned_trade(p['entry'],p['sl'],p['tp'],p['qty'],fee_rate=rate,exit_slippage=slip)
+        engine.state['cash']-=cost+fee
+        left=max(0,order.quantity-order.filled)/order.quantity
+        row['reservedCash']=(template['notional']+template['fee'])*left
+        row['reservedRisk']=template['risk']*left
+        p['entrySlippage']=0.0
+        p.setdefault('entryMakerFills',[]).extend(observed)
+        if engine.state.get('selectorDecision'):
+            engine.state['selectorDecision']['executed']=True

@@ -48,7 +48,7 @@ function Start-TradingService {
                 throw "El backend terminó al arrancar. Revisa .runtime/backend-$launchStamp.stderr.log."
             }
             try {
-                $response = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/api/mt5' -TimeoutSec 2
+                $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/api/mt5' -TimeoutSec 2
                 if ($response.StatusCode -eq 200) { return }
             } catch { }
             Start-Sleep -Milliseconds 500

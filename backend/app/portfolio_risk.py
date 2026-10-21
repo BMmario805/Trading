@@ -67,6 +67,12 @@ def _collect():
             risk=max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-slip)*(1-fee))
             rows.append(dict(source='desk',bot=bot_id,symbol=instrument(p['symbol']),factor=factor(p['symbol']),
                              direction='long',riskEUR=risk/rate,notionalEUR=p['notional']/rate))
+        for pending in engine.state.get('makerOrders',[]):
+            if pending['side']!='buy' or pending['reservedRisk']<=0: continue
+            symbol=pending['symbol']
+            rows.append(dict(source='desk',bot=bot_id,symbol=instrument(symbol),factor=factor(symbol),
+                             direction='long',riskEUR=pending['reservedRisk']/rate,
+                             notionalEUR=pending['reservedCash']/rate,pending=True))
     state=dict(mt5_demo.STATE)
     session=state.get('session') or {}
     if state.get('demo') is True and state.get('currency')=='EUR' and session.get('initial') is not None:

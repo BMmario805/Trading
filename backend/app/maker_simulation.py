@@ -9,6 +9,7 @@ import argparse
 from dataclasses import asdict, dataclass, field
 import json
 import math
+from decimal import Decimal, ROUND_DOWN
 from pathlib import Path
 
 
@@ -22,6 +23,7 @@ class PostOnlyOrder:
     expires_at: float
     queue_ahead: float
     fee_rate: float
+    quantity_step: float = 0.0
     status: str = 'pending'
     filled: float = 0.0
     fees: float = 0.0
@@ -75,10 +77,13 @@ class PostOnlyOrder:
             qty-=ahead
         else:
             self.queue_ahead=0.0
-        fill=min(qty,self.quantity-self.filled)
+        fill=min(qty,float(Decimal(str(self.quantity))-Decimal(str(self.filled))))
+        if self.quantity_step>0:
+            step=Decimal(str(self.quantity_step))
+            fill=float((Decimal(str(fill))/step).to_integral_value(rounding=ROUND_DOWN)*step)
         if fill<=0: return
         fee=fill*self.price*self.fee_rate
-        self.filled+=fill
+        self.filled=float(Decimal(str(self.filled))+Decimal(str(fill)))
         self.fees+=fee
         self.fills.append(dict(at=stamp,tradeId=identifier,quantity=fill,price=self.price,fee=fee))
         if self.quantity-self.filled<=self.quantity*1e-12:

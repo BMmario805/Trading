@@ -10,6 +10,8 @@ import logging
 import math
 import os
 import time
+import uuid
+from collections import deque
 
 from websockets.asyncio.client import connect
 
@@ -28,6 +30,28 @@ class BookStream:
         self.changed = asyncio.Event()
         self.messages = self.reconnects = self.hits = self.fallbacks = 0
         self.error = None
+        self.trade_wanted = {}
+        self.trades = {}
+        self.generation = uuid.uuid4().hex
+
+    def watch_trades(self,symbols):
+        before=set(self.trade_wanted)
+        now=time.monotonic()
+        for symbol in symbols:
+            if isinstance(symbol,str) and symbol.isalnum() and symbol.endswith('USDT'):
+                self.trade_wanted[symbol]=now
+        self.trade_wanted={s:t for s,t in sorted(self.trade_wanted.items(),key=lambda x:x[1],reverse=True)
+                           if now-t<120}
+        self.trade_wanted=dict(list(self.trade_wanted.items())[:8])
+        self.trades={s:rows for s,rows in self.trades.items() if s in self.trade_wanted}
+        self.watch(self.trade_wanted)
+        if before!=set(self.trade_wanted): self.changed.set()
+
+    def observed_trades(self,symbol,placed_at,last_id,generation):
+        if not self.connected or generation!=self.generation: return None
+        rows=list(self.trades.get(symbol,[]))
+        if last_id>=0 and rows and rows[0]['id']>last_id+1: return None
+        return [dict(e) for e in rows if e['at']>placed_at and e['id']>last_id]
 
     def watch(self, symbols):
         before = set(self.wanted)
@@ -46,6 +70,23 @@ class BookStream:
         if not isinstance(payload, dict) or payload.get('s') not in self.wanted:
             return False
         symbol = payload['s']
+        if payload.get('e')=='trade':
+            if symbol not in self.trade_wanted: return False
+            try:
+                event=dict(symbol=symbol,id=payload['t'],at=payload['T']/1000,
+                           price=float(payload['p']),quantity=float(payload['q']),isBuyerMaker=payload['m'])
+                if type(event['id']) is not int or type(event['isBuyerMaker']) is not bool: return False
+                if not all(math.isfinite(event[k]) and event[k]>0 for k in ('at','price','quantity')): return False
+                if not -2<=time.time()-event['at']<=10: return False
+                rows=self.trades.setdefault(symbol,deque(maxlen=2048))
+                if rows and event['id']<=rows[-1]['id']: return False
+                if rows and event['id']!=rows[-1]['id']+1:
+                    self.generation=uuid.uuid4().hex  # Una discontinuidad cancela órdenes pendientes.
+                    self.trades.clear()
+                    rows=self.trades.setdefault(symbol,deque(maxlen=2048))
+                rows.append(event)
+                return True
+            except (KeyError,TypeError,ValueError): return False
         try:
             bid, ask, bqty, aqty = (float(payload[k]) for k in ('b', 'a', 'B', 'A'))
             update = payload['u']
@@ -75,18 +116,19 @@ class BookStream:
         return dict(connected=self.connected, watched=len(self.wanted), fresh=len(self.fresh(self.wanted)),
                     messages=self.messages, reconnects=self.reconnects, streamQuotes=self.hits,
                     restFallbacks=self.fallbacks, error=self.error, maximumQuoteAgeSeconds=MAX_AGE,
-                    timestampBasis='local-receipt', endpoint='Binance public bookTicker')
+                    timestampBasis='local-receipt', endpoint='Binance public bookTicker',
+                    observedTradeSymbols=len(self.trade_wanted),observedTradeBufferLimit=2048)
 
     async def _subscriptions(self, socket):
         active = set()
         serial = 0
         while True:
             self.changed.clear()
-            desired = set(self.wanted)
-            for method, symbols in (('UNSUBSCRIBE', active-desired), ('SUBSCRIBE', desired-active)):
-                if symbols:
+            desired = {s.lower()+'@bookTicker' for s in self.wanted} | {s.lower()+'@trade' for s in self.trade_wanted}
+            for method, streams in (('UNSUBSCRIBE', active-desired), ('SUBSCRIBE', desired-active)):
+                if streams:
                     serial += 1
-                    await socket.send(json.dumps(dict(method=method, params=[s.lower()+'@bookTicker' for s in sorted(symbols)], id=serial), ensure_ascii=False))
+                    await socket.send(json.dumps(dict(method=method, params=sorted(streams), id=serial), ensure_ascii=False))
                     await asyncio.sleep(.6)  # Reserva capacidad para los pong del servidor.
             active = desired
             await self.changed.wait()
@@ -108,6 +150,8 @@ class BookStream:
                                    ping_interval=20, ping_timeout=20, close_timeout=3,
                                    max_size=262144, max_queue=1) as socket:
                     self.books.clear()
+                    self.trades.clear()
+                    self.generation=uuid.uuid4().hex
                     self.connected = True
                     self.error = None
                     reader = asyncio.create_task(self._read(socket))
@@ -130,6 +174,7 @@ class BookStream:
             finally:
                 self.connected = False
                 self.books.clear()
+                self.trades.clear()
             attempts += 1
             self.reconnects += 1
             await asyncio.sleep(min(60, 2 ** min(attempts, 6)))
@@ -145,6 +190,7 @@ class BookStream:
             self.task = None
         self.connected = False
         self.books.clear()
+        self.trades.clear()
 
 
 BOOKS = BookStream()

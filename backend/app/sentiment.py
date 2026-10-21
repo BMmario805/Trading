@@ -251,6 +251,39 @@ async def _compute(sym: Symbol) -> dict:
         return await _compute_uncached(sym)
 
 
+async def candidate_sources(sym: Symbol, timeout: float = 4) -> dict:
+    """Entrega las fuentes que llegaron a tiempo, aunque otra esté caída.
+
+    El candidato ya fue verificado por el motor. Las publicaciones conservan
+    sus fechas; sin evidencia no se inventa cobertura ni un veto.
+    """
+    from dataclasses import replace
+    from .config import SYMBOLS_BY_ID
+    cached=peek_cached(sym.id)
+    if cached: return cached
+    known=SYMBOLS_BY_ID.get(sym.id)
+    if known:
+        sym=known
+    elif sym.source=='binance' and sym.category=='cripto' and sym.id.isalnum() and len(sym.id)<=24:
+        sym=replace(sym,stocktwits=sym.id+'.X',reddit_query='"'+sym.id+'" crypto',
+                    reddit_subs=('CryptoCurrency','CryptoMarkets'),tradingview=sym.source_symbol)
+    tasks=[asyncio.create_task(c) for c in (_stocktwits(sym),_reddit(sym),ideas_source(sym),minds_source(sym),official_news())]
+    try:
+        done,pending=await asyncio.wait(tasks,timeout=timeout)
+        sources=[]
+        for task in done:
+            try:
+                result=task.result()
+                if isinstance(result,dict): sources.append(result)
+            except Exception:
+                pass
+        return dict(symbol=sym.id,sources=sources,partial=bool(pending))
+    finally:
+        for task in tasks:
+            if not task.done(): task.cancel()
+        await asyncio.gather(*tasks,return_exceptions=True)
+
+
 def peek_cached(symbol_id: str) -> dict | None:
     """Sentimiento cacheado aún vigente, sin disparar ningún cálculo.
 

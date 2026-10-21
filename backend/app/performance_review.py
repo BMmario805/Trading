@@ -49,7 +49,11 @@ def desk_trades(engine):
         # en los precios de referencia y no se inventa un histórico de libro.
         exit_value=(trade.get('finalExitQty',trade['qty'])*trade['exitPrice']
                     +sum(e['qty']*e['price'] for e in trade.get('partialExits',[])))
-        slippage=trade['qty']*(trade['entry']-trade['entry']/(1+slip))+exit_value*slip/(1-slip)
+        entry_slip=trade.get('entrySlippage',slip)
+        slippage=(trade['qty']*(trade['entry']-trade['entry']/(1+entry_slip))
+                  +trade.get('finalExitQty',trade['qty'])*trade['exitPrice']*slip/(1-slip)
+                  +sum(e['qty']*e['price']*e.get('slippageRate',slip)/(1-e.get('slippageRate',slip))
+                       for e in trade.get('partialExits',[])))
         result.append(dict(pnl=trade['pnl'],basis='net',fees=fee,slippage=slippage,
                            initialRisk=trade.get('risk',0),
                            policy=trade.get('policyVersion','legacy'),strategy=trade.get('evidence',{}).get('tape',{}).get('strategy') or 'legacy'))
@@ -70,7 +74,8 @@ def opportunity_diagnostics(engine):
     # Frontera económica exacta para SL 1,5 ATR, TP 3 ATR y ratio neto 1,2.
     exit_factor=(1-slip)*(1-fee)
     friction=(1+slip)*(1+fee-exit_factor)
-    min_atr=friction*(1+desk.MIN_NET_REWARD_RISK)/(exit_factor*(3-1.5*desk.MIN_NET_REWARD_RISK))*100
+    sl_mult,tp_mult=(2,4) if engine.feed is None else (1.5,3)
+    min_atr=friction*(1+desk.MIN_NET_REWARD_RISK)/(exit_factor*(tp_mult-sl_mult*desk.MIN_NET_REWARD_RISK))*100
     return dict(eligible=len(eligible),reviewed=len(recent),evaluated=len(evaluated),
         signalPassed=count('signal'),costPassed=count('costs'),sizePassed=count('size'),
         signalBlocked=len(evaluated)-count('signal'),costBlocked=len(evaluated)-count('costs'),

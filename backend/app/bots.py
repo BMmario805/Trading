@@ -810,7 +810,8 @@ class TradingBot:
                 against = (pos.direction == "long" and score <= -0.75 * threshold) or (
                     pos.direction == "short" and score >= 0.75 * threshold
                 )
-                if against:
+                from .execution import signal_exit_enabled
+                if against and signal_exit_enabled(self.cfg.id):
                     tick = await market_data.get_price(sym)
                     if not valid_tick(tick, time.time()):
                         continue
@@ -852,11 +853,14 @@ class TradingBot:
             if mode == "probation" and len(self.probation_open) >= learning.MAX_PROBATION_POSITIONS:
                 self.diagnostics[symbol_id]["reason"] = "Límite de posiciones a prueba alcanzado"
                 continue
+            if gemini_agent.AGENT:
+                await gemini_agent.AGENT.pretrade(sym)
             # Puntuación logística ponderada por R neta; no una probabilidad
             # calibrada. Solo puede filtrar señales o reducir su tamaño.
             feats = learning.meta_features(
                 self.cfg.id, sym.category, direction, hour_utc,
                 signal["confirmations"],
+                learning.entry_context(price, atr_val, signal.get('extension'), self.spread_pct(sym)),
             )
             meta_ok, p_win, meta_note = learning.meta_gate(self.cfg.id, feats)
             if not meta_ok:
@@ -1057,11 +1061,11 @@ class TradingBot:
         if probation_why:
             prob_mult = learning.PROBATION_SIZE
             reasons.insert(0, f"A prueba ({learning.PROBATION_SIZE:.0%} del tamaño): {probation_why}")
-        # La puntuación ponderada tampoco está calibrada monetariamente;
-        # solo puede reducir el riesgo, nunca subirlo.
+        # El aumento experimental requiere validación vigente y modelo maduro.
         meta_mult = 1.0
         if p_win is not None:
-            meta_mult = max(0.5, min(1.0, 0.5 + (p_win - 0.35) * 2.5))
+            validated=not probation_why and learning.entry_mode(self.cfg.id,sym.id,direction)[0]=='full'
+            meta_mult = learning.meta_size_multiplier(self.cfg.id,p_win,validated)
             reasons.append(
                 f"Meta-modelo: puntuación ponderada por R={p_win:.0%} → tamaño ×{meta_mult:.2f}"
                 + (f" ({meta_note})" if meta_note else "")
@@ -1100,6 +1104,8 @@ class TradingBot:
         window = signal["candles"][-SNAPSHOT_BARS:]
         snapshot = {
             "engineVersion": ENGINE_VERSION,
+            "metaFeatureVersion": learning.META_FEATURE_VERSION,
+            "entryContext": learning.entry_context(price, atr_val, signal.get('extension'), costs['spreadPct']),
             "interval": self.cfg.work_interval,
             "score": round(score, 3),
             "confirmations": signal["confirmations"],

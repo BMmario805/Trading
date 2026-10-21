@@ -3,6 +3,11 @@
 import math
 
 
+def signal_exit_enabled(bot_id):
+    """Las estrategias tendenciales salen por protección y plazo, no por ruido."""
+    return bot_id not in ('swing', 'trend', 'squeeze')
+
+
 def atr_spread_multiple(bot_id):
     """El scalper exige spread ≤10% del ATR; el resto conserva su filtro."""
     return 10 if bot_id=='scalper' else 3

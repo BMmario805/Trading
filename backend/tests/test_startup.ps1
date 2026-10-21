@@ -47,7 +47,8 @@ function Start-Process {
 }
 
 function Invoke-WebRequest {
-    param($Uri, $TimeoutSec)
+    param($Uri, $TimeoutSec, [switch]$UseBasicParsing)
+    if (-not $UseBasicParsing) { throw 'La comprobación debe funcionar en PowerShell 5 sin depender de Internet Explorer.' }
     [pscustomobject]@{ StatusCode = 200 }
 }
 

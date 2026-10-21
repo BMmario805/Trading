@@ -38,20 +38,20 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
     def test_new_positions_freeze_hourly_partial_policy_and_48h_horizon(self):
         p=self.engine.state['positions'][0]
         self.assertEqual((p['candleInterval'],p['maxHoldSeconds']),('1h',48*3600))
-        self.assertEqual(p['exitPolicy'],dict(partialAtR=1.5,trailAtr=2.5))
+        self.assertEqual(p['exitPolicy'],dict(partialAtR=1.5,trailAtr=2.5,trailAfterR=2.0,residualStopR=-.5))
         self.assertEqual(self.engine.public()['policy']['version'],desk.POLICY_VERSION)
 
     def test_partial_then_final_exit_is_one_net_trade_with_all_cash_and_fees(self):
         original=dict(self.engine.state['positions'][0])
         before_cash=self.engine.state['cash']
-        self.engine.manage(self.quote(106))
+        self.engine.manage(self.quote(107))
         p=self.engine.state['positions'][0]
         self.assertTrue(p['partialDone'])
         self.assertEqual(len(p['partialExits']),1)
         e=p['partialExits'][0]
         self.assertAlmostEqual(p['qty']+e['qty'],original['qty'])
         self.assertAlmostEqual(self.engine.state['cash'],before_cash+e['proceeds'])
-        self.assertAlmostEqual(p['sl'],max(original['entry']*(1+desk.FEE)/((1-desk.SLIPPAGE)*(1-desk.FEE)),106-2.5*original['atr']))
+        self.assertAlmostEqual(p['sl'],original['entry']-.5*original['risk']/original['qty'])
         self.engine.close_position(110,'final','SOLUSDT')
         trade=self.engine.public()['trades'][0]
         self.assertAlmostEqual(self.engine.state['cash']-self.engine.initial,trade['pnl'])
@@ -62,7 +62,7 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(performance_review.desk_trades(self.engine)[0]['fees'],original['fee']+trade['exitFee'])
 
     def test_restart_and_repeat_quote_do_not_repeat_partial(self):
-        self.engine.manage(self.quote(106))
+        self.engine.manage(self.quote(107))
         self.engine.save()
         restored=desk.Desk(db_path=self.engine.db_path)
         cash=restored.state['cash']
@@ -81,19 +81,19 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(p.get('partialDone',False))
 
     def test_minimum_notional_preserves_full_exit_instead_of_creating_dust(self):
-        snapshot=self.quote(106)
+        snapshot=self.quote(107)
         snapshot['metadata']['SOLUSDT']['filters'][1]['minNotional']='90'
         self.engine.manage(snapshot)
         p=self.engine.state['positions'][0]
         self.assertTrue(p['partialSkippedByFilters'])
         self.assertFalse(p.get('partialDone',False))
-        self.engine.manage(self.quote(108))
+        self.engine.manage(self.quote(110))
         self.assertFalse(self.engine.state['positions'])
         self.assertEqual(self.engine.public()['trades'][0]['exitReason'],'Objetivo')
 
     def test_pause_keeps_partial_management_and_legacy_position_keeps_fixed_target(self):
         self.engine.state['enabled']=False
-        self.engine.manage(self.quote(106))
+        self.engine.manage(self.quote(107))
         self.assertTrue(self.engine.state['positions'][0]['partialDone'])
         p=self.engine.state['positions'][0]
         p.pop('exitPolicy')
@@ -101,7 +101,7 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.engine.state['positions'])
 
     def test_time_limit_above_reference_target_is_reported_as_time(self):
-        self.engine.manage(self.quote(106))
+        self.engine.manage(self.quote(107))
         self.engine.state['positions'][0]['entryTime']=time.time()-48*3600-1
         self.engine.manage(self.quote(110))
         self.assertEqual(self.engine.public()['trades'][0]['exitReason'],'Tiempo máximo')
@@ -109,17 +109,17 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
     def test_database_failure_rolls_back_partial_cash_and_quantity(self):
         cash,qty=self.engine.state['cash'],self.engine.state['positions'][0]['qty']
         with patch.object(self.engine,'connect',side_effect=OSError('disk')):
-            with self.assertRaises(OSError):self.engine.manage(self.quote(106))
+            with self.assertRaises(OSError):self.engine.manage(self.quote(107))
         self.assertEqual(self.engine.state['cash'],cash)
         self.assertEqual(self.engine.state['positions'][0]['qty'],qty)
         self.assertFalse(self.engine.state['positions'][0].get('partialDone',False))
 
     def test_newly_excluded_instrument_closes_with_fresh_price_and_keeps_history(self):
         with patch.object(desk,'TOKENIZED_EQUITIES',{'SOL'}):
-            stale=self.quote(106);stale['at']-=121
+            stale=self.quote(107);stale['at']-=121
             self.engine.manage(stale)
             self.assertEqual(len(self.engine.state['positions']),1)
-            self.engine.manage(self.quote(106))
+            self.engine.manage(self.quote(107))
         self.assertFalse(self.engine.state['positions'])
         trade=self.engine.public()['trades'][0]
         self.assertEqual(trade['exitReason'],'Instrumento fuera del universo cripto')
@@ -191,7 +191,7 @@ class FullUniverseSelectorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_signal_beyond_second_batch_is_considered_before_any_entry(self):
         await self.engine.scan(self.snapshot)
-        self.assertEqual(len(set(self.downloaded)),81)
+        self.assertEqual(set(self.downloaded),set(self.snapshot['metadata']) | {'BTCUSDT'})
         self.assertEqual(self.agent.choose_market.call_args.args[0][0]['symbol'],'COIN79USDT')
         self.assertEqual([p['symbol'] for p in self.engine.state['positions']],['COIN79USDT'])
         self.assertEqual(self.engine.state['selectorCoverage']['evaluated'],81)

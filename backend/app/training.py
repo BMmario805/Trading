@@ -52,8 +52,8 @@ MIN_TRAIN_TRADES = {
     "flow": 10, "scalper": 20, "swing": 8, "trend": 6, "meanrev": 8, "orb": 10, "squeeze": 8,
 }
 MIN_VALIDATION_TRADES = 8
-ENGINE_VERSION = 5
-VALIDATION_PROTOCOL = 'fixed-origin-3-blocks-holdout20-net-v1'
+ENGINE_VERSION = 6
+VALIDATION_PROTOCOL = 'fixed-origin-2of3-dsr-holdout20-net-v2'
 
 # Segundos por vela de cada intervalo de trabajo
 WORK_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
@@ -246,6 +246,7 @@ def simulate(
     allow_short: bool = True,
     risk_multipliers: list[float] | None = None,
     min_atr_spread: float = 3,
+    exit_on_signal: bool = True,
 ) -> dict:
     """Backtest de una configuración sobre candles[start:end]. Sin capitalizar
     (tamaño fijo por operación) para que las métricas sean comparables.
@@ -260,6 +261,8 @@ def simulate(
     max_dd = 0.0
     trade_pnls: list[float] = []
     total_fees = total_carry = turnover = 0.0
+    period_pnls = []
+    previous_mark = 0.0
     model = dict(cost_model or {})
     fee_rate = model.get('feeRate', 0.0)
     slippage = model.get('slippageRate', 0.0)
@@ -319,6 +322,10 @@ def simulate(
     for i in range(max(start, 1), end):
         c = candles[i]
         exit_time = c['time']
+        mark = equity + (net_outcome(entry, exit_fill(c['open']), qty, direction,
+                        entry_fee, fee_rate, carry=carry_at(exit_time)) if direction else 0)
+        period_pnls.append(mark-previous_mark)
+        previous_mark = mark
 
         if direction:
             bars_held += 1
@@ -351,7 +358,7 @@ def simulate(
             equity_peak = max(equity_peak, equity + floating)
             max_dd = max(max_dd, equity_peak - equity - floating)
             # señal claramente contraria (histéresis 0.75×umbral, como en vivo)
-            if direction and scores[i] * direction <= -0.75 * threshold:
+            if exit_on_signal and direction and scores[i] * direction <= -0.75 * threshold:
                 # Una decisión al cierre solo se ejecuta en la siguiente apertura.
                 if i + 1 < end:
                     exit_time = candles[i + 1]['time']
@@ -415,6 +422,7 @@ def simulate(
         final_price = candles[end - 1]["close"]
         exit_time = candles[end - 1]['time']
         close(exit_fill(final_price))
+    period_pnls.append(equity-previous_mark)
     n = wins + losses
     return {
         "expectancy": round(pnl / n, 4) if n else None,
@@ -428,6 +436,7 @@ def simulate(
         "carry": round(total_carry, 6),
         "turnover": round(turnover, 4),
         "tradePnls": trade_pnls,
+        "periodPnls": period_pnls,
         "costModel": model or {'mode': 'legacy-spread-only'},
     }
 
@@ -480,7 +489,44 @@ def expectancy_uncertainty(pnls: list[float], samples: int = 512, seed: int = 41
 
 
 def compact_metrics(metrics: dict) -> dict:
-    return {k: v for k, v in metrics.items() if k not in ('tradePnls', 'costModel')}
+    return {k: v for k, v in metrics.items() if k not in ('tradePnls', 'periodPnls', 'costModel')}
+
+
+def deflated_sharpe(period_pnls, trial_sharpes):
+    """DSR por vela (capital fijo), Bailey/López de Prado 2014, eq. 2.
+
+    Todos los ensayos de esta rejilla cuentan como independientes, sin reducir
+    artificialmente N por correlación. No corrige búsquedas de otras ejecuciones.
+    Ajuste conservador del tamaño efectivo por autocorrelaciones positivas.
+    """
+    n = len(period_pnls)
+    result = dict(probability=None, passed=False, sample=n, trials=len(trial_sharpes),
+                  scope='this-grid-only', method='deflated-sharpe-bar-pnl-v1', threshold=.95,
+                  source='https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf')
+    if n < 30 or len(trial_sharpes) < 2: return result
+    mean = statistics.fmean(period_pnls)
+    variance = statistics.variance(period_pnls)
+    if variance <= 0: return result
+    sd = math.sqrt(variance)
+    sr = mean/sd
+    centered = [x-mean for x in period_pnls]
+    m2 = sum(x*x for x in centered)/n
+    skew = sum(x**3 for x in centered)/n/m2**1.5
+    kurt = sum(x**4 for x in centered)/n/m2**2
+    ac = sum(max(0, sum(centered[i]*centered[i-lag] for i in range(lag,n))/(n*m2))
+             for lag in range(1,min(20,n//4)+1))
+    effective = max(2, n/(1+2*ac))
+    normal = statistics.NormalDist()
+    count = len(trial_sharpes)
+    sigma = math.sqrt(max(statistics.variance(trial_sharpes),1/(n-1)))
+    gamma = .5772156649015329
+    benchmark = sigma*((1-gamma)*normal.inv_cdf(1-1/count)
+                      +gamma*normal.inv_cdf(1-1/(count*math.e)))
+    denominator = 1-skew*sr+(kurt-1)/4*sr*sr
+    if denominator <= 0: return result
+    probability = normal.cdf((sr-benchmark)*math.sqrt(effective-1)/math.sqrt(denominator))
+    return dict(result, probability=probability, passed=probability>=.95,
+                sharpe=sr, benchmark=benchmark, skew=skew, kurtosis=kurt, effectiveSample=effective)
 
 
 def stressed_costs(model: dict, multiplier: float = 2) -> dict:
@@ -513,17 +559,18 @@ def optimize(
                     reason='Histórico insuficiente para tres bloques y holdout con embargo', protocol=protocol)
 
     def evaluate(cfg: tuple, lo: int, hi: int, costs: dict | None = None) -> dict:
-        from .execution import atr_spread_multiple
+        from .execution import atr_spread_multiple, signal_exit_enabled
         th, sl, tp, tr = cfg
         return simulate(candles, scores, atrs, spread_pct, th, sl, tp, tr,
                         max_hold_bars, cooldown_bars, risk_amount, notional_cap,
                         lo, hi, extensions, overext_atr, costs or model, allow_short,
-                        min_atr_spread=atr_spread_multiple(bot_id))
+                        min_atr_spread=atr_spread_multiple(bot_id), exit_on_signal=signal_exit_enabled(bot_id))
 
     best_cfg: tuple | None = None
     best_score = float("-inf")
     best_train: dict | None = None
     trials = 0
+    trial_sharpes = []
     for th, sl, tp, tr in product(GRID_THRESHOLD, GRID_SL, GRID_TP, GRID_TRAIL):
         # recompensa >= riesgo inicial, salvo en reversión a la media (su perfil
         # clásico es ganancia corta y frecuente con stop amplio)
@@ -531,6 +578,9 @@ def optimize(
             continue
         trials += 1
         m = evaluate((th, sl, tp, tr), 0, split)
+        series=m.get('periodPnls',[])
+        sd=statistics.stdev(series) if len(series)>1 else 0
+        trial_sharpes.append(statistics.fmean(series)/sd if sd else 0)
         if m["trades"] < min_trades:
             continue
         pf = m["profitFactor"] if m["profitFactor"] is not None else (3.0 if m["pnl"] > 0 else 0.0)
@@ -548,7 +598,7 @@ def optimize(
 
     th, sl, tp, tr = best_cfg
     segments = [evaluate(best_cfg, lo, hi) for lo, hi in protocol['folds']]
-    stress_segments = [evaluate(best_cfg, lo, hi, stressed_costs(model)) for lo, hi in protocol['folds']]
+    stress_segments = [evaluate(best_cfg, lo, hi, stressed_costs(model,1.5)) for lo, hi in protocol['folds']]
     # Los vecinos se comprueban solo antes del holdout, sin elegir el mejor vecino.
     neighbor_configs = [(th * .9, sl, tp, tr), (min(.95, th * 1.1), sl, tp, tr),
                         (th, sl * 1.1, tp * 1.1, tr)]
@@ -556,16 +606,18 @@ def optimize(
                       pnl=sum(evaluate(c, lo, hi)['pnl'] for lo, hi in protocol['folds']))
                  for c in neighbor_configs]
     uncertainty = expectancy_uncertainty([p for m in segments for p in m['tradePnls']])
+    dsr = deflated_sharpe(best_train.get('periodPnls',[]), trial_sharpes)
     # Única consulta del tramo final una vez congelados configuración y pruebas.
     val = evaluate(best_cfg, *protocol['holdout'])
     stress = evaluate(best_cfg, *protocol['holdout'], stressed_costs(model))
     accepted = (val['pnl'] > 0 and val['trades'] >= MIN_VALIDATION_TRADES
                 and sum(m['trades'] for m in segments) >= 20
-                and all(m['pnl'] > 0 and m['trades'] >= 2 for m in segments)
-                and all(m['pnl'] > 0 for m in stress_segments)
+                and sum(m['pnl'] > 0 for m in segments) >= 2
+                and sum(m['pnl'] for m in segments) > 0
+                and sum(m['pnl'] for m in stress_segments) > 0
                 and stress['pnl'] > 0 and stress['trades'] >= MIN_VALIDATION_TRADES
                 and sum(n['pnl'] > 0 for n in neighbors) >= 2
-                and uncertainty.get('lower95') is not None and uncertainty['lower95'] > 0)
+                and dsr['passed'])
     return {
         "ok": True,
         "params": {"entryThreshold": th, "slAtr": sl, "tpAtr": tp, "trailAtr": tr},
@@ -577,12 +629,15 @@ def optimize(
         "stressSegments": [compact_metrics(m) for m in stress_segments],
         "neighbors": neighbors,
         "uncertainty": uncertainty,
+        "deflatedSharpe": dsr,
+        "developmentStressMultiplier": 1.5,
+        "holdoutStressMultiplier": 2.0,
         "protocol": protocol,
         "trials": trials,
         "costModel": model,
         "costVersion": ECONOMICS_VERSION,
         "engineVersion": ENGINE_VERSION,
-        "reason": "Tres bloques, holdout neto, incertidumbre y costes reforzados superados" if accepted else "Muestra, consistencia, incertidumbre, vecindad o costes insuficientes",
+        "reason": "Dos de tres bloques, DSR, holdout a doble coste y vecindad superados" if accepted else "Muestra, consistencia, DSR, vecindad o costes insuficientes",
         "bars": len(candles),
     }
 
@@ -644,7 +699,7 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
                 (
                     cfg.id, sym.id,
                     json.dumps(result["params"]),
-                    json.dumps({k: result.get(k) for k in ("train", "validation", "segments", "stress", "stressSegments", "neighbors", "uncertainty", "protocol", "trials", "costModel", "costVersion", "engineVersion", "reason", "source", "proxy")}),
+                    json.dumps({k: result.get(k) for k in ("train", "validation", "segments", "stress", "stressSegments", "neighbors", "uncertainty", "deflatedSharpe", "developmentStressMultiplier", "holdoutStressMultiplier", "protocol", "trials", "costModel", "costVersion", "engineVersion", "reason", "source", "proxy")}),
                     int(result["applied"]), int(time.time()),
                 ),
             )

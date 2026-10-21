@@ -32,8 +32,9 @@ para no "aprender" del ruido:
    hora. El modelo no decide la dirección (eso es del bot primario): decide
    CUÁNTO fiarse de la señal. Su objetivo se pondera por la magnitud del R
    neto; la puntuación resultante no es probabilidad de éxito calibrada.
-   Puede reducir tamaño o filtrar señales. Aprende de cierres con snapshot
-   de la generación vigente y riesgo inicial monetario verificable.
+   Puede filtrar señales o modular tamaño: hasta 1,25x solo con validación
+   vigente y modelo maduro. Conserva schemas compatibles entre motores y
+   aprende de cierres netos con riesgo inicial monetario verificable.
 
 Además, un planificador reentrena cada bot automáticamente cada pocas
 horas (walk-forward con histórico fresco), de modo que parámetros, vetos,
@@ -52,6 +53,7 @@ from . import training
 from .config import SYMBOLS_BY_ID
 from .history import DB_PATH
 from .database import Connection
+from .economics import ECONOMICS_VERSION
 
 log = logging.getLogger("learning")
 
@@ -82,7 +84,8 @@ META_LR = 0.05            # tasa de aprendizaje SGD
 META_L2 = 0.001           # regularización L2 (evita pesos desbocados)
 # Cambiar las features exige reaprender: quitar un peso no elimina su
 # influencia anterior sobre el sesgo y los demás coeficientes.
-META_FEATURE_VERSION = 3  # Objetivo ponderado por magnitud de R neta, no tasa de acierto.
+META_FEATURE_VERSION = 4  # v3 + contexto continuo causal; migración aditiva compatible.
+META_FORGETTING = .98
 NON_CAUSAL_CONFIRMATIONS = frozenset({
     "Opinión pública", "Señal combinada", "Contexto macro oficial",
 })
@@ -99,7 +102,7 @@ MAX_CONCURRENT_TRAININGS = 2
 _policies: dict[str, dict] = {}       # bot -> política vigente (en memoria)
 _edges: dict[str, dict[str, str]] = {}  # bot -> {símbolo: validated|rejected|unknown}
 _models: dict[str, dict] = {}         # bot -> meta-modelo {w, n, lastTradeId}
-META_PROCESSING_VERSION = 1
+META_PROCESSING_VERSION = 2  # Recibos atómicos v1 + recuperación acotada de netos v4 omitidos.
 _scheduler_task: asyncio.Task | None = None
 
 
@@ -216,12 +219,23 @@ def _sigmoid(z: float) -> float:
     return 1.0 / (1.0 + math.exp(-z))
 
 
+def entry_context(price, atr_value, extension, spread_pct):
+    """Solo valores conocidos al entrar; no reconstruir desde velas posteriores."""
+    values={}
+    if price and atr_value and price>0 and atr_value>0:
+        values.update(atr_pct=atr_value/price*100, spread_to_atr=price*spread_pct/atr_value)
+    if isinstance(extension,(int,float)) and math.isfinite(extension):
+        values['extension_atr']=extension
+    return values
+
+
 def meta_features(
     bot_id: str,
     category: str,
     direction: str,
     hour_utc: int,
     confirmations: list[dict],
+    context: dict | None = None,
 ) -> dict[str, float]:
     """Vector de features (disperso) del contexto de una señal.
 
@@ -246,7 +260,23 @@ def meta_features(
         if not v:
             continue
         feats[f"conf:{system}"] = max(-1.0, min(1.0, v * sign))
+    for name, divisor in (('atr_pct',5),('extension_atr',3),('spread_to_atr',1)):
+        value=(context or {}).get(name)
+        if isinstance(value,(int,float)) and math.isfinite(value):
+            feats[name]=max(-2.0,min(2.0,value/divisor))
     return feats
+
+
+def _compatible_model(model):
+    return (model.get('featureVersion') in (3,META_FEATURE_VERSION)
+            and model.get('processingVersion') in (1,META_PROCESSING_VERSION))
+
+
+def _migrate_model(model):
+    # Compatibilidad explícita de features/recibos, independiente del motor.
+    model.update(featureVersion=META_FEATURE_VERSION,engineVersion=training.ENGINE_VERSION,
+                 processingVersion=META_PROCESSING_VERSION)
+    return model
 
 
 def _new_model() -> dict:
@@ -263,9 +293,10 @@ def _load_model(bot_id: str) -> dict:
             "SELECT model FROM bot_model WHERE bot = ?", (bot_id,)
         ).fetchone()
     _models[bot_id] = json.loads(row[0]) if row else _new_model()
-    if (_models[bot_id].get('engineVersion') != training.ENGINE_VERSION
-            or _models[bot_id].get('featureVersion') != META_FEATURE_VERSION):
+    if not _compatible_model(_models[bot_id]):
         _models[bot_id] = _new_model()
+    else:
+        _migrate_model(_models[bot_id])
     return _models[bot_id]
 
 
@@ -291,9 +322,19 @@ def meta_predict(bot_id: str, feats: dict[str, float]) -> float:
     return _sigmoid(z)
 
 
+def meta_size_multiplier(bot_id,score,validated):
+    if score is None: return 1.0
+    base=max(.5,min(1.0,.5+(score-.35)*2.5))
+    if validated and score>=.65 and _load_model(bot_id)['n']>=META_MIN_SAMPLES:
+        return min(1.25,1+(score-.65)/.35*.25)
+    return base
+
+
 def _meta_sgd_step(model: dict, feats: dict[str, float], won: bool, weight: float = 1.0) -> None:
     """Un paso de descenso de gradiente sobre la pérdida logística."""
     w = model["w"]
+    for key in w:
+        w[key] *= META_FORGETTING
     z = sum(w.get(k, 0.0) * v for k, v in feats.items())
     p = _sigmoid(z)
     err = (1.0 if won else 0.0) - p
@@ -325,13 +366,23 @@ def _trade_features(bot_id: str, row: tuple) -> dict[str, float] | None:
         snap = json.loads(snapshot_json)
     except (TypeError, ValueError):
         return None
-    if snap.get('engineVersion') != training.ENGINE_VERSION:
+    version=snap.get('metaFeatureVersion')
+    costs=snap.get('executionCosts') or {}
+    economy=snap.get('economics') or {}
+    legacy_net=(version is None and snap.get('engineVersion')==4
+                and costs.get('version')==ECONOMICS_VERSION and economy.get('version')==ECONOMICS_VERSION
+                and all(isinstance(costs.get(k),(int,float)) and math.isfinite(costs[k]) and 0<=costs[k]<1
+                        for k in ('feeRate','slippageRate','spreadPct','carryDailyRate')))
+    if version not in (3,META_FEATURE_VERSION) and not legacy_net and not (version is None and snap.get('engineVersion') in (5,6)):
         return None
     confs = snap.get("confirmations") or []
+    if not isinstance(confs,list) or any(not isinstance(c,dict) or not isinstance(c.get('system'),str)
+        or not isinstance(c.get('vote'),(int,float)) or not math.isfinite(c['vote']) or not -1<=c['vote']<=1 for c in confs):
+        return None
     sym = SYMBOLS_BY_ID.get(symbol)
     category = sym.category if sym else "?"
     hour = int(entry_time % 86400 // 3600)
-    return meta_features(bot_id, category, direction, hour, confs)
+    return meta_features(bot_id, category, direction, hour, confs, snap.get('entryContext'))
 
 
 def meta_learn_new_trades(bot_id: str) -> int:
@@ -347,15 +398,30 @@ def meta_learn_new_trades(bot_id: str) -> int:
         con.execute("BEGIN IMMEDIATE")
         saved = con.execute("SELECT model FROM bot_model WHERE bot = ?", (bot_id,)).fetchone()
         m = json.loads(saved[0]) if saved else _new_model()
-        compatible = (m.get("engineVersion") == training.ENGINE_VERSION
-                      and m.get("featureVersion") == META_FEATURE_VERSION
-                      and m.get("processingVersion") == META_PROCESSING_VERSION)
+        recover_legacy=(m.get('engineVersion') in (5,6) and m.get('processingVersion')==1) or not m.get('n')
+        compatible = _compatible_model(m)
+        migrated = m.get('featureVersion') != META_FEATURE_VERSION or m.get('engineVersion') != training.ENGINE_VERSION
         if not compatible:
             # El antiguo cursor por ID de apertura no permite distinguir las
             # operaciones omitidas de las ya aprendidas: reconstruir los pesos
             # evita duplicarlos y recupera todos los cierres compatibles.
             m = _new_model()
             con.execute("DELETE FROM bot_model_processed WHERE bot = ?", (bot_id,))
+        else:
+            _migrate_model(m)
+        if not m.get('legacyNetV4Recovered'):
+            # v5/v6 anteriores marcaban estos IDs como vistos, pero SIEMPRE los
+            # omitían por engineVersion != vigente. Se recuperan solo netos v4
+            # con contrato de costes declarado. No se reentrena lo ya aprendido.
+            if recover_legacy:
+                con.execute('''DELETE FROM bot_model_processed WHERE bot=? AND trade_id IN
+                (SELECT id FROM bot_trades WHERE bot=? AND json_valid(snapshot)
+                 AND json_extract(snapshot,'$.engineVersion')=4
+                 AND json_extract(snapshot,'$.executionCosts.version')=?
+                 AND json_extract(snapshot,'$.economics.version')=?)''',
+                            (bot_id,bot_id,ECONOMICS_VERSION,ECONOMICS_VERSION))
+            m['legacyNetV4Recovered']=True
+            migrated=True
         rows = con.execute(
             """SELECT t.id, t.symbol, t.direction, t.entry_time, t.snapshot, t.pnl
                     , t.qty*COALESCE(t.economic_risk_dist,t.initial_risk_dist)*COALESCE(t.quote_to_account,1)
@@ -378,7 +444,7 @@ def meta_learn_new_trades(bot_id: str) -> int:
                 learned += 1
             con.execute("INSERT INTO bot_model_processed VALUES (?, ?)", (bot_id, tid))
         m["n"] += learned
-        if rows or not compatible or not saved:
+        if rows or not compatible or not saved or migrated:
             m["updatedAt"] = int(time.time())
             m["w"] = {k: round(v, 6) for k, v in m["w"].items() if abs(v) > 1e-6}
             con.execute("INSERT OR REPLACE INTO bot_model VALUES (?, ?, ?)",
@@ -403,7 +469,10 @@ def meta_summary(bot_id: str) -> dict:
         "calibrated": False,
         "objective": "r-weighted-logistic-v1",
         "outputMeaning": "Puntuación ponderada por R; no probabilidad de éxito ni expectativa R",
-        "sizeIncreaseAllowed": False,
+        "sizeIncreaseAllowed": True,
+        "sizeIncreaseRequires": "Validación vigente, modelo maduro y puntuación ≥0,65; máximo 1,25x",
+        "featureVersion": META_FEATURE_VERSION,
+        "forgettingPerClose": META_FORGETTING,
         "topFeatures": [
             {"feature": k, "weight": round(v, 3)} for k, v in top
         ],

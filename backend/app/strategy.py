@@ -1,6 +1,6 @@
 """Señales causales compartidas por el vivo y el backtest.
 
-Scalper, swing y trend usan tres bloques con pesos 40/40/20: régimen,
+Scalper, swing, trend, meanrev y squeeze usan tres bloques con pesos 40/40/20: régimen,
 disparador de precio y flujo CMF. Sin disparador no hay entrada.
 Los demás bots mantienen sus escuelas específicas. Las funciones devuelven
 una puntuación en [-1, 1] por vela y solo usan información ya disponible.
@@ -362,86 +362,35 @@ def trend_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
 # ---------------------------------------------------------------------------
 
 
-def meanrev_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
-    """Serie de señal de reversión (Connors RSI-2): comprar pánicos cortos
-    dentro de tendencias alcistas (RSI(2) en suelo con precio sobre la
-    SMA200) y vender euforias en tendencias bajistas. La salida se codifica
-    como puntuación contraria suave (RSI(2) recuperado + cierre sobre SMA5),
-    que dispara el cierre por señal contraria sin abrir posición nueva."""
-    n = len(c_work)
-    closes = [c["close"] for c in c_work]
-    if n < 60:
-        return [0.0] * n
-    r2 = rsi(closes, 2)
-    s200 = sma(closes, 200)
-    s5 = sma(closes, 5)
-    pb = pct_b(closes)
-    stv = stoch_votes(c_work)
-    wv = williams_votes(c_work)
-    cv = cci_votes(c_work)
-    zs = zscore_series(closes)
-    swp = sweep_series(c_work)
-    obk = order_block_series(c_work)
-    srv = stochrsi_votes(c_work)
-
-    out: list[float] = []
-    for i in range(n):
-        m200, m5, v2 = s200[i], s5[i], r2[i]
-        if v2 is None or m200 is None:
-            out.append(0.0)
-            continue
-        above = closes[i] > m200
-        z = zs[i]
-        score = 0.0
-        if above:
-            if v2 <= 15:  # pánico corto en tendencia alcista -> compra
-                score = 0.55 + 0.45 * (15 - v2) / 15
-            elif z is not None and z <= -2.0:
-                # extremo estadístico: 2σ bajo su media con sesgo alcista
-                score = 0.55 + 0.15 * min((-z - 2.0), 1.0)
-            elif v2 >= 80 and m5 is not None and closes[i] > m5:
-                score = -0.35  # presión de salida (no abre cortos)
-            if score > 0 and swp[i] > 0:  # barrido de liquidez: suelo con rechazo
-                score += 0.15
-            if score > 0 and obk[i] > 0:  # reacción en order block de demanda
-                score += 0.1
-        else:
-            if v2 >= 85:  # euforia en tendencia bajista -> venta
-                score = -(0.55 + 0.45 * (v2 - 85) / 15)
-            elif z is not None and z >= 2.0:
-                score = -(0.55 + 0.15 * min((z - 2.0), 1.0))
-            elif v2 <= 20 and m5 is not None and closes[i] < m5:
-                score = 0.35
-            if score < 0 and swp[i] < 0:  # barrido de máximos con rechazo
-                score -= 0.15
-            if score < 0 and obk[i] < 0:  # reacción en order block de oferta
-                score -= 0.1
-        # confirmación de osciladores en la misma dirección (%B, estocástico,
-        # Williams %R y CCI): cuantos más extremos coinciden, más convicción
-        if score >= 0.5:
-            if pb[i] is not None and pb[i] <= 0.05:
-                score += 0.1
-            if stv[i] > 0:
-                score += 0.1
-            if wv[i] > 0:
-                score += 0.05
-            if cv[i] > 0:
-                score += 0.05
-            if srv[i] > 0:
-                score += 0.05
-        elif score <= -0.5:
-            if pb[i] is not None and pb[i] >= 0.95:
-                score -= 0.1
-            if stv[i] < 0:
-                score -= 0.1
-            if wv[i] < 0:
-                score -= 0.05
-            if cv[i] < 0:
-                score -= 0.05
-            if srv[i] < 0:
-                score -= 0.05
-        out.append(_clip(score))
+def meanrev_factor_series(c_work, c_trend):
+    """40% rango/tendencia larga, 40% extremo confirmado, 20% flujo/barrido."""
+    closes=[c['close'] for c in c_work]
+    n=len(closes)
+    r2, ma = rsi(closes,2), sma(closes,200)
+    zs, adx = zscore_series(closes), adx_series(c_work)
+    sweeps, money = sweep_series(c_work), chaikin_money_flow(c_work)
+    out=[]
+    for i,c in enumerate(c_work):
+        regime=trigger=flow=0.0
+        if i>=200 and adx[i] is not None and adx[i]<25 and ma[i] is not None and r2[i] is not None:
+            side=1 if c['close']>ma[i] else -1
+            extreme=(r2[i]<10 or (zs[i] is not None and zs[i]<-2)) if side>0 else (r2[i]>90 or (zs[i] is not None and zs[i]>2))
+            body=abs(c['close']-c['open'])
+            lower=min(c['open'],c['close'])-c['low']
+            upper=c['high']-max(c['open'],c['close'])
+            confirm=(c['close']>c_work[i-1]['high'] or (c['close']>c['open'] and lower>=max(body, .4*(c['high']-c['low'])))) if side>0 else (c['close']<c_work[i-1]['low'] or (c['close']<c['open'] and upper>=max(body,.4*(c['high']-c['low']))))
+            regime=float(side)
+            if extreme and confirm:
+                trigger=float(side)
+                cmf=money[i] or 0
+                flow=_clip((sweeps[i]+_clip(cmf*5))/2)
+        score=.4*regime+.4*trigger+.2*flow if trigger else 0.0
+        out.append(dict(regime=regime,trigger=trigger,flow=flow,score=score if score*trigger>0 else 0.0))
     return out
+
+
+def meanrev_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
+    return [f['score'] for f in meanrev_factor_series(c_work,c_trend)]
 
 
 # ---------------------------------------------------------------------------
@@ -485,72 +434,39 @@ def orb_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
 # ---------------------------------------------------------------------------
 
 
-def squeeze_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
-    """Serie de señal del squeeze: cuando las Bollinger se comprimen dentro
-    del canal de Keltner la volatilidad está "cargada"; al liberarse, se entra
-    en la dirección del momento con la confirmación de SuperTrend, MACD y el
-    marco horario."""
-    n = len(c_work)
-    closes = [c["close"] for c in c_work]
-    if n < 60:
-        return [0.0] * n
-    rel = squeeze_release_series(c_work)
-    bbw = bbw_expansion_series(c_work)
-    st = supertrend_votes(c_work)
-    m_line, m_sig = macd(closes)
-    htf = _htf_trend_votes(c_work, c_trend, 20, 50, TREND_STEP['squeeze'])
-    kb = keltner_break_votes(c_work)
-    mom = momentum_votes(c_work)
-    vx = vortex_votes(c_work)
-    ar = aroon_votes(c_work)
-
-    out: list[float] = []
-    for i in range(n):
-        # disparador: squeeze BB/Keltner clásico o, en su defecto, expansión
-        # del ancho de Bollinger desde compresión (percentil bajo de BBW)
-        v = rel[i]
-        weak = False
-        if not v and bbw[i]:
-            v = bbw[i]
-            weak = True  # el disparador BBW arranca con algo menos de base
-        if not v:
-            out.append(0.0)
-            continue
-        agree = 0.0
-        if st[i] == v:
-            agree += 0.12
-        if m_line[i] is not None and m_sig[i] is not None:
-            hist = m_line[i] - m_sig[i]
-            if (hist > 0) == (v > 0):
-                agree += 0.10
-        if htf[i] == v:
-            agree += 0.10
-        if kb[i] == v:  # cierre ya fuera del canal de Keltner: expansión real
-            agree += 0.10
-        if mom[i] * v > 0.3:  # momento ATR-normalizado en la misma dirección
-            agree += 0.08
-        if vx[i] == v:  # el Vortex rota en la misma dirección
-            agree += 0.08
-        if ar[i] == v:  # Aroon: la tendencia que nace es fresca
-            agree += 0.06
-        base = 0.42 if weak else 0.5
-        out.append(_clip(v * (base + agree)))
+def squeeze_factor_series(c_work, c_trend):
+    """40% régimen 4h, 40% liberación de compresión, 20% CMF; sin sumas redundantes."""
+    closes=[c['close'] for c in c_work]
+    rel, bbw = squeeze_release_series(c_work), bbw_expansion_series(c_work)
+    htf=_htf_trend_votes(c_work,c_trend,20,50,TREND_STEP['squeeze'])
+    e50, e200 = ema(closes,50), ema(closes,200)
+    money=chaikin_money_flow(c_work)
+    out=[]
+    for i,c in enumerate(c_work):
+        regime=trigger=flow=0.0
+        if i>=200:
+            side=1 if c['close']>e200[i] and e50[i]>e200[i] else -1 if c['close']<e200[i] and e50[i]<e200[i] else 0
+            if side and htf[i]*side>0:
+                regime=float(side)
+                release=rel[i] or bbw[i]
+                if release*side>0:
+                    trigger=float(side)
+                    flow=_clip((money[i] or 0)*5)
+        score=.4*regime+.4*trigger+.2*flow if trigger else 0.0
+        out.append(dict(regime=regime,trigger=trigger,flow=flow,score=score if score*trigger>0 else 0.0))
     return out
 
 
-SCORE_FNS = {
-    "scalper": scalper_scores,
-    "swing": swing_scores,
-    "trend": trend_scores,
-    "meanrev": meanrev_scores,
-    "orb": orb_scores,
-    "squeeze": squeeze_scores,
-    "flow": flow_scores,
-}
+def squeeze_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
+    return [f['score'] for f in squeeze_factor_series(c_work,c_trend)]
+
+
+SCORE_FNS = {'scalper':scalper_scores,'swing':swing_scores,'trend':trend_scores,
+             'meanrev':meanrev_scores,'orb':orb_scores,'squeeze':squeeze_scores,'flow':flow_scores}
 
 
 def score_series(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[float]:
-    return SCORE_FNS.get(bot_id, swing_scores)(c_work, c_trend)
+    return SCORE_FNS.get(bot_id,swing_scores)(c_work,c_trend)
 
 
 # ---------------------------------------------------------------------------
@@ -565,14 +481,16 @@ def confirmations(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[
     informativo). Es lo que ve el usuario al preguntar POR QUÉ se abrió una
     operación, así que cubre todos los sistemas que componen la señal.
     """
-    if bot_id in ("scalper", "swing", "trend"):
+    if bot_id in ("scalper", "swing", "trend", "meanrev", "squeeze"):
         if not c_work:
             return []
-        factors = (trend_factor_series(c_work,c_trend) if bot_id=='trend'
+        factors = (meanrev_factor_series(c_work,c_trend) if bot_id=='meanrev'
+                   else squeeze_factor_series(c_work,c_trend) if bot_id=='squeeze'
+                   else trend_factor_series(c_work,c_trend) if bot_id=='trend'
                    else factor_series(c_work,c_trend,TREND_STEP[bot_id]))[-1]
-        regime_detail=('ADX ≥20, EMA200 y marco 4h cerrado' if bot_id=='trend'
+        regime_detail=('ADX <25 y lado de SMA200' if bot_id=='meanrev' else 'EMA50/200 y marco 4h cerrado' if bot_id=='squeeze' else 'ADX ≥20, EMA200 y marco 4h cerrado' if bot_id=='trend'
                        else 'ADX/CHOP, EMA200 y marco superior cerrado')
-        trigger_detail=('ruptura Donchian 40/55 obligatoria' if bot_id=='trend'
+        trigger_detail=('RSI2/z-score extremo y vela de rechazo obligatoria' if bot_id=='meanrev' else 'liberación BB/Keltner o BBW obligatoria' if bot_id=='squeeze' else 'ruptura Donchian 40/55 obligatoria' if bot_id=='trend'
                         else 'ruptura/pullback en tendencia; barrido/z-score en rango')
         return [
             {"system": "Régimen", "detail": "Peso 40%: "+regime_detail, "vote": factors["regime"]},
