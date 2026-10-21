@@ -130,16 +130,18 @@ class CashFeedTests(unittest.IsolatedAsyncioTestCase):
 
 class ConfirmationTests(unittest.TestCase):
     def test_tokenized_stocks_do_not_enter_the_crypto_desk(self):
-        rows=desk.universe(add_markets(data(),['SNDKB','SOXLB','BNB','JUP']))
+        rows=desk.universe(add_markets(data(),['SNDKB','SOXLB','KORUB','SNXXB','INTWB','TQQQB','BNB','JUP']))
         eligible={r['symbol'] for r in rows if r['eligible']}
         self.assertNotIn('SOXLBUSDT',eligible)
         self.assertNotIn('SNDKBUSDT',eligible)
+        for base in ('KORUB','SNXXB','INTWB','TQQQB'):
+            self.assertNotIn(base+'USDT',eligible)
         self.assertIn('BNBUSDT',eligible)
         self.assertIn('JUPUSDT',eligible)
     def rows(self,down=False):
         now=1800000
         closes=[100+i*.05*(-1 if down else 1) for i in range(90)]
-        return now,[dict(time=now-(90-i)*900,open=p+.02,close=p,high=p+.2,low=p-.2,volume=100) for i,p in enumerate(closes)]
+        return now,[dict(time=now-(90-i)*desk.CANDLE_SECONDS,open=p+.02,close=p,high=p+.2,low=p-.2,volume=100) for i,p in enumerate(closes)]
 
     def test_declining_discount_is_not_an_entry(self):
         now,rows=self.rows(True)

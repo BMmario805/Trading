@@ -54,7 +54,7 @@ class DemoGateway:
         return tick
 
     def prepare_entry(self, symbol, direction, atr, sl_multiple, tp_multiple, magic, comment, now,
-                      risk_mult=1.0, virtual_equity=None):
+                      risk_mult=1.0, virtual_equity=None, min_atr_spread=3):
         self.last_entry_diagnostics = None
         if not math.isfinite(risk_mult) or not 0 < risk_mult <= 1:
             raise DemoOnlyError('Multiplicador de riesgo inválido')
@@ -81,7 +81,7 @@ class DemoGateway:
             raise DemoOnlyError('Instrumento cerrado para nuevas operaciones')
         tick = self.tick(symbol, now)
         spread = tick.ask - tick.bid
-        if not math.isfinite(atr) or atr <= 0 or atr < 3 * spread:
+        if not math.isfinite(atr) or atr <= 0 or atr < min_atr_spread * spread:
             raise DemoOnlyError('ATR insuficiente para el spread del bróker')
         buy = direction > 0
         kind = api.ORDER_TYPE_BUY if buy else api.ORDER_TYPE_SELL

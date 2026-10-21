@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
-from . import learning
+from . import learning, gemini_agent
 from . import market_data
 from . import sentiment as sentiment_mod
 from . import systems
@@ -22,7 +22,7 @@ from .config import SYMBOLS_BY_ID, Symbol, EXTRA_CRYPTO
 from . import opportunities
 from .history import DB_PATH
 from .database import Connection
-from .execution import closed_candles, fresh_signal, valid_tick
+from .execution import closed_candles, fresh_signal, valid_tick, atr_spread_multiple
 from .training import ENGINE_VERSION
 from .indicators import atr
 from .strategy import confirmations as strategy_confirmations
@@ -153,7 +153,7 @@ TREND = BotConfig(
         "NVDA", "TSLA", "SPY", "QQQ", "EURUSD", "USDJPY",
     ),
     work_interval="1h",
-    trend_interval="1d",
+    trend_interval="4h",
     scan_seconds=60,
     tick_seconds=20,
     weight_tech=0.9,
@@ -241,8 +241,8 @@ SQUEEZE = BotConfig(
         "PAXG", "XAUUSD", "BTC", "ETH", "SOL", "XRP", "DOGE",
         "EURUSD", "GBPUSD", "USDJPY",
     ),
-    work_interval="15m",
-    trend_interval="1h",
+    work_interval="1h",
+    trend_interval="4h",
     scan_seconds=60,
     tick_seconds=10,
     weight_tech=0.9,
@@ -835,7 +835,7 @@ class TradingBot:
             # filtro de coste: sin volatilidad suficiente el spread se come el
             # beneficio.  El mismo filtro que aplica el backtest de training.py:
             # lo entrenado tiene que ser exactamente lo operado.
-            if atr_val < 3 * price * self.spread_pct(sym):
+            if atr_val < atr_spread_multiple(self.cfg.id) * price * self.spread_pct(sym):
                 self.diagnostics[symbol_id]["reason"] = "Volatilidad insuficiente para cubrir costes"
                 continue
             direction = "long" if score > 0 else "short"
@@ -852,10 +852,8 @@ class TradingBot:
             if mode == "probation" and len(self.probation_open) >= learning.MAX_PROBATION_POSITIONS:
                 self.diagnostics[symbol_id]["reason"] = "Límite de posiciones a prueba alcanzado"
                 continue
-            # meta-modelo (meta-labeling): un clasificador online entrenado con
-            # las operaciones reales del bot estima la probabilidad de éxito de
-            # ESTA señal en ESTE contexto; filtra las de baja confianza y
-            # modula el tamaño de las demás
+            # Puntuación logística ponderada por R neta; no una probabilidad
+            # calibrada. Solo puede filtrar señales o reducir su tamaño.
             feats = learning.meta_features(
                 self.cfg.id, sym.category, direction, hour_utc,
                 signal["confirmations"],
@@ -869,7 +867,7 @@ class TradingBot:
             if mode == "probation" and p_win is not None and p_win < learning.PROBATION_META_P:
                 # a prueba solo pasan las señales de más convicción
                 self.diagnostics[symbol_id]["reason"] = (
-                    f"Entrada a prueba filtrada: p(éxito)={p_win:.1%} < {learning.PROBATION_META_P:.0%}"
+                    f"Entrada a prueba filtrada: puntuación ponderada por R={p_win:.1%} < {learning.PROBATION_META_P:.0%}"
                 )
                 log.debug("%s: %s %s a prueba sin convicción (p=%.2f)",
                           self.cfg.id, symbol_id, direction, p_win)
@@ -1011,6 +1009,10 @@ class TradingBot:
         p_win: float | None = None, meta_note: str | None = None,
         probation_why: str | None = None,
     ) -> None:
+        gate=gemini_agent.catalyst_gate(sym.id,direction)
+        if not gate['allowed']:
+            self.diagnostics[sym.id]={"reason":gate['reason'],"at":int(time.time()),"catalystGate":gate}
+            return
         if not all(math.isfinite(v) for v in (price, atr_val, sl_m, tp_m, trail_m)) or min(price, atr_val, sl_m, tp_m) <= 0:
             self.diagnostics[sym.id] = {"reason": "Precio, ATR o distancias inválidos", "at": int(time.time())}
             return
@@ -1055,13 +1057,13 @@ class TradingBot:
         if probation_why:
             prob_mult = learning.PROBATION_SIZE
             reasons.insert(0, f"A prueba ({learning.PROBATION_SIZE:.0%} del tamaño): {probation_why}")
-        # Una probabilidad de acierto no mide el beneficio/pérdida esperado.
-        # Sin calibración monetaria sólo puede reducir el riesgo, nunca subirlo.
+        # La puntuación ponderada tampoco está calibrada monetariamente;
+        # solo puede reducir el riesgo, nunca subirlo.
         meta_mult = 1.0
         if p_win is not None:
             meta_mult = max(0.5, min(1.0, 0.5 + (p_win - 0.35) * 2.5))
             reasons.append(
-                f"Meta-modelo: p(éxito)={p_win:.0%} → tamaño ×{meta_mult:.2f}"
+                f"Meta-modelo: puntuación ponderada por R={p_win:.0%} → tamaño ×{meta_mult:.2f}"
                 + (f" ({meta_note})" if meta_note else "")
             )
         conversion=1.0
@@ -1106,6 +1108,7 @@ class TradingBot:
                 window, intraday=self.cfg.work_interval in ("1m", "5m", "15m")
             ),
             "executionCosts": costs,
+            "catalystGate": gate,
             "economics": economy,
         }
         from . import portfolio_risk

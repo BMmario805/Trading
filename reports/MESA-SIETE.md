@@ -1,5 +1,9 @@
 # Mesa Siete — 14 de octubre de 2026
 
+> Registro histórico. La política vigente de nuevas entradas Cripto usa 1 h,
+> parcial en 1,5 R y horizonte de 48 h. Las cifras y reglas de esta página
+> describen el estado del día 14. [Cambios actuales](CORRECCIONES_2026-10-21.md).
+
 La nueva página inicial reproduce la organización del ejemplo: un selector y
 seis roles especializados, curva de patrimonio, velas, lista de mercados,
 decisiones e historial. Se ha comprobado con una llamada real a Gemini y con

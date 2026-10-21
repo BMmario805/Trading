@@ -1,5 +1,9 @@
 # Gemini en observación — 14 de octubre de 2026
 
+> Registro histórico. Desde el 21 de octubre existe un veto local por
+> catalizadores recientes y selección exclusiva por vela en Cripto.
+> [Funcionamiento actualizado](CORRECCIONES_2026-10-21.md#catalizadores-de-gemini).
+
 El observador está conectado y funcionando con **Gemini 3.5 Flash-Lite**.
 Se comprobó el acceso a los modelos con la clave proporcionada y se ejecutó
 una clasificación real de doce textos de oro. El resultado y los contadores

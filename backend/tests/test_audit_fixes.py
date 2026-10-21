@@ -208,14 +208,14 @@ class ProbationSizingTests(TemporaryDatabaseTests):
         bot = bots.TradingBot(bots.SCALPER)
         pos = self.open_probation(bot, learn_mult=1.5, p_win=.99)
         risk_with_spread = pos.initial_risk()
-        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .35)
+        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .15)
 
     def test_loss_streak_can_reduce_probation_risk_further(self):
         bot = bots.TradingBot(bots.SCALPER)
         bot.consec_losses = 2
         pos = self.open_probation(bot)
         risk_with_spread = pos.initial_risk()
-        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .175)
+        self.assertAlmostEqual(risk_with_spread, bot.balance * bot.cfg.risk_pct * .075)
 
     def test_restart_preserves_probation_slots(self):
         bot = bots.TradingBot(bots.SCALPER)
@@ -224,9 +224,9 @@ class ProbationSizingTests(TemporaryDatabaseTests):
         restored.load_state()
         self.assertIn('BTC', restored.probation_open)
 
-    def test_five_probation_positions_stop_further_exploration(self):
+    def test_one_probation_position_stops_further_exploration(self):
         bot = bots.TradingBot(replace(bots.SCALPER, universe=('BTC',)))
-        bot.probation_open.update(('ETH', 'SOL', 'XRP', 'ADA', 'BNB'))
+        bot.probation_open.add('ETH')
         with patch.object(learning, 'entry_mode', return_value=('probation', 'Sin validar')), \
              patch.object(bot, '_evaluate', AsyncMock()) as evaluate:
             asyncio.run(bot._scan())

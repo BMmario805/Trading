@@ -38,6 +38,7 @@ def connection():
         owner TEXT, ticket INTEGER, amount REAL NOT NULL, PRIMARY KEY(owner,ticket))''')
     con.execute('''CREATE TABLE IF NOT EXISTS mt5_sync_evidence (
         owner TEXT PRIMARY KEY, payload TEXT NOT NULL)''')
+    con.commit()  # Completar migraciones antes de abrir transacciones de negocio.
     return con
 
 
@@ -45,6 +46,34 @@ def session(owner):
     with connection() as con:
         row=con.execute('SELECT payload FROM mt5_sessions WHERE owner=?',(owner,)).fetchone()
     return json.loads(row[0]) if row else None
+
+
+def allocated_capital(settings, at=None):
+    return settings['initial']+sum(a['amount'] for a in settings.get('allocations',[])
+                                   if at is None or a['at']<=at)
+
+
+def ensure_virtual_budget(owner, target, currency, now):
+    """Aportación virtual auditada e idempotente; conserva cierres y fecha de corte.
+
+    Solo aumenta una sesión EUR existente. No modifica el saldo del bróker,
+    retira capital, borra operaciones ni autoriza un lote superior al riesgo.
+    """
+    if isinstance(target,bool) or not isinstance(target,(int,float)) or not math.isfinite(target) or not 1000<=target<=2500:
+        raise ValueError('Presupuesto virtual de prueba: entre 1.000 y 2.500 EUR')
+    with connection() as con:
+        con.execute('BEGIN IMMEDIATE')
+        row=con.execute('SELECT payload FROM mt5_sessions WHERE owner=?',(owner,)).fetchone()
+        if row is None: return 0.0
+        settings=json.loads(row[0])
+        if currency!='EUR' or settings['currency']!=currency:
+            raise ValueError('El presupuesto ampliado requiere una sesión DEMO denominada en EUR')
+        amount=max(0,target-allocated_capital(settings))
+        if amount:
+            settings.setdefault('allocations',[]).append(dict(at=int(now),amount=amount,
+                reason='Capital virtual para granularidad del lote mínimo; no es beneficio'))
+            con.execute('UPDATE mt5_sessions SET payload=? WHERE owner=?',(json.dumps(settings),owner))
+        return amount
 
 
 def capital(owner, account, positions, now=None):
@@ -57,10 +86,11 @@ def capital(owner, account, positions, now=None):
         rows=con.execute('SELECT kind,profit,commission,swap,fee FROM mt5_deals WHERE owner=? AND raw_ts>=?',
                          (owner,settings['cutoffMsc'])).fetchall()
     realized=sum(sum(r[1:]) for r in rows if r[0] not in TRANSFERS)
-    balance=settings['initial']+realized
+    funded=allocated_capital(settings)
+    balance=funded+realized
     floating=sum(p.profit+p.swap for p in positions)
     readiness = entry_readiness(owner, now, account=account, positions=positions) if now is not None else {}
-    return dict(initial=settings['initial'],balance=balance,equity=balance+floating,
+    return dict(initial=settings['initial'],allocatedCapital=funded,allocations=settings.get('allocations',[]),balance=balance,equity=balance+floating,
                 currency=settings['currency'],startedAt=settings['startedAt'], **readiness)
 
 
@@ -141,10 +171,10 @@ def ingest(owner, account, positions, deals, now, full=False, clock_offset=0):
         virtual=None
         if settings:
             rows=con.execute('SELECT kind,profit,commission,swap,fee FROM mt5_deals WHERE owner=? AND raw_ts>=?',(owner,settings['cutoffMsc'])).fetchall()
-            balance=settings['initial']+sum(sum(r[1:]) for r in rows if r[0] not in TRANSFERS)
+            balance=allocated_capital(settings,now)+sum(sum(r[1:]) for r in rows if r[0] not in TRANSFERS)
             virtual=(balance,balance+sum(p.profit+p.swap for p in positions),0)
         con.execute('INSERT OR REPLACE INTO mt5_snapshots VALUES (?,?,?,?,?,?,?)',
-                    (owner, int(now)//10*10, *(virtual or (account.balance,account.equity,account.credit)),
+                    (owner, int(now), *(virtual or (account.balance,account.equity,account.credit)),
                      account.currency, json.dumps(pos)))
         con.execute('INSERT OR REPLACE INTO mt5_sync VALUES (?,?,?,?)',
                     (owner, int(now), int(now) if full else info['lastFull'], None))
@@ -248,6 +278,7 @@ def performance(owner, bots, bot=None, symbol=None, since=None, until=None, per_
         if history[-1]['ts'] != last['ts']:
             history.append(last)
     settings=session(owner)
+    funding=allocated_capital(settings,latest['ts']) if settings and latest else allocated_capital(settings) if settings else 0
     out.update(currency=currency, session=settings, updatedAt=sync['updatedAt'], syncError=sync['error'], source='mt5',
                timestampBasis='utc-normalized; raw_ts and per-deal broker offset retained',
                bots=[dict(id=key, name=value) for key,value in names.items()],
@@ -255,8 +286,8 @@ def performance(owner, bots, bot=None, symbol=None, since=None, until=None, per_
                cards=cards, accountHistory=history, account=dict(
                    balance=latest['balance'] if latest else None, equity=latest['equity'] if latest else None,
                    realizedPnl=round(sum(realized.values()), 2), unrealizedPnl=round(account_float, 2),
-                   totalPnl=round(sum(realized.values())+account_float, 2), netFunding=round(cash_flows+(settings or {}).get('initial',0), 2),
-                   reconciliationDifference=round(latest['balance']+latest['credit']-(session(owner) or {}).get('initial',0)-cash_flows-sum(realized.values()), 2) if latest else None,
+                   totalPnl=round(sum(realized.values())+account_float, 2), netFunding=round(cash_flows+funding, 2),
+                   reconciliationDifference=round(latest['balance']+latest['credit']-funding-cash_flows-sum(realized.values()), 2) if latest else None,
                    historySince=snapshots[0]['ts'] if snapshots else None))
     if per_bot:
         out['series'] = [dict(id=key, name=name, **result(key)) for key,name in names.items() if not bot or key==bot]

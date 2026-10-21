@@ -13,7 +13,7 @@ interface DemoStatus {
   equity?: number
   brokerBalance?: number
   brokerEquity?: number
-  session?: { initial: number; startedAt: number } | null
+  session?: { initial: number; allocatedCapital?: number; startedAt: number } | null
   riskPct?: number
   probationRiskPct?: number
   maxPositions?: number
@@ -59,7 +59,7 @@ export default function MetaTraderPanel() {
     <p role="status" className={status?.tradingAllowed ? 'up' : 'muted'}>{error || status?.message}</p>
     {status?.connected && <>
       <p>{status.server} · {status.session ? 'Presupuesto virtual' : 'Balance'}: <strong>{money(status.balance)}</strong> · Patrimonio: <strong>{money(status.equity)}</strong></p>
-      {status.session && <p className="muted small">Sesión desde {money(status.session.initial)}. Las entradas usan este presupuesto y sus resultados posteriores al reinicio. Saldo de la demo en el bróker: {money(status.brokerBalance)}; su historial original se conserva en MT5.</p>}
+      {status.session && <p className="muted small">Capital virtual aportado: {money(status.session.allocatedCapital ?? status.session.initial)}. Las aportaciones se registran por separado del beneficio y se conserva el historial. Saldo de la demo en el bróker: {money(status.brokerBalance)}.</p>}
       <p className="muted small">Riesgo base {status.riskPct}% por operación · máximo {status.maxPositions} posiciones en la cuenta. Estas operaciones aparecen en MT5 del móvil.</p>
       {status.probationRiskPct != null && <p className="muted small">Mercados sin validar: a prueba, con riesgo objetivo máximo del {status.probationRiskPct}% por operación.</p>}
       <div className="bot-actions"><button disabled={busy} onClick={control}>{status.enabled ? 'Pausar entradas en MT5' : 'Activar entradas demo'}</button></div>

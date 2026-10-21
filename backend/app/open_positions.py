@@ -103,7 +103,8 @@ def _desk_positions(now, engine=None):
             quantity=qty, quantityUnit='units', entryPrice=_number(p.get('entry'), positive=True),
             currentPrice=price, notional=notional, unrealizedPnl=pnl, currency=getattr(engine,'currency','USDT'),
             openedAt=_number(p.get('entryTime'), positive=True),
-            stopLoss=_number(p.get('sl'), positive=True), takeProfit=_number(p.get('tp'), positive=True),
+            stopLoss=_number(p.get('sl'), positive=True),
+            takeProfit=None if p.get('exitPolicy') and not p.get('partialSkippedByFilters') else _number(p.get('tp'), positive=True),
             priceFresh=fresh, priceUpdatedAt=price_at, accountMode='paper', pnlBasis='estimated-net',
         ))
     stale = not _fresh(stamp, now) or bool(engine.last_error)

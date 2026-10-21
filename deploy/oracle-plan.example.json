@@ -1,0 +1,23 @@
+{
+  "region": "eu-madrid-1",
+  "displayName": "mesa-siete-crypto",
+  "compartmentId": "REEMPLAZAR_POR_OCID_COMPARTIMENTO",
+  "sshPublicKey": "REEMPLAZAR_POR_CLAVE_PUBLICA_SSH",
+  "requests": [
+    {
+      "shape": "VM.Standard.A1.Flex",
+      "architecture": "aarch64",
+      "shapeConfig": {"ocpus": 1, "memoryInGBs": 6},
+      "availabilityDomain": "REEMPLAZAR_POR_AD",
+      "imageId": "REEMPLAZAR_POR_OCID_UBUNTU_ARM",
+      "subnetId": "REEMPLAZAR_POR_OCID_SUBRED"
+    },
+    {
+      "shape": "VM.Standard.E2.1.Micro",
+      "architecture": "x86_64",
+      "availabilityDomain": "REEMPLAZAR_POR_AD",
+      "imageId": "REEMPLAZAR_POR_OCID_UBUNTU_AMD64",
+      "subnetId": "REEMPLAZAR_POR_OCID_SUBRED"
+    }
+  ]
+}

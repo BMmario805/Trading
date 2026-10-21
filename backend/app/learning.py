@@ -1,4 +1,4 @@
-"""Aprendizaje continuo de los bots a partir de sus operaciones REALES.
+"""Aprendizaje continuo a partir de operaciones SIMULADAS registradas.
 
 Mecanismos complementarios, todos con salvaguardas de tamaño de muestra
 para no "aprender" del ruido:
@@ -30,9 +30,10 @@ para no "aprender" del ruido:
    el bot guardó al abrir (cada sistema técnico y si estaba a favor o en
    contra de la dirección), la categoría del mercado, la dirección y la
    hora. El modelo no decide la dirección (eso es del bot primario): decide
-   CUÁNTO fiarse de la señal → filtra las de probabilidad baja y modula el
-   tamaño de las demás. Se reentrena solo con cada cierre y se bootstrapea
-   con todo el historial de operaciones guardado.
+   CUÁNTO fiarse de la señal. Su objetivo se pondera por la magnitud del R
+   neto; la puntuación resultante no es probabilidad de éxito calibrada.
+   Puede reducir tamaño o filtrar señales. Aprende de cierres con snapshot
+   de la generación vigente y riesgo inicial monetario verificable.
 
 Además, un planificador reentrena cada bot automáticamente cada pocas
 horas (walk-forward con histórico fresco), de modo que parámetros, vetos,
@@ -69,19 +70,19 @@ BLOCK_EXPECTANCY_R = -0.15
 MIN_TRADES_HOUR = 10
 BLOCK_HOUR_EXPECTANCY_R = -0.25
 
-PROBATION_SIZE = 0.35         # máximo 35% del riesgo normal en pares sin validar
+PROBATION_SIZE = 0.15         # máximo 15% del riesgo normal en pares sin validar
 PROBATION_THRESHOLD_MULT = 1.0   # sin recargo sobre el umbral de entrada
-PROBATION_META_P = 0.30        # p(éxito) mínima del meta-modelo (si es maduro)
-MAX_PROBATION_POSITIONS = 5    # posiciones a prueba simultáneas por bot
+PROBATION_META_P = 0.30        # puntuación ponderada mínima (modelo maduro)
+MAX_PROBATION_POSITIONS = 1    # posiciones a prueba simultáneas por bot
 
 # --- Meta-modelo (regresión logística online) ---
 META_MIN_SAMPLES = 30     # madurez mínima antes de que pueda vetar señales
-META_GATE_P = 0.25        # probabilidad de éxito mínima para dejar pasar
+META_GATE_P = 0.25        # puntuación ponderada mínima para dejar pasar
 META_LR = 0.05            # tasa de aprendizaje SGD
 META_L2 = 0.001           # regularización L2 (evita pesos desbocados)
 # Cambiar las features exige reaprender: quitar un peso no elimina su
 # influencia anterior sobre el sesgo y los demás coeficientes.
-META_FEATURE_VERSION = 2
+META_FEATURE_VERSION = 3  # Objetivo ponderado por magnitud de R neta, no tasa de acierto.
 NON_CAUSAL_CONFIRMATIONS = frozenset({
     "Opinión pública", "Señal combinada", "Contexto macro oficial",
 })
@@ -283,7 +284,7 @@ def _save_model(bot_id: str) -> None:
 
 
 def meta_predict(bot_id: str, feats: dict[str, float]) -> float:
-    """Probabilidad estimada de que la señal acabe en ganancia."""
+    """Puntuación logística ponderada por R; no es probabilidad calibrada."""
     m = _load_model(bot_id)
     w = m["w"]
     z = sum(w.get(k, 0.0) * v for k, v in feats.items())
@@ -301,7 +302,7 @@ def _meta_sgd_step(model: dict, feats: dict[str, float], won: bool, weight: floa
 
 
 def meta_gate(bot_id: str, feats: dict[str, float]) -> tuple[bool, float | None, str | None]:
-    """¿Deja pasar el meta-modelo esta señal? -> (sí/no, p estimada, nota).
+    """¿Deja pasar el meta-modelo esta señal? -> (sí/no, puntuación, nota).
 
     Con el modelo aún inmaduro (pocas operaciones aprendidas) no veta nada
     y no opina sobre el tamaño (p = None): primero hay que ganarse la opinión.
@@ -311,7 +312,7 @@ def meta_gate(bot_id: str, feats: dict[str, float]) -> tuple[bool, float | None,
         return True, None, f"meta-modelo en aprendizaje ({m['n']}/{META_MIN_SAMPLES})"
     p = meta_predict(bot_id, feats)
     if p < META_GATE_P:
-        return False, p, f"señal filtrada: p(éxito)={p:.0%} < {META_GATE_P:.0%}"
+        return False, p, f"señal filtrada: puntuación ponderada por R={p:.0%} < {META_GATE_P:.0%}"
     return True, p, None
 
 
@@ -357,6 +358,7 @@ def meta_learn_new_trades(bot_id: str) -> int:
             con.execute("DELETE FROM bot_model_processed WHERE bot = ?", (bot_id,))
         rows = con.execute(
             """SELECT t.id, t.symbol, t.direction, t.entry_time, t.snapshot, t.pnl
+                    , t.qty*COALESCE(t.economic_risk_dist,t.initial_risk_dist)*COALESCE(t.quote_to_account,1)
                FROM bot_trades t
                LEFT JOIN bot_model_processed p ON p.bot=t.bot AND p.trade_id=t.id
                WHERE t.bot = ? AND t.status = 'closed' AND t.pnl IS NOT NULL
@@ -365,11 +367,14 @@ def meta_learn_new_trades(bot_id: str) -> int:
             (bot_id,),
         ).fetchall()
         learned = 0
-        for tid, symbol, direction, entry_time, snap, pnl in rows:
+        for tid, symbol, direction, entry_time, snap, pnl, initial_risk in rows:
             feats = _trade_features(bot_id, (symbol, direction, entry_time, snap))
             m["lastTradeId"] = max(m["lastTradeId"], tid)  # informativo, nunca cursor
-            if feats is not None and math.isfinite(pnl):
-                _meta_sgd_step(m, feats, pnl > 0)
+            if (feats is not None and math.isfinite(pnl) and initial_risk is not None
+                    and math.isfinite(initial_risk) and initial_risk>0):
+                r_mult=pnl/initial_risk
+                weight=min(3.0,max(.25,abs(r_mult)))
+                _meta_sgd_step(m, feats, r_mult>0, weight)
                 learned += 1
             con.execute("INSERT INTO bot_model_processed VALUES (?, ?)", (bot_id, tid))
         m["n"] += learned
@@ -396,6 +401,8 @@ def meta_summary(bot_id: str) -> dict:
         "minSamples": META_MIN_SAMPLES,
         "gateP": META_GATE_P,
         "calibrated": False,
+        "objective": "r-weighted-logistic-v1",
+        "outputMeaning": "Puntuación ponderada por R; no probabilidad de éxito ni expectativa R",
         "sizeIncreaseAllowed": False,
         "topFeatures": [
             {"feature": k, "weight": round(v, 3)} for k, v in top

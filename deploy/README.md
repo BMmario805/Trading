@@ -49,3 +49,24 @@ duplicar los motores de trading.
 
 Referencias: [Always Free](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm),
 [Docker en Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+
+## Reintentos acotados de capacidad
+
+`retry_oracle.py` usa el SDK oficial OCI (dependencia opcional `oci`, fuera del
+runtime de trading). Completar una copia local de `oracle-plan.example.json`
+con compartimento, AD, subred existente, clave pública e imágenes Ubuntu
+distintas para ARM y AMD64. El plan admite únicamente A1 de 1 OCPU/6 GB y
+E2.1.Micro, con disco de 50 GB. Revisar cuotas y coste de la cuenta; el script
+no confirma Always Free ni amplía cuotas.
+
+`python deploy/retry_oracle.py --plan .runtime/oracle-plan.json` valida sin
+llamadas al proveedor. Añadir `--apply` solicita una instancia. Puede invocarse
+desde un planificador cada quince minutos; no hay ningún planificador instalado
+por esta modificación. Cada ejecución realiza como máximo un intento de alta.
+El diario `.runtime/oracle-retry.sqlite` evita solicitudes simultáneas,
+conserva el token y detiene reintentos tras éxito o respuesta incierta. Solo una
+falta de capacidad confirmada permite alternar shape en la siguiente ejecución.
+
+No borrar el diario para sortear una respuesta incierta: reconciliar primero
+instancias y volúmenes en OCI. Crear una instancia no inicia la migración ni el
+trading remoto; seguir el procedimiento de copia definitiva y parada local.

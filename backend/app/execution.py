@@ -3,6 +3,11 @@
 import math
 
 
+def atr_spread_multiple(bot_id):
+    """El scalper exige spread ≤10% del ATR; el resto conserva su filtro."""
+    return 10 if bot_id=='scalper' else 3
+
+
 def closed_candles(candles: list[dict], seconds: int, now: float) -> list[dict]:
     """Excluye velas abiertas, duplicadas y OHLC no válidos."""
     out = {}

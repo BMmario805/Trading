@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .bots import ALL_BOTS, INTERVAL_SECONDS
 from .database import Connection
-from .execution import closed_candles, fresh_signal
+from .execution import closed_candles, fresh_signal, atr_spread_multiple
 from .indicators import atr_series
 from .mt5_gateway import DemoGateway, DemoOnlyError
 from .strategy import score_series, resample, TREND_STEP, extension_atr
@@ -22,7 +22,7 @@ from . import mt5_performance
 from . import mt5_market
 from . import learning
 from . import broker_replay
-from . import portfolio_risk
+from . import portfolio_risk, gemini_agent
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / '.runtime' / 'mt5-demo.json'
@@ -389,6 +389,10 @@ class DemoEngine:
                 save(self.owner+'cooldown:'+symbol, now+300)
         save(self.owner+'last_positions', tickets)
         self.manage(positions, now)
+        # La ampliación es una aportación virtual identificada, nunca PnL.
+        # El límite de riesgo y los lotes mínimos siguen siendo obligatorios.
+        allocated=(mt5_performance.ensure_virtual_budget(self.owner,cfg.get('virtual_budget_eur',1000),account.currency,now)
+                   if account.currency=='EUR' else 0)
         self.sync_performance(now)
         # Management may have closed a position. Publish and size from the
         # current broker read, never the pre-management position list.
@@ -398,6 +402,8 @@ class DemoEngine:
         equity=virtual['equity'] if virtual else account.equity
         day_key = self.owner+f'day:{int(now//86400)}'
         daily = read(day_key, dict(equity=equity, paused=False))
+        if allocated and read(day_key) is not None:
+            daily['equity']+=allocated
         if equity <= daily['equity']*(1-cfg['max_daily_loss_pct']):
             daily['paused'] = True
         save(day_key, daily)
@@ -498,6 +504,10 @@ class DemoEngine:
                 if not fresh_signal(scores[-1], scores[-4:-1], threshold):
                     raise DemoOnlyError('Sin cruce reciente de señal')
                 direction = 1 if scores[-1] > 0 else -1
+                base=next((base for base,mapped in cfg['symbols'].items() if mapped==symbol),symbol)
+                context=gemini_agent.catalyst_gate(base,'long' if direction>0 else 'short',now=now)
+                if not context['allowed']:
+                    raise DemoOnlyError(context['reason'])
                 extension = extension_atr(work)
                 if extension is not None and extension*direction > bot.overext_atr:
                     raise DemoOnlyError('Precio demasiado extendido')
@@ -515,7 +525,7 @@ class DemoEngine:
                 request, risk = self.gateway.prepare_entry(symbol, direction, atr,
                     p.get('slAtr', bot.sl_atr), p.get('tpAtr', bot.tp_atr), MAGICS[bot.id], comment, time.time(),
                     risk_mult=learning.PROBATION_SIZE if probation else 1.0,
-                    virtual_equity=(current_virtual or {}).get('equity'))
+                    virtual_equity=(current_virtual or {}).get('equity'),min_atr_spread=atr_spread_multiple(bot.id))
                 if self.gateway.last_entry_diagnostics:
                     self.risk_diagnostics[key] = dict(self.gateway.last_entry_diagnostics)
                 portfolio_token = None

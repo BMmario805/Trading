@@ -11,11 +11,11 @@ import math
 from dataclasses import asdict, dataclass, replace
 from itertools import product
 
-from .execution import fresh_signal
+from .execution import fresh_signal, atr_spread_multiple
 from .mt5_gateway import lot_floor
 from .strategy import extension_series
 
-VERSION = 1
+VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -131,7 +131,7 @@ def entry_plan(contract, direction, price, atr, sl_atr, tp_atr, equity, risk_pct
 
 def simulate(candles, scores, atrs, contract, params, *, initial, risk_pct,
              max_open_risk_pct, max_hold_seconds, start=0, end=None,
-             extensions=None, overext_atr=float('inf'), max_daily_loss_pct=.02):
+             extensions=None, overext_atr=float('inf'), max_daily_loss_pct=.02,min_atr_spread=3):
     """OHLC approximation; no contrary-signal exit absent from MT5 management."""
     c = contract
     c.validate()
@@ -201,7 +201,7 @@ def simulate(candles, scores, atrs, contract, params, *, initial, risk_pct,
         if a is None or not math.isfinite(a) or a <= 0 or not fresh_signal(score,scores[max(0,i-3):i],threshold):
             continue
         direction = 1 if score > 0 else -1
-        if a < 3*c.spread:
+        if a < min_atr_spread*c.spread:
             blocked['spread'] = blocked.get('spread',0)+1
             continue
         ext = extensions[i] if extensions is not None else None
@@ -239,7 +239,7 @@ def optimize(cfg, candles, scores, atrs, contract, *, initial, risk_pct, max_ope
     train_end, val_end = int(len(candles)*.6), int(len(candles)*.8)
     common = dict(initial=initial,risk_pct=risk_pct,max_open_risk_pct=max_open_risk_pct,
                   max_hold_seconds=cfg.max_hold_seconds,extensions=extensions,overext_atr=cfg.overext_atr,
-                  max_daily_loss_pct=max_daily_loss_pct)
+                  max_daily_loss_pct=max_daily_loss_pct,min_atr_spread=atr_spread_multiple(cfg.id))
     best, best_train = base, None
     for threshold,stop,target in product((cfg.entry_threshold*.8,cfg.entry_threshold,cfg.entry_threshold*1.2),
                                          (cfg.sl_atr,cfg.sl_atr*1.25),(cfg.tp_atr,cfg.tp_atr*1.25)):

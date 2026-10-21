@@ -33,8 +33,9 @@ class DeskEfficiencyTests(unittest.IsolatedAsyncioTestCase):
         self.engine=desk.Desk(db_path=Path(self.tmp.name)/'desk.sqlite')
 
     def candles(self,now,lag=0):
-        last=int(now//900)*900-900-lag
-        return [dict(time=last-(69-i)*900,open=99,high=101,low=98,close=100,volume=100) for i in range(70)]
+        seconds=desk.CANDLE_SECONDS
+        last=int(now//seconds)*seconds-seconds-lag
+        return [dict(time=last-(69-i)*seconds,open=99,high=101,low=98,close=100,volume=100) for i in range(70)]
 
     async def test_cache_refreshes_at_new_closed_bar(self):
         sym=self.engine.market_symbol('SOLUSDT',data())
@@ -43,7 +44,7 @@ class DeskEfficiencyTests(unittest.IsolatedAsyncioTestCase):
             await self.engine.candidate_candles(sym)
             await self.engine.candidate_candles(sym)
         self.assertEqual(get.await_count,1)
-        with patch.object(desk.time,'time',return_value=now+900),patch.object(market_data,'get_candles',AsyncMock(return_value=self.candles(now+900))) as get:
+        with patch.object(desk.time,'time',return_value=now+desk.CANDLE_SECONDS),patch.object(market_data,'get_candles',AsyncMock(return_value=self.candles(now+desk.CANDLE_SECONDS))) as get:
             rows=await self.engine.candidate_candles(sym)
         self.assertEqual(get.await_count,1)
         self.assertEqual(rows[-1]['time'],1800000)
@@ -52,7 +53,7 @@ class DeskEfficiencyTests(unittest.IsolatedAsyncioTestCase):
     async def test_delayed_feed_is_not_cached_until_next_bar(self):
         sym=self.engine.market_symbol('SOLUSDT',data())
         now=1800100
-        with patch.object(desk.time,'time',return_value=now),patch.object(market_data,'get_candles',AsyncMock(return_value=self.candles(now,900))) as get:
+        with patch.object(desk.time,'time',return_value=now),patch.object(market_data,'get_candles',AsyncMock(return_value=self.candles(now,desk.CANDLE_SECONDS))) as get:
             await self.engine.candidate_candles(sym)
             await self.engine.candidate_candles(sym)
         self.assertEqual(get.await_count,2)

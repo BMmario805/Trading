@@ -47,8 +47,9 @@ def desk_trades(engine):
         slip=engine.costs(trade)[1]
         # Reconstrucción del deslizamiento simulado; el spread sigue incluido
         # en los precios de referencia y no se inventa un histórico de libro.
-        slippage=trade['qty']*(trade['entry']-trade['entry']/(1+slip)
-                    +trade['exitPrice']/(1-slip)-trade['exitPrice'])
+        exit_value=(trade.get('finalExitQty',trade['qty'])*trade['exitPrice']
+                    +sum(e['qty']*e['price'] for e in trade.get('partialExits',[])))
+        slippage=trade['qty']*(trade['entry']-trade['entry']/(1+slip))+exit_value*slip/(1-slip)
         result.append(dict(pnl=trade['pnl'],basis='net',fees=fee,slippage=slippage,
                            initialRisk=trade.get('risk',0),
                            policy=trade.get('policyVersion','legacy'),strategy=trade.get('evidence',{}).get('tape',{}).get('strategy') or 'legacy'))
@@ -58,7 +59,7 @@ def desk_trades(engine):
 def opportunity_diagnostics(engine):
     now=time.time()
     eligible=[c for c in engine.state['candidates'] if c.get('eligible')]
-    recent=[c for c in eligible if c.get('checkedAt',0)>=now-desk.CANDLE_SECONDS]
+    recent=[c for c in eligible if c.get('checkedAt',0)>=now-engine.candle_seconds]
     evaluated=[c for c in recent if isinstance(c.get('entryChecks'),dict)]
     def count(key): return sum(c['entryChecks'].get(key) is True for c in evaluated)
     spread=statistics.median(c['spreadBp'] for c in eligible)/10000 if eligible else None

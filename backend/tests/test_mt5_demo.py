@@ -190,11 +190,11 @@ class ProbationEngineTests(unittest.TestCase):
     def test_unvalidated_demo_pair_uses_reduced_risk(self):
         prepare, submit = self.cycle()
         prepare.assert_called_once()
-        self.assertEqual(prepare.call_args.kwargs['risk_mult'], .35)
+        self.assertEqual(prepare.call_args.kwargs['risk_mult'], .15)
         self.assertTrue(prepare.call_args.args[6].startswith('cxp-'))
         submit.assert_called_once()
-        self.assertIn('35%', self.engine.diagnostics['scalper/XAUUSD'])
-        self.assertEqual(mt5_demo.STATE['probationRiskPct'], .035)
+        self.assertIn('15%', self.engine.diagnostics['scalper/XAUUSD'])
+        self.assertEqual(mt5_demo.STATE['probationRiskPct'], .015)
 
     def test_validated_demo_pair_uses_normal_budget_and_threshold(self):
         mt5_demo.save(self.engine.owner+'params:scalper/XAUUSD', dict(

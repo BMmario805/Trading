@@ -70,7 +70,7 @@ def _collect():
     state=dict(mt5_demo.STATE)
     session=state.get('session') or {}
     if state.get('demo') is True and state.get('currency')=='EUR' and session.get('initial') is not None:
-        accounts.append(dict(source='mt5',bot='shared',equityEUR=max(0,_finite(state.get('equity'))),initialEUR=session['initial']))
+        accounts.append(dict(source='mt5',bot='shared',equityEUR=max(0,_finite(state.get('equity'))),initialEUR=session.get('allocatedCapital',session['initial'])))
         for p in list(state.get('positions',[])):
             # Riesgo desconocido consume el máximo de cartera de esa cuenta.
             risk=p.get('riskEUR')

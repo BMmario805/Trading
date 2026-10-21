@@ -1,5 +1,14 @@
 # 📈 Panel de Trading en Tiempo Real
 
+> **Correcciones (21-10-2026):** [cambios, límites y rectificación del diagnóstico](reports/CORRECCIONES_2026-10-21.md).
+> Nuevas entradas Cripto en 1 h, parcial en 1,5 R netos y trailing 2,5 ATR hasta
+> 48 h; selección exclusiva tras revisar todo el universo. Motor v5, Trend en
+> tres bloques, modo a prueba limitado a una posición al 15 % del riesgo habitual
+> y veto local por catalizadores recientes. La DEMO EUR amplía el capital virtual
+> mediante una aportación registrada, conservando historial. Simulador maker y
+> reintentos Oracle preparados por separado; sin contratación ni despliegue remoto.
+> Las notas siguientes describen estados históricos y no sustituyen este informe.
+
 > **Rendimiento y continuidad (18-10-2026):** [diagnóstico, mejoras y prioridades](reports/PLAN_RENDIMIENTO_2026-10-18.md).
 > Vigilancia independiente de stops también en el Laboratorio, reutilización de velas
 > cerradas, consultas de libro por lote y diagnóstico económico con resultados netos.

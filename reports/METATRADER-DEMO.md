@@ -1,5 +1,9 @@
 # Conexión MetaTrader 5 — solo DEMO
 
+> La descripción de conexión inicial que sigue es histórica. Desde el 21 de
+> octubre la sesión EUR tiene una aportación virtual hasta 1.000 EUR, separada
+> del saldo del bróker y del beneficio. [Cambios y límites actuales](CORRECCIONES_2026-10-21.md#mt5-capital-virtual-y-lotes).
+
 La integración está instalada y conectada a MetaQuotes-Demo, con cuenta en EUR y
 100.000 EUR de saldo en la comprobación inicial. La aplicación detectó Algo Trading
 desactivado y no envió ninguna orden. El backend tiene configuradas las entradas;

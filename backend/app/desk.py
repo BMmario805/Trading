@@ -18,6 +18,7 @@ from .execution import closed_candles
 from .indicators import atr, ema, rsi
 from .economics import planned_trade,ECONOMICS_VERSION
 from .book_stream import BOOKS
+from .spot_orders import partial_quantity
 
 DB_PATH = Path(__file__).resolve().parents[2]/'.runtime'/'desk.sqlite'
 INITIAL = 1000.0
@@ -39,24 +40,31 @@ LEVERAGED_BASES = {
                               'EOS','TRX','XLM','UNI','SUSHI','YFI','1INCH','AAVE','SXP','FIL','XTZ')
     for suffix in ('UP','DOWN')
 } | {asset+suffix for asset in ('BTC','ETH','EOS','XRP','BNB','TRX') for suffix in ('BULL','BEAR')}
-# bStocks publicados por Binance en junio/julio de 2026. Son exposición a
-# acciones/ETF, incluso el ETF apalancado SOXL; no son criptomonedas ordinarias.
-TOKENIZED_EQUITIES={ticker+'B' for ticker in ('AAPL','CRCL','MU','NVDA','SNDK','TSLA',
-    'SPCX','AMD','EWY','INTC','MSTR','LITE','META','MSFT','PLTR','QQQ','CBRS','COIN',
-    'DRAM','GLW','GOOGL','NBIS','QCOM','SOXL','SPY','WDC')}
-SCAN_BATCH_SIZE = 10
+# Catálogo bStocks confirmado en anuncios de 28-08 y 21-10-2026, incluidos ETF 2x/3x.
+# Identidades exactas: no excluir todo símbolo acabado en B (p. ej. BNB).
+# https://www.binance.com/en/support/announcement/detail/4fea39f8b6e54e1b88e388fc90ce323e
+TOKENIZED_EQUITIES={ticker+'B' for ticker in (
+    'AAOI','AAPL','ALAB','AMAT','AMD','AMZN','ARM','ASML','ASTS','AVGO','AXTI',
+    'BABA','BE','BMNR','CBRS','COHR','COIN','CRCL','CRDO','CRWV','DELL','DJT',
+    'DRAM','EWY','FLNC','GLW','GME','GOOGL','GS','HOOD','IBM','INTC','INTW',
+    'IREN','KORU','LITE','META','MRVL','MSFT','MSTR','MU','MUU','MVLL','NBIS',
+    'NFLX','NOK','NVDA','ORCL','PLTR','PYPL','QCOM','QNT','QQQ','RKLB','SKHY',
+    'SMCI','SMH','SNDK','SNXX','SOXL','SOXS','SPCX','SPY','TQQQ','TSLA','TSM',
+    'USAR','WDC','BOT','BRKB','KSTR','TMF','VST')}
+SCAN_BATCH_SIZE = 40  # Tamaño de cada grupo de descargas; el barrido cubre todos.
 MAX_OPEN_POSITIONS = 3
 SCAN_INTERVAL_S = 20
-CANDLE_INTERVAL = '15m'
-CANDLE_SECONDS = 900
-MAX_HOLD_S = 6*3600
+CANDLE_INTERVAL = '1h'
+CANDLE_SECONDS = 3600
+MAX_HOLD_S = 48*3600
 MAX_NOTIONAL_FRACTION = 1/6  # Conserva el límite reducido solicitado en el archivo local.
 MIN_NET_REWARD_RISK = 1.2
-POLICY_VERSION = 'desk-confirmed-v2'
+POLICY_VERSION = 'desk-partial-1h-v4'
+CASH_POLICY_VERSION = 'desk-cash-context-v3'
 MIN_QUOTE_VOLUME = 2_000_000
 RISK_FRACTION = .005
 TOTAL_RISK_FRACTION = .015
-SELECTION_INTERVAL = 6*3600  # Gemini propone prioridades; el escaneo no espera este turno.
+SELECTION_INTERVAL = CANDLE_SECONDS
 
 
 def fresh_snapshot(data):
@@ -138,7 +146,8 @@ def tape(rows, now, candle_seconds=CANDLE_SECONDS):
                 entryAllowed=setup is not None,strategy=setup,relativeVolume=relative_volume,rows=rows[-90:])
 
 
-def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage=SLIPPAGE):
+def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage=SLIPPAGE,
+               partial=True):
     if not all(math.isfinite(v) and v>0 for v in (equity,cash,ask,a)): return None
     fill=ask*(1+slippage)
     stop=fill-1.5*a
@@ -163,7 +172,10 @@ def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage
     return dict(qty=qty,entry=fill,notional=qty*fill,fee=qty*fill*fee,
                 sl=stop,tp=target,risk=qty*risk_per_unit,economics=plan,
                 costPolicy=dict(version=ECONOMICS_VERSION,feeRate=fee,slippageRate=slippage),policyVersion=POLICY_VERSION,
-                maxHoldSeconds=MAX_HOLD_S)
+                maxHoldSeconds=MAX_HOLD_S if partial else 6*3600,
+                candleInterval=CANDLE_INTERVAL if partial else '15m',
+                exitPolicy=dict(partialAtR=1.5,trailAtr=2.5) if partial else None,
+                targetIsReference=partial)
 
 
 def price_allowed(analysis, ask):
@@ -185,6 +197,9 @@ class Desk:
             self.feed=CashMarketFeed(market)
         self.fee=FEE if self.feed is None else self.feed.fee
         self.slippage=SLIPPAGE if self.feed is None else self.feed.slippage
+        self.candle_interval=CANDLE_INTERVAL if self.feed is None else '15m'
+        self.candle_seconds=CANDLE_SECONDS if self.feed is None else 900
+        self.policy_version=POLICY_VERSION if self.feed is None else CASH_POLICY_VERSION
         with self.connect() as con:
             row=con.execute("SELECT payload FROM state WHERE key='desk'").fetchone()
         self.state=json.loads(row[0]) if row else dict(initial=INITIAL,cash=INITIAL,enabled=True,position=None,
@@ -208,7 +223,7 @@ class Desk:
         self.candle_cache={}
         self.efficiency=dict(candleDownloads=0,candleCacheHits=0,bookBatches=0)
         epochs=self.state.setdefault('policyEpochs',{})
-        epochs.setdefault(POLICY_VERSION,dict(at=time.time(),equity=self.equity()))
+        epochs.setdefault(self.policy_version,dict(at=time.time(),equity=self.equity()))
         self.save()
 
     def connect(self):
@@ -232,23 +247,26 @@ class Desk:
         if self.feed: return self.feed.quality(symbol,data)
         return opportunities.assess(self.market_symbol(symbol,data),data,min_quote_volume=MIN_QUOTE_VOLUME)
 
-    async def candidate_candles(self,sym):
+    async def candidate_candles(self,sym,interval=None):
         """Una descarga por vela cerrada; un feed retrasado se vuelve a consultar.
 
         Solo se reutiliza histórico, nunca cotizaciones de ejecución ni controles
         de cartera. Al cambiar de vela no se sirve el análisis anterior.
         """
         now=time.time()
-        expected=int(now//CANDLE_SECONDS)*CANDLE_SECONDS-CANDLE_SECONDS
-        cached=self.candle_cache.get(sym.source_symbol)
+        interval=interval or self.candle_interval
+        seconds={'15m':900,'1h':3600,'4h':14400}[interval]
+        expected=int(now//seconds)*seconds-seconds
+        key=(sym.source_symbol,interval)
+        cached=self.candle_cache.get(key)
         if cached and cached[0]==expected:
             self.efficiency['candleCacheHits']+=1
             return cached[1]
-        rows=await market_data.get_candles(sym,CANDLE_INTERVAL,250)
+        rows=await market_data.get_candles(sym,interval,250)
         self.efficiency['candleDownloads']+=1
-        completed=closed_candles(rows,CANDLE_SECONDS,time.time())
+        completed=closed_candles(rows,seconds,time.time())
         if completed and completed[-1]['time']==expected:
-            self.candle_cache[sym.source_symbol]=(expected,rows)
+            self.candle_cache[key]=(expected,rows)
             if len(self.candle_cache)>512:
                 self.candle_cache.pop(next(iter(self.candle_cache)))
         return rows
@@ -354,20 +372,72 @@ class Desk:
     def close_position(self,bid,reason,symbol=None):
         p=next((p for p in self.state['positions'] if p['symbol']==symbol),None) if symbol else self.state['position']
         if not p: return
+        previous=json.loads(json.dumps(self.state))
         fee,slip=self.costs(p)
         exit_price=bid*(1-slip)
         proceeds=p['qty']*exit_price*(1-fee)
-        pnl=proceeds-p['notional']-p['fee']
+        pnl=proceeds-p['notional']-p['fee']+p.get('realizedPnl',0)
+        partials=p.get('partialExits',[])
+        original_qty=p.get('originalQty',p['qty'])
+        average_exit=(p['qty']*exit_price+sum(e['qty']*e['price'] for e in partials))/original_qty
         closed=dict(p,status='closed',exitPrice=exit_price,exitTime=time.time(),pnl=pnl,
-                    exitFee=p['qty']*exit_price*fee,exitReason=reason)
+                    qty=original_qty,notional=p.get('originalNotional',p['notional']),
+                    fee=p.get('originalFee',p['fee']),averageExitPrice=average_exit,
+                    finalExitQty=p['qty'],exitFee=p['qty']*exit_price*fee+sum(e['fee'] for e in partials),exitReason=reason)
         self.state['cash']+=proceeds
         self.state['positions'].remove(p)
-        self.state['cooldowns'][p['symbol']]=time.time()+CANDLE_SECONDS*(4 if pnl<=0 else 1)
+        seconds={'15m':900,'1h':3600,'4h':14400}.get(p.get('candleInterval'),900)
+        self.state['cooldowns'][p['symbol']]=time.time()+seconds*(4 if pnl<=0 else 1)
         self.focus_position()
-        with self.connect() as con:
-            con.execute('UPDATE trades SET payload=? WHERE entry_key=?',(json.dumps(closed),p['entryKey']))
-            con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
+        try:
+            with self.connect() as con:
+                con.execute('UPDATE trades SET payload=? WHERE entry_key=?',(json.dumps(closed),p['entryKey']))
+                con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
+        except BaseException:
+            self.state=previous
+            self.focus_position()
+            raise
         self.role('Risk','closed',f'{reason}; resultado neto {pnl:+.2f} {self.currency}')
+
+    def take_partial(self,p,bid,data):
+        """Una realización por entrada; estado y flujos se confirman juntos."""
+        info=data.get('metadata',{}).get(p['symbol']) or dict(filters=p.get('marketFilters',[]))
+        if not info.get('filters'):
+            return False  # Esperar metadatos; nunca inventar mínimos de mercado.
+        fee,slip=self.costs(p)
+        price=bid*(1-slip)
+        qty=partial_quantity(p['qty'],price,info)
+        if not qty:
+            p['partialSkippedByFilters']=True
+            return False
+        previous=json.loads(json.dumps(self.state))
+        fraction=qty/p['qty']
+        cost=(p['notional']+p['fee'])*fraction
+        exit_fee=qty*price*fee
+        proceeds=qty*price-exit_fee
+        p.setdefault('originalQty',p['qty'])
+        p.setdefault('originalNotional',p['notional'])
+        p.setdefault('originalFee',p['fee'])
+        p['qty']=float(Decimal(str(p['qty']))-Decimal(str(qty)))
+        p['notional']*=1-fraction
+        p['fee']*=1-fraction
+        p['realizedPnl']=p.get('realizedPnl',0)+proceeds-cost
+        p.setdefault('partialExits',[]).append(dict(qty=qty,price=price,bid=bid,fee=exit_fee,
+            proceeds=proceeds,pnl=proceeds-cost,at=time.time(),quoteAt=data['at']))
+        p['partialDone']=True
+        self.state['cash']+=proceeds
+        equilibrium=p['entry']*(1+fee)/((1-slip)*(1-fee))
+        if equilibrium<bid: p['sl']=max(p['sl'],equilibrium)
+        try:
+            with self.connect() as con:
+                con.execute('UPDATE trades SET payload=? WHERE entry_key=?',(json.dumps(p),p['entryKey']))
+                con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
+        except BaseException:
+            self.state=previous
+            self.focus_position()
+            raise
+        self.role('Exec','partial',f'Salida parcial SIMULADA de {qty:g} {p["symbol"]}; costes incluidos')
+        return True
 
     def manage(self,data):
         if not self.state['positions']:
@@ -384,14 +454,29 @@ class Desk:
             bid=q[0]
             p['lastBid']=bid
             p['quoteAt']=data['at']
+            base=data.get('metadata',{}).get(p['symbol'],{}).get('baseAsset') or p['symbol'].removesuffix('USDT')
+            if self.feed is None and base in TOKENIZED_EQUITIES:
+                self.close_position(bid,'Instrumento fuera del universo cripto',p['symbol'])
+                continue
             hold=p.get('maxHoldSeconds',45*60)
-            if self.state.get('flatten') or bid<=p['sl'] or bid>=p['tp'] or time.time()-p['entryTime']>=hold:
-                self.close_position(bid,'Cierre solicitado' if self.state.get('flatten') else 'Stop' if bid<=p['sl'] else 'Objetivo' if bid>=p['tp'] else 'Tiempo máximo',p['symbol'])
+            policy=p.get('exitPolicy') or {}
+            fixed_target=not policy or p.get('partialSkippedByFilters',False)
+            if self.state.get('flatten') or bid<=p['sl'] or (fixed_target and bid>=p['tp']) or (hold is not None and time.time()-p['entryTime']>=hold):
+                reason=('Cierre solicitado' if self.state.get('flatten') else 'Stop' if bid<=p['sl']
+                        else 'Objetivo' if fixed_target and bid>=p['tp'] else 'Tiempo máximo')
+                self.close_position(bid,reason,p['symbol'])
             else:
                 p['best']=max(p['best'],bid)
-                if bid>=p['entry']+1.0*p['initialDist']:
-                    fee,slip=self.costs(p)
-                    stop=max(p['sl'],(p['notional']+p['fee'])/(p['qty']*(1-slip)*(1-fee)),p['best']-1.5*p['atr'])
+                fee,slip=self.costs(p)
+                if policy and not p.get('partialDone') and not p.get('partialSkippedByFilters'):
+                    original_qty=p.get('originalQty',p['qty'])
+                    net_per_unit=bid*(1-slip)*(1-fee)-p['entry']*(1+fee)
+                    if net_per_unit>=policy['partialAtR']*p['risk']/original_qty:
+                        self.take_partial(p,bid,data)
+                trailing=p.get('partialDone') if policy and not p.get('partialSkippedByFilters') else bid>=p['entry']+p['initialDist']
+                if trailing:
+                    multiple=policy['trailAtr'] if p.get('partialDone') else 1.5
+                    stop=max(p['sl'],p['entry']*(1+fee)/((1-slip)*(1-fee)),p['best']-multiple*p['atr'])
                     if stop<bid: p['sl']=stop
                 self.role('Risk','managing',f'Stop activo; riesgo inicial {p["risk"]:.2f} {self.currency}')
         if not self.state['positions']: self.state.pop('flatten',None)
@@ -420,7 +505,7 @@ class Desk:
         previous={c['symbol']:c for c in self.state['candidates']}
         for candidate in candidates:
             old=previous.get(candidate['symbol'],{})
-            if candidate['eligible'] and old.get('eligible') and old.get('checkedAt') and old.get('policyVersion')==POLICY_VERSION:
+            if candidate['eligible'] and old.get('eligible') and old.get('checkedAt') and old.get('policyVersion')==self.policy_version:
                 candidate.update({k:old[k] for k in ('status','reason','checkedAt','signal','policyVersion','retryAfter','errorCount','entryChecks','economics') if k in old})
         self.state['candidates']=candidates
         self.state['scanReviewed']=0
@@ -456,7 +541,7 @@ class Desk:
             return
         cursor=int(self.state.get('scanCursor',0))%len(eligible)
         rotated=eligible[cursor:]+eligible[:cursor]
-        batch=rotated[:SCAN_BATCH_SIZE]
+        batch=rotated  # Todas las señales del universo antes de asignar capital.
         agent=gemini_agent.AGENT if self.feed is None else None
         choice=None
         # Descargas acotadas en paralelo; las decisiones y el libro se actualizan en serie.
@@ -470,7 +555,8 @@ class Desk:
                         return candidate['symbol'],rows
                     except Exception:
                         return candidate['symbol'],None
-            prefetched=dict(await asyncio.gather(*(download(c) for c in batch)))
+            for offset in range(0,len(batch),SCAN_BATCH_SIZE):
+                prefetched.update(await asyncio.gather(*(download(c) for c in batch[offset:offset+SCAN_BATCH_SIZE])))
             if self.feed is None and self.task is not None:
                 # Un libro reciente compartido por el lote; el monitor de riesgo
                 # sigue teniendo su tarea independiente y su tiempo máximo.
@@ -480,18 +566,35 @@ class Desk:
                 except Exception:
                     log.warning('Libro del lote no disponible en %s; se consultan mercados individualmente',self.desk_id)
         prepared={}
-        if agent and (not self.state.get('selection') or now-self.state.get('selectionAt',0)>=SELECTION_INTERVAL):
+        if agent or self.task is not None:
             shortlist=[]
             for candidate in batch:
                 try:
                     context,analysis=await self.selector_setup(candidate,data,prefetched)
                     prepared[candidate['symbol']]=analysis
-                    if context: shortlist.append(context)
+                    if context:
+                        shortlist.append(context)
+                        self.evaluated(candidate,'waiting','Señal y tamaño aptos; pendiente de selección de esta vela')
+                    else:
+                        self.evaluated(candidate,'waiting','Sin señal, tamaño, liquidez o contexto aptos para selección')
                 except asyncio.CancelledError:
                     raise
                 except Exception:
                     continue
-            if shortlist:
+            # Se comparan métricas públicas agregadas, sin saldos ni posiciones.
+            shortlist.sort(key=lambda c:(c.get('maxPositiveCorrelation') is None,
+                c.get('maxPositiveCorrelation') or 0,-c['netRewardRisk'],-c['relativeVolume'],c['symbol']))
+            all_ready=len(shortlist)
+            # Cota de entrada independiente del tamaño del universo.
+            shortlist=shortlist[:24]
+            while shortlist and len(json.dumps(shortlist,ensure_ascii=False).encode())>11500:
+                shortlist.pop()
+            self.state['selectorCoverage']=dict(eligible=len(eligible),evaluated=len(batch),ready=all_ready,submitted=len(shortlist))
+            bar=int(now//self.candle_seconds)*self.candle_seconds
+            cached_choice=self.state.get('selectorDecision') if agent else None
+            if cached_choice and cached_choice.get('bar')==bar:
+                choice=cached_choice['choice']
+            elif agent and shortlist and (not self.state.get('selection') or now-self.state.get('selectionAt',0)>=SELECTION_INTERVAL):
                 self.state['selectionPending']=True
                 self.role('Selector','waiting',f'Gemini compara {len(shortlist)} señales con tamaño y costes viables')
                 try:
@@ -503,11 +606,22 @@ class Desk:
                 finally:
                     self.state['selectionPending']=False
                 self.state['selectionAt']=now
-            if choice and choice.get('symbol') in {c['symbol'] for c in shortlist}:
-                choice={**choice,'selectorVersion':'setup-aware-v1','role':'ranking-only'}
-                batch.sort(key=lambda c:c['symbol']!=choice['symbol'])
+                if isinstance(choice,dict) and (choice.get('symbol') is None or choice.get('symbol') in {c['symbol'] for c in shortlist}):
+                    self.state['selectorDecision']=dict(bar=bar,choice=choice)
+            if isinstance(choice,dict) and choice.get('symbol') is None:
+                batch=[]
+                self.role('Selector','waiting','Gemini elige efectivo para esta vela; no se abren posiciones')
+            elif isinstance(choice,dict) and choice.get('symbol') in {c['symbol'] for c in shortlist}:
+                choice={**choice,'selectorVersion':'full-universe-v2','role':'exclusive-setup'}
+                batch=[c for c in batch if c['symbol']==choice['symbol']]
+            elif cached_choice and cached_choice.get('bar')==bar:
+                batch=[]  # La elección de esta vela ya se ejecutó o dejó de ser apta.
             else:
                 choice=None
+                if shortlist:
+                    # Sin respuesta utilizable se conserva una sola prioridad
+                    # local entre todos los setups que superaron los controles.
+                    batch=[c for c in batch if c['symbol']==shortlist[0]['symbol']]
         self.state['selectionPending']=False
         for candidate in batch:
             self.state['scanReviewed']+=1
@@ -537,7 +651,7 @@ class Desk:
                 break
 
     def evaluated(self,candidate,status,reason):
-        candidate.update(status=status,reason=reason,checkedAt=time.time(),policyVersion=POLICY_VERSION)
+        candidate.update(status=status,reason=reason,checkedAt=time.time(),policyVersion=self.policy_version)
         if status=='error':
             candidate['errorCount']=candidate.get('errorCount',0)+1
             candidate['retryAfter']=time.time()+min(900,60*2**min(candidate['errorCount'],4))
@@ -552,25 +666,59 @@ class Desk:
         if not q or self.state['cooldowns'].get(symbol,0)>time.time(): return None,None
         rows=prefetched.get(symbol)
         if rows is None: return None,None
-        analysis=tape(rows,time.time())
+        analysis=tape(rows,time.time(),self.candle_seconds)
         if analysis is None: return None,None
-        if not price_allowed(analysis,q[1]) or not (await self.wire(symbol,data))['ok']:
-            return None,analysis
         open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-self.costs(p)[1])*(1-self.costs(p)[0])) for p in self.state['positions'])
         order=size_order(self.equity(),self.state['cash'],q[1],analysis['atr'],data['metadata'][symbol],
-                         max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage)
+                         max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage,partial=self.feed is None)
+        fill=q[1]*(1+self.slippage)
+        geometry=planned_trade(fill,fill-1.5*analysis['atr'],fill+3*analysis['atr'],1,
+                               fee_rate=self.fee,exit_slippage=self.slippage) if fill>1.5*analysis['atr'] else None
+        candidate['economics']=geometry
+        candidate['signal']=dict(strategy=analysis.get('strategy'),rsi=round(analysis['rsi'],2),
+                                 atrPct=round(analysis['atr']/q[1]*100,3),trend=analysis['trend'])
+        price_ok=price_allowed(analysis,q[1])
+        candidate['entryChecks']=dict(signal=price_ok,costs=bool(geometry and geometry['viable'] and geometry['netRewardRisk']>=MIN_NET_REWARD_RISK),
+                                     size=order is not None,enabled=self.state['enabled'] and not self.state['dailyStopped'])
+        if not price_ok or not (await self.wire(symbol,data))['ok']:
+            return None,analysis
         if order is None: return None,analysis
         available=float(data['books'][symbol].get('askQty',0))
         if not math.isfinite(available) or order['qty']>available*.1: return None,analysis
+        gate=gemini_agent.catalyst_gate(candidate.get('base') or data['metadata'][symbol].get('baseAsset'),'long')
+        candidate['catalystGate']=gate
+        if not gate['allowed']: return None,analysis
         with self.connect() as con:
             if con.execute('SELECT 1 FROM trades WHERE entry_key=?',(f'{symbol}:{analysis["bar"]}',)).fetchone():
                 return None,analysis
         context={k:candidate[k] for k in ('symbol','eligible','change24h','volumeUSD','spreadBp')}
-        context.update(strategy=analysis.get('strategy') or 'confirmed-setup',candleInterval=CANDLE_INTERVAL,
+        context.update(strategy=analysis.get('strategy') or 'confirmed-setup',candleInterval=self.candle_interval,
                        signalBar=analysis['bar'],rsi=round(analysis['rsi'],2),
                        atrPct=round(analysis['atr']/q[1]*100,4),extensionAtr=round((q[1]-analysis['ema20'])/analysis['atr'],3),
-                       relativeVolume=round(analysis.get('relativeVolume',0),3),netRewardRisk=round(order['economics']['netRewardRisk'],3))
+                       relativeVolume=round(analysis.get('relativeVolume',0),3),netRewardRisk=round(order['economics']['netRewardRisk'],3),
+                       maxPositiveCorrelation=self.setup_correlation(rows))
         return context,analysis
+
+    def setup_correlation(self,rows):
+        """Correlación causal de retornos coincidentes; None si falta muestra."""
+        def returns(candles):
+            bars=closed_candles(candles,self.candle_seconds,time.time())[-73:]
+            return {b['time']:math.log(b['close']/a['close']) for a,b in zip(bars,bars[1:])
+                    if a['close']>0 and b['close']>0 and b['time']-a['time']==self.candle_seconds}
+        own=returns(rows)
+        correlations=[]
+        if not self.state['positions']: return 0.0
+        for p in self.state['positions']:
+            cached=self.candle_cache.get((p['symbol'],self.candle_interval))
+            other=returns(cached[1]) if cached else {}
+            times=sorted(own.keys() & other.keys())
+            if len(times)<20: continue
+            x,y=[own[t] for t in times],[other[t] for t in times]
+            mx,my=sum(x)/len(x),sum(y)/len(y)
+            variance=sum((v-mx)**2 for v in x)*sum((v-my)**2 for v in y)
+            if variance>0:
+                correlations.append(sum((a-mx)*(b-my) for a,b in zip(x,y))/math.sqrt(variance))
+        return round(max(0,max(correlations)),4) if correlations else None
 
     async def review_candidate(self,candidate,data,prefetched=None,prepared=None):
         symbol=candidate['symbol']
@@ -599,9 +747,12 @@ class Desk:
         if identity['ok'] and self.state['benchmark'] is None:
             self.state['benchmark']=dict(symbol=symbol,qty=self.initial/(ask*(1+self.slippage)*(1+self.fee)),lastBid=bid,startedAt=time.time())
         sym=self.market_symbol(symbol,data)
-        rows=prefetched[symbol] if prefetched and symbol in prefetched else await self.candidate_candles(sym)
-        analysis=prepared if prepared is not None else tape(rows or [],time.time())
-        if analysis and time.time()-analysis['bar']>3*CANDLE_SECONDS:
+        existing=next((p for p in self.state['positions'] if p['symbol']==symbol),None)
+        interval=existing.get('candleInterval','15m') if existing else self.candle_interval
+        seconds={'15m':900,'1h':3600,'4h':14400}[interval]
+        rows=prefetched[symbol] if prefetched and symbol in prefetched else await self.candidate_candles(sym,interval)
+        analysis=prepared if prepared is not None else tape(rows or [],time.time(),seconds)
+        if analysis and time.time()-analysis['bar']>3*seconds:
             analysis=None
         if analysis is None:
             self.evaluated(candidate,'blocked','Velas cerradas insuficientes o antiguas')
@@ -622,7 +773,7 @@ class Desk:
                 self.evaluated(candidate,'blocked',quality['reason'])
                 return
         self.chart=analysis['rows']
-        self.state['tape']={k:v for k,v in analysis.items() if k!='rows'}
+        self.state['tape']={**{k:v for k,v in analysis.items() if k!='rows'},'candleInterval':interval}
         candidate['signal']=dict(strategy=analysis.get('strategy'),rsi=round(analysis['rsi'],2),
                                  atrPct=round(analysis['atr']/ask*100,3),trend=analysis['trend'])
         self.role('Tape','ready' if analysis['trend'] else 'waiting',f'EMA20/50; RSI {analysis["rsi"]:.0f}; ATR {analysis["atr"]:.5g}')
@@ -648,7 +799,8 @@ class Desk:
             self.evaluated(candidate,'waiting','En espera tras el último cierre; se evita reentrar inmediatamente')
             return
         open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-self.costs(p)[1])*(1-self.costs(p)[0])) for p in self.state['positions'])
-        order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage)
+        order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage,partial=self.feed is None)
+        if order: order['policyVersion']=self.policy_version
         geometry=planned_trade(ask*(1+self.slippage),ask*(1+self.slippage)-1.5*analysis['atr'],
                                ask*(1+self.slippage)+3*analysis['atr'],1,fee_rate=self.fee,exit_slippage=self.slippage) if ask*(1+self.slippage)>1.5*analysis['atr'] else None
         candidate['economics']=geometry
@@ -659,6 +811,12 @@ class Desk:
         if not self.state['enabled'] or self.state['dailyStopped'] or not price_ok or not identity['ok'] or not order:
             self.evaluated(candidate,'waiting',f'Sin confirmación de entrada; RSI {analysis["rsi"]:.0f}, extensión {extension:.1f} ATR' if not price_ok else size_reason if not order else 'Entradas pausadas por control de riesgo')
             self.role('Exec','waiting','Esperando aprobación de Price, Wire, Size y Risk')
+            return
+        gate=gemini_agent.catalyst_gate(base,'long')
+        candidate['catalystGate']=gate
+        if not gate['allowed']:
+            self.evaluated(candidate,'blocked',gate['reason'])
+            self.role('Risk','blocked',gate['reason'])
             return
         key=f'{symbol}:{analysis["bar"]}'
         with self.connect() as con:
@@ -690,7 +848,8 @@ class Desk:
             reservation=decision.get('token')
         position=dict(order,symbol=symbol,entryKey=key,entryTime=time.time(),quoteAt=data['at'],atr=analysis['atr'],
                       initialDist=order['entry']-order['sl'],best=order['entry'],lastBid=bid,status='open',
-                      evidence=dict(tape=self.state['tape'],wire=identity,selection=self.state['selection']))
+                      marketFilters=meta.get('filters',[]),
+                      evidence=dict(tape=self.state['tape'],wire=identity,selection=self.state['selection'],catalystGate=gate))
         self.state['cash']-=order['notional']+order['fee']
         self.state['positions'].append(position)
         self.state['position']=position
@@ -786,7 +945,7 @@ class Desk:
             count,wins,pnl=con.execute('''SELECT COUNT(*),COALESCE(SUM(json_extract(payload,'$.pnl')>0),0),COALESCE(SUM(json_extract(payload,'$.pnl')),0)
                 FROM trades WHERE json_extract(payload,'$.status')='closed' ''').fetchone()
             policy_count,policy_wins,policy_pnl=con.execute('''SELECT COUNT(*),COALESCE(SUM(json_extract(payload,'$.pnl')>0),0),COALESCE(SUM(json_extract(payload,'$.pnl')),0)
-                FROM trades WHERE json_extract(payload,'$.status')='closed' AND json_extract(payload,'$.policyVersion')=?''',(POLICY_VERSION,)).fetchone()
+                FROM trades WHERE json_extract(payload,'$.status')='closed' AND json_extract(payload,'$.policyVersion')=?''',(self.policy_version,)).fetchone()
         candidates=[dict(c,selected=c['symbol']==self.state['selected']) for c in self.state['candidates']]
         filtered=sum(not c['eligible'] for c in candidates)
         eligible=len(candidates)-filtered
@@ -803,21 +962,27 @@ class Desk:
                     filterReasons=[dict(reason=reason,count=count) for reason,count in reasons.most_common()],
                     scope=self.feed.scope if self.feed else 'Binance Spot · USDT',scanBatchSize=SCAN_BATCH_SIZE,
                     scanReviewed=self.state.get('scanReviewed',0),maxPositions=MAX_OPEN_POSITIONS,
-                    scanIntervalSeconds=SCAN_INTERVAL_S,candleInterval=CANDLE_INTERVAL,
-                    policy=dict(version=POLICY_VERSION,costVersion=ECONOMICS_VERSION,maxNotionalPct=MAX_NOTIONAL_FRACTION*100,minNetRewardRisk=MIN_NET_REWARD_RISK,
+                    scanIntervalSeconds=SCAN_INTERVAL_S,candleInterval=self.candle_interval,
+                    chartInterval=(self.state.get('tape') or {}).get('candleInterval',self.candle_interval),
+                    policy=dict(version=self.policy_version,costVersion=ECONOMICS_VERSION,maxNotionalPct=MAX_NOTIONAL_FRACTION*100,minNetRewardRisk=MIN_NET_REWARD_RISK,
                                 riskPct=RISK_FRACTION*100,totalRiskPct=TOTAL_RISK_FRACTION*100,minVolumeUSD=MIN_QUOTE_VOLUME,
+                                maxHoldSeconds=MAX_HOLD_S if self.feed is None else 6*3600,
+                                partialAtR=1.5 if self.feed is None else None,trailAtr=2.5 if self.feed is None else 1.5,
+                                minNetRewardRiskBasis='reference-3atr',
+                                selectorCoverage=self.state.get('selectorCoverage'),catalystGate='fresh-opposing-catalyst-v1',
                                 strategies=['trend-pullback','breakout','recovery'],validated=False),
                     monitoring=dict(riskIndependent=True,riskError=self.risk_error,
-                                    reviewedMarkets=sum(c.get('checkedAt',0)>=time.time()-CANDLE_SECONDS for c in candidates if c['eligible']),
+                                    reviewedMarkets=sum(c.get('checkedAt',0)>=time.time()-self.candle_seconds for c in candidates if c['eligible']),
                                     eligibleMarkets=eligible,
                                     quoteAt=(self.last_risk_data or {}).get('at'),scanDurationSeconds=round(self.cycle_duration,3),
                                     dataEfficiency=dict(self.efficiency)),
                     roles=[dict(name=r,**self.state['roles'].get(r,dict(status='waiting',detail='Pendiente',provider='Gemini' if r=='Selector' else 'Reglas deterministas'))) for r in ROLES],
                     position=next((p for p in self.state['positions'] if p['symbol']==self.state['selected']),None),positions=self.state['positions'],trades=trades,events=events,curve=curve,candles=self.chart,
-                    stats=dict(closed=count,wins=wins,pnl=round(pnl,2)),
-                    experiment=dict(version=POLICY_VERSION,**self.state.get('policyEpochs',{}).get(POLICY_VERSION,{}),
+                    stats=dict(closed=count,wins=wins,pnl=round(pnl,2),
+                               realizedPartialPnlOpen=round(sum(p.get('realizedPnl',0) for p in self.state['positions']),6)),
+                    experiment=dict(version=self.policy_version,**self.state.get('policyEpochs',{}).get(self.policy_version,{}),
                                     closed=policy_count,wins=policy_wins,pnl=round(policy_pnl,4),
-                                    opened=sum(p.get('policyVersion')==POLICY_VERSION for p in self.state['positions'])),
+                                    opened=sum(p.get('policyVersion')==self.policy_version for p in self.state['positions'])),
                     error=self.last_error or self.risk_error,updatedAt=int(max((self.last_data or {}).get('at',0),(self.last_risk_data or {}).get('at',0))) or None,
                     wire=self.state.get('wire'),fees=dict(perSide=self.fee,slippage=self.slippage,assumptions=True),
                     gemini=gemini_agent.AGENT.status() if gemini_agent.AGENT else None)

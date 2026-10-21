@@ -52,7 +52,7 @@ MIN_TRAIN_TRADES = {
     "flow": 10, "scalper": 20, "swing": 8, "trend": 6, "meanrev": 8, "orb": 10, "squeeze": 8,
 }
 MIN_VALIDATION_TRADES = 8
-ENGINE_VERSION = 4
+ENGINE_VERSION = 5
 VALIDATION_PROTOCOL = 'fixed-origin-3-blocks-holdout20-net-v1'
 
 # Segundos por vela de cada intervalo de trabajo
@@ -245,6 +245,7 @@ def simulate(
     cost_model: dict | None = None,
     allow_short: bool = True,
     risk_multipliers: list[float] | None = None,
+    min_atr_spread: float = 3,
 ) -> dict:
     """Backtest de una configuración sobre candles[start:end]. Sin capitalizar
     (tamaño fijo por operación) para que las métricas sean comparables.
@@ -377,7 +378,7 @@ def simulate(
         if not fresh_signal(s, scores[max(0, i - 3):i], threshold):
             continue
         # filtro de coste: sin volatilidad suficiente el spread se come el beneficio
-        if a < 3 * c["close"] * spread_pct:
+        if a < min_atr_spread * c["close"] * spread_pct:
             continue
         ext = extensions[i] if extensions is not None else None
         if ext is not None and ext * (1 if s > 0 else -1) > overext_atr:
@@ -512,10 +513,12 @@ def optimize(
                     reason='Histórico insuficiente para tres bloques y holdout con embargo', protocol=protocol)
 
     def evaluate(cfg: tuple, lo: int, hi: int, costs: dict | None = None) -> dict:
+        from .execution import atr_spread_multiple
         th, sl, tp, tr = cfg
         return simulate(candles, scores, atrs, spread_pct, th, sl, tp, tr,
                         max_hold_bars, cooldown_bars, risk_amount, notional_cap,
-                        lo, hi, extensions, overext_atr, costs or model, allow_short)
+                        lo, hi, extensions, overext_atr, costs or model, allow_short,
+                        min_atr_spread=atr_spread_multiple(bot_id))
 
     best_cfg: tuple | None = None
     best_score = float("-inf")

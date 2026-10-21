@@ -392,7 +392,7 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.engine.state['position']['symbol'],'BTCUSDT')
         self.assertEqual(self.engine.state['candidates'][0]['status'],'error')
 
-    async def test_rotation_is_bounded_and_reaches_markets_beyond_first_batch(self):
+    async def test_each_scan_covers_the_entire_eligible_universe(self):
         d=add_markets(data(),[f'COIN{i:02}' for i in range(25)])
         reviewed=[]
         async def candles(symbol,*args):
@@ -402,8 +402,8 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
             for _ in range(3):
                 before=len(reviewed)
                 await self.engine.scan(d)
-                self.assertEqual(len(reviewed)-before,desk.SCAN_BATCH_SIZE)
-                self.assertLessEqual(self.engine.state['scanReviewed'],12)
+                self.assertEqual(len(reviewed)-before,26)
+                self.assertEqual(self.engine.state['scanReviewed'],26)
         self.assertEqual(len(set(reviewed)),26)
         self.assertIsNone(self.engine.state['position'])
 

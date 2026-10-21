@@ -7,7 +7,6 @@ estudios ya observados: no son una validación independiente ni autorizan promoc
 import argparse
 import asyncio
 from dataclasses import asdict, dataclass
-from decimal import Decimal, ROUND_DOWN
 import hashlib
 import json
 import math
@@ -17,6 +16,7 @@ import time
 from . import desk, market_data
 from .research import _bounded_history
 from .training import expectancy_uncertainty
+from .spot_orders import partial_quantity
 
 
 @dataclass(frozen=True)
@@ -31,16 +31,6 @@ POLICIES = (ExitPolicy('fixed-6h',6*3600),ExitPolicy('fixed-48h',48*3600),
             ExitPolicy('partial-trail-48h',48*3600,True,2.5),
             ExitPolicy('partial-trail-unlimited',None,True,2.5))
 INTERVALS = {'15m':900,'1h':3600,'4h':14400}
-
-
-def partial_quantity(qty, bid, info):
-    lot=next((f for f in info.get('filters',[]) if f['filterType']=='LOT_SIZE'),{})
-    step=Decimal(str(lot.get('stepSize','.00000001')))
-    if step<=0: return 0.0
-    part=float((Decimal(str(qty/2))/step).to_integral_value(rounding=ROUND_DOWN)*step)
-    minimum=max([float(f.get('minNotional',0)) for f in info.get('filters',[])
-                 if f['filterType'] in ('MIN_NOTIONAL','NOTIONAL')] or [0])
-    return part if all(q>=float(lot.get('minQty',0)) and q*bid>=minimum and q>0 for q in (part,qty-part)) else 0.0
 
 
 def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None):

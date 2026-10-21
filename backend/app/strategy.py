@@ -1,6 +1,6 @@
 """Señales causales compartidas por el vivo y el backtest.
 
-Scalper y swing usan tres bloques con pesos 40/40/20: régimen,
+Scalper, swing y trend usan tres bloques con pesos 40/40/20: régimen,
 disparador de precio y flujo CMF. Sin disparador no hay entrada.
 Los demás bots mantienen sus escuelas específicas. Las funciones devuelven
 una puntuación en [-1, 1] por vela y solo usan información ya disponible.
@@ -68,11 +68,11 @@ ADX_LOW, ADX_HIGH = 20.0, 30.0
 TREND_STEP = {
     "scalper": 300,      # 5m
     "swing": 86400,      # 1d
-    "trend": 86400,      # 1d
+    "trend": 14400,      # 4h
     "meanrev": 86400,    # 1d
     "orb": 900,          # 15m
     "flow": 3600,
-    "squeeze": 3600,     # 1h
+    "squeeze": 14400,    # 4h
 }
 
 
@@ -323,78 +323,38 @@ def swing_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
 # ---------------------------------------------------------------------------
 
 
-def trend_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
-    """Serie de señal del seguidor de tendencia (reglas Turtle de Dennis/Eckhardt):
-    rupturas del canal de Donchian 55/20 confirmadas por volumen, SuperTrend,
-    Parabolic SAR, régimen EMA50/200 y marco diario; la convicción se escala
-    por la fuerza de la tendencia (ADX)."""
-    n = len(c_work)
-    closes = [c["close"] for c in c_work]
-    if n < 60:
-        return [0.0] * n
-    bo55 = donchian_breakout_series(c_work, 55, persist=2)
-    bo20 = donchian_breakout_series(c_work, 20, persist=1)
-    pos20 = donchian_pos_series(c_work, 20)
-    st = supertrend_votes(c_work)
-    ps = psar_votes(c_work)
-    e50, e200 = ema(closes, 50), ema(closes, 200)
-    htf = _htf_trend_votes(c_work, c_trend, 20, 50, 86400)
-    adx = adx_series(c_work)
-    rv = rvol_series(c_work)
-    cci_t = cci_trend_votes(c_work)
-    mom = momentum_votes(c_work)
-    ha = ha_trend_votes(c_work)
-    ka = kama_votes(c_work)
-    vx = vortex_votes(c_work)
-    struct = structure_series(c_work)
-    rib = ribbon_votes(c_work)
-    ar = aroon_votes(c_work)
-    pull = pullback_votes(c_work)
-    av = anchored_vwap_votes(c_work)
+def trend_factor_series(c_work: list[dict], c_trend: list[dict]) -> list[dict]:
+    """40% régimen, 40% ruptura Donchian 40/55, 20% CMF.
 
-    out: list[float] = []
-    for i in range(n):
-        votes: list[float] = []
-        if bo55[i]:  # ruptura larga (sistema 2 Turtle): la señal principal
-            votes.append(_breakout_vote_confirmed(bo55[i], rv[i]))
-            votes.append(bo55[i])  # doble peso: es el corazón del sistema
-        elif bo20[i]:  # ruptura corta (sistema 1): señal secundaria
-            votes.append(_breakout_vote_confirmed(bo20[i], rv[i]) * 0.6)
-        if st[i]:
-            votes.append(st[i])
-        if ps[i]:
-            votes.append(ps[i])
-        if e50[i] is not None and e200[i] is not None:
-            votes.append(1.0 if e50[i] > e200[i] else -1.0)
-        if pos20[i]:
-            votes.append(pos20[i])
-        if cci_t[i]:  # CCI >|100|: impulso en marcha (modo tendencia de Lambert)
-            votes.append(cci_t[i])
-        if mom[i]:
-            votes.append(mom[i])
-        if ha[i]:
-            votes.append(ha[i])
-        if ka[i]:  # KAMA: tendencia adaptativa
-            votes.append(ka[i])
-        if vx[i]:  # Vortex: confirmación temprana de rotación
-            votes.append(vx[i])
-        if struct[i]:  # estructura BOS/CHoCH: el esqueleto de la tendencia
-            votes.append(struct[i])
-        if rib[i]:  # cinta de EMAs ordenada
-            votes.append(rib[i])
-        if ar[i]:  # Aroon: la tendencia sigue fresca
-            votes.append(ar[i])
-        if pull[i]:  # pullback: reengancharse a la tendencia sin esperar ruptura
-            votes.append(pull[i])
-        if av[i]:  # VWAP anclado al último giro
-            votes.append(av[i])
-        votes.append(htf[i])
-        base = sum(votes) / len(votes) if votes else 0.0
-        # sin tendencia (ADX bajo) el seguidor de tendencia no tiene ventaja
-        a = adx[i]
-        w = 0.6 if a is None else _clip((a - 15.0) / 20.0, 0.25, 1.0)
-        out.append(_clip(base * w))
+    Exige calentamiento, ADX y dirección EMA200 coherentes con la ruptura.
+    El marco superior se incorpora solo cuando ha cerrado; ningún oscilador
+    adicional diluye el disparador ni invierte su dirección.
+    """
+    closes=[c['close'] for c in c_work]
+    slow=ema(closes,200)
+    adx=adx_series(c_work)
+    htf=_htf_trend_votes(c_work,c_trend,20,50,TREND_STEP['trend'])
+    bo55=donchian_breakout_series(c_work,55,persist=2)
+    bo40=donchian_breakout_series(c_work,40,persist=1)
+    money=chaikin_money_flow(c_work)
+    out=[]
+    for i,price in enumerate(closes):
+        factors=dict(regime=0.0,trigger=0.0,flow=0.0,score=0.0)
+        trigger=bo55[i] or bo40[i]
+        if i>=199 and slow[i] is not None and adx[i] is not None and adx[i]>=ADX_LOW and trigger:
+            bias=1.0 if price>slow[i] else -1.0 if price<slow[i] else 0.0
+            if bias*trigger>0 and htf[i]*trigger>=0:
+                regime=(bias+htf[i])/2
+                flow=_clip(money[i]*3) if money[i] is not None else 0.0
+                score=_clip(.4*regime+.4*trigger+.2*flow)
+                factors.update(regime=regime,trigger=trigger,flow=flow,
+                               score=score if score*trigger>0 else 0.0)
+        out.append(factors)
     return out
+
+
+def trend_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
+    return [f['score'] for f in trend_factor_series(c_work,c_trend)]
 
 
 # ---------------------------------------------------------------------------
@@ -538,7 +498,7 @@ def squeeze_scores(c_work: list[dict], c_trend: list[dict]) -> list[float]:
     bbw = bbw_expansion_series(c_work)
     st = supertrend_votes(c_work)
     m_line, m_sig = macd(closes)
-    htf = _htf_trend_votes(c_work, c_trend, 20, 50, 3600)
+    htf = _htf_trend_votes(c_work, c_trend, 20, 50, TREND_STEP['squeeze'])
     kb = keltner_break_votes(c_work)
     mom = momentum_votes(c_work)
     vx = vortex_votes(c_work)
@@ -605,13 +565,18 @@ def confirmations(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[
     informativo). Es lo que ve el usuario al preguntar POR QUÉ se abrió una
     operación, así que cubre todos los sistemas que componen la señal.
     """
-    if bot_id in ("scalper", "swing"):
+    if bot_id in ("scalper", "swing", "trend"):
         if not c_work:
             return []
-        factors = factor_series(c_work, c_trend, TREND_STEP[bot_id])[-1]
+        factors = (trend_factor_series(c_work,c_trend) if bot_id=='trend'
+                   else factor_series(c_work,c_trend,TREND_STEP[bot_id]))[-1]
+        regime_detail=('ADX ≥20, EMA200 y marco 4h cerrado' if bot_id=='trend'
+                       else 'ADX/CHOP, EMA200 y marco superior cerrado')
+        trigger_detail=('ruptura Donchian 40/55 obligatoria' if bot_id=='trend'
+                        else 'ruptura/pullback en tendencia; barrido/z-score en rango')
         return [
-            {"system": "Régimen", "detail": "Peso 40%: ADX/CHOP, EMA200 y marco superior cerrado", "vote": factors["regime"]},
-            {"system": "Disparador de precio", "detail": "Peso 40%: ruptura/pullback en tendencia; barrido/z-score en rango", "vote": factors["trigger"]},
+            {"system": "Régimen", "detail": "Peso 40%: "+regime_detail, "vote": factors["regime"]},
+            {"system": "Disparador de precio", "detail": "Peso 40%: "+trigger_detail, "vote": factors["trigger"]},
             {"system": "Flujo CMF", "detail": "Peso 20%: participación por Chaikin Money Flow; sin volumen, neutro", "vote": factors["flow"]},
         ]
     if bot_id == "flow":
