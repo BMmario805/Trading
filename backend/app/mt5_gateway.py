@@ -3,6 +3,10 @@
 import math
 from decimal import Decimal, ROUND_DOWN
 
+# Margen acotado para el pequeño adelanto observado del reloj del bróker.
+# No modifica el límite de antigüedad ni desplaza el cierre de las velas.
+MAX_TICK_FUTURE_SECONDS = 15
+
 
 class DemoOnlyError(RuntimeError):
     def __init__(self, message, details=None):
@@ -48,7 +52,7 @@ class DemoGateway:
         # El motor estima ese desfase una vez por ciclo y lo pasa aquí.
         effective_skew = self.clock_skew if clock_skew is None else clock_skew
         age = now + effective_skew - tick.time if tick is not None else float('inf')
-        if (tick is None or not -5 <= age <= 120
+        if (tick is None or not -MAX_TICK_FUTURE_SECONDS <= age <= 120
                 or not all(math.isfinite(v) and v > 0 for v in (tick.bid, tick.ask)) or tick.ask < tick.bid):
             raise DemoOnlyError('Sin cotización reciente del bróker')
         return tick

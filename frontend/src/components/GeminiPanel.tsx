@@ -58,7 +58,7 @@ export default function GeminiPanel({ symbol }: { symbol: string }) {
   return (
     <section className="panel gemini-panel" aria-label="Análisis de textos con Gemini">
       <h3>Gemini · análisis de textos</h3>
-      <p className="muted small">En observación · no modifica las operaciones de los bots.</p>
+      <p className="muted small">Clasifica textos y no envía órdenes. Sus clasificaciones pueden activar un veto de entrada ante catalizadores recientes.</p>
       {error && <p role="status">No se pudo actualizar Gemini. Se reintentará automáticamente.</p>}
       {!observation && !error && <p className="muted">Cargando estado…</p>}
       {observation && !data && <p role="status">{

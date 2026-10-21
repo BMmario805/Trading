@@ -47,6 +47,7 @@ export default function MetaTraderPerformance() {
   const money = (v: number | null | undefined) => v == null ? '—' : `${v.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${data?.currency ?? ''}`
   return <div className="mt5-performance">
     <h3>{data?.session ? 'Rendimiento del presupuesto virtual MT5' : 'Rendimiento general de tu cuenta MT5'}</h3>
+    {!!data?.cards?.length && data.cards.every(card => card.closedTrades === 0 && card.openPositions === 0) && <p className="execution-status">MT5 todavía no tiene operaciones en esta sesión. Las posiciones del Laboratorio simulado se muestran en su sección, más arriba.</p>}
     {data?.session && <p className="muted small">Sesión inicial desde {money(data.session.initial)}; capital virtual aportado {money(data.account?.netFunding)}. Las aportaciones cambian el balance y se excluyen del beneficio. Se conserva el historial de la sesión.</p>}
     {(error || data?.syncError) && <p role="status">Sincronización pendiente: se conservan los últimos datos disponibles.</p>}
     {Math.abs(data?.account?.reconciliationDifference ?? 0) > .01 && <p role="status">El historial disponible no reconcilia todo el saldo: diferencia de {money(data?.account?.reconciliationDifference)}. El balance y patrimonio mostrados proceden directamente de MT5.</p>}

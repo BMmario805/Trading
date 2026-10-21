@@ -541,6 +541,9 @@ body {
 
 /* MT5: tamaños independientes del contenido de los canvas y del laboratorio. */
 .mt5-panel { min-width: 0; }
+.execution-status { padding: 10px 12px; margin: 10px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-3); font-size: 13px; line-height: 1.5; }
+.execution-status p { margin: 4px 0; }
+.execution-status ul { margin: 6px 0 0; padding-left: 20px; }
 .mt5-panel > details { margin: 12px 0; }
 .mt5-panel summary { cursor: pointer; }
 .mt5-panel details ul { max-height: 240px; overflow: auto; overflow-wrap: anywhere; }

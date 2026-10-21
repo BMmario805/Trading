@@ -63,6 +63,16 @@ class GatewayTests(unittest.TestCase):
         self.api.symbol_info_tick.return_value.time = 1000 + 3 * 3600
         self.assertEqual(self.gateway.tick('XAUUSD', 1000, 3 * 3600).bid, 100)
 
+    def test_small_broker_clock_lead_is_accepted_but_large_future_and_stale_ticks_are_not(self):
+        now,offset=1000,10800
+        tick=self.api.symbol_info_tick.return_value
+        for ahead in (6,10,15):
+            tick.time=now+offset+ahead
+            self.assertIs(self.gateway.tick('XAUUSD',now,offset),tick)
+        for age in (-16,121,600):
+            tick.time=now+offset-age
+            with self.assertRaises(DemoOnlyError):self.gateway.tick('XAUUSD',now,offset)
+
     def test_position_query_failure_blocks_entries(self):
         self.api.positions_get.return_value = None
         with self.assertRaises(DemoOnlyError): self.entry()
@@ -195,6 +205,16 @@ class ProbationEngineTests(unittest.TestCase):
         submit.assert_called_once()
         self.assertIn('15%', self.engine.diagnostics['scalper/XAUUSD'])
         self.assertEqual(mt5_demo.STATE['probationRiskPct'], .015)
+        self.assertEqual(mt5_demo.STATE['scan']['reviewed'],1)
+        self.assertEqual(mt5_demo.STATE['scan']['accepted'],1)
+
+    def test_completed_scan_replaces_old_risk_diagnostics_when_no_entry_signal_exists(self):
+        self.engine.risk_diagnostics['scalper/XAUUSD']=dict(minimumLotRisk=999,riskBudget=.15)
+        prepare,submit=self.cycle(score=0)
+        prepare.assert_not_called()
+        submit.assert_not_called()
+        self.assertEqual(mt5_demo.STATE['riskDiagnostics'],{})
+        self.assertEqual(mt5_demo.STATE['scan']['blockers'],[dict(reason='Sin señal nueva de entrada',count=1)])
 
     def test_validated_demo_pair_uses_normal_budget_and_threshold(self):
         mt5_demo.save(self.engine.owner+'params:scalper/XAUUSD', dict(
@@ -316,6 +336,32 @@ class BrokerClockTests(unittest.TestCase):
                 self.assertEqual(closed_candles(candles, 60, now), candles)
                 self.assertEqual(candles[-1]['dataSource']['provider'], 'mt5')
 
+    def test_advancing_ticks_with_small_clock_lead_calibrate_without_refreshing_frozen_prices(self):
+        now,offset=1000000,10800
+        tick=self.api.symbol_info_tick.return_value
+        tick.time=now+offset+7
+        with patch.object(mt5_demo.time,'time',return_value=now):
+            self.engine.update_clock_skew()
+        self.assertFalse(self.engine._clock_confirmed)
+        tick.time+=5
+        with patch.object(mt5_demo.time,'time',return_value=now+5):
+            self.engine.update_clock_skew()
+        self.assertTrue(self.engine._clock_confirmed)
+        self.assertEqual(self.engine.clock_skew,offset)
+        self.assertIs(self.engine.gateway.tick('XAUUSD',now+5),tick)
+        with patch.object(mt5_demo.time,'time',return_value=now+140):
+            self.engine.update_clock_skew()
+        with self.assertRaises(DemoOnlyError):self.engine.gateway.tick('XAUUSD',now+140)
+
+    def test_large_future_residual_cannot_calibrate_even_with_advancing_ticks(self):
+        now,offset=1000000,10800
+        tick=self.api.symbol_info_tick.return_value
+        for elapsed in (0,5):
+            tick.time=now+offset+60+elapsed
+            with patch.object(mt5_demo.time,'time',return_value=now+elapsed):
+                self.engine.update_clock_skew()
+        self.assertFalse(self.engine._clock_confirmed)
+
     def test_most_recent_tick_prevents_other_symbols_appearing_in_the_future(self):
         now, offset = 1000000, 10800
         self.config['symbols']['EURUSD'] = 'EURUSD'
@@ -388,6 +434,15 @@ class BrokerClockTests(unittest.TestCase):
                 self.engine.update_clock_skew()
         self.assertEqual(self.engine.clock_skew,0)
         with self.assertRaises(DemoOnlyError): self.engine.gateway.tick('XAUUSD',now+5)
+
+
+class EntrySummaryTests(unittest.TestCase):
+    def test_groups_actual_blocks_and_does_not_count_accepted_orders_as_blocks(self):
+        summary=mt5_demo.entry_blockers({'a':'Sin cruce reciente de señal','b':'Sin cruce reciente de señal',
+            'c':'El lote mínimo (0.01) arriesga 31 EUR; presupuesto 0.15',
+            'd':'Orden DEMO ejecutada en MT5'})
+        self.assertEqual(summary,[dict(reason='Sin señal nueva de entrada',count=2),
+                                  dict(reason='Lote mínimo superior al presupuesto de riesgo',count=1)])
 
 
 if __name__ == '__main__':

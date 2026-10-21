@@ -152,11 +152,11 @@ export default function App() {
         />
         <SentimentHistory symbol={selected} />
         <GeminiPanel symbol={selected} />
-        <MetaTraderPanel />
-        <details className="panel">
+        <details className="panel" id="laboratorio-paper" open>
           <summary>Laboratorio de paper trading · simulación independiente de MT5</summary>
           <BotsPanel />
         </details>
+        <MetaTraderPanel />
         {opinionsSource && (
           <OpinionsModal
             symbol={selected}

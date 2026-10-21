@@ -312,6 +312,13 @@ function BotCard({
 
   const totalPnl = bot.equity - bot.initialBalance
   const { stats, config } = bot
+  const blocked = Object.entries(bot.diagnostics ?? {}).filter(([symbol]) => !bot.openPositions.some(p => p.symbol === symbol))
+  const reasons = blocked.reduce<Record<string, number>>((counts, [, diagnostic]) => {
+    const reason = diagnostic.reason.startsWith('Señal ') && diagnostic.reason.includes('no alcanza umbral') ? 'Señal todavía insuficiente' : diagnostic.reason
+    counts[reason] = (counts[reason] ?? 0) + 1
+    return counts
+  }, {})
+  const mainReasons = Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 3)
 
   return (
     <div className="panel bot-card">
@@ -380,6 +387,11 @@ function BotCard({
         <p className="small muted">Mercados sin validar: a prueba, hasta el {config.probationSizePct}% del riesgo habitual y un máximo de {config.maxProbationPositions} posiciones a prueba por bot.</p>
       )}
       {bot.diagnostics && (
+        <p className="small execution-status">{bot.openPositions.length > 0 ? `Gestionando ${bot.openPositions.length} posiciones. ` : 'Sin posición abierta. '}
+          {mainReasons.length > 0 && <>Nuevas entradas: {mainReasons.map(([reason, count]) => `${reason} (${count})`).join(' · ')}.</>}
+        </p>
+      )}
+      {bot.diagnostics && (
         <details className="small muted">
           <summary>Diagnóstico de entradas por mercado</summary>
           <ul>
@@ -445,17 +457,19 @@ export default function BotsPanel() {
   const onChanged = (updated: BotStatus) =>
     setBots((prev) => prev.map((b) => (b.id === updated.id ? updated : b)))
 
-  if (error || bots.length === 0) return null
+  if (bots.length === 0) return <p role="status">{error ? 'No se puede actualizar el Laboratorio simulado.' : 'Consultando los bots del Laboratorio…'}</p>
 
   return (
     <section className="bots-section">
       <div className="bots-title">
-        <h3>🤖 Bots de trading automático</h3>
+        <h3>🤖 Laboratorio simulado · {bots.reduce((sum, bot) => sum + bot.openPositions.length, 0)} posiciones abiertas</h3>
         <small className="muted">
           Cuenta simulada (paper trading) sobre precios reales · no es dinero real ni
           asesoramiento financiero
         </small>
       </div>
+      {error && <p role="status">No se puede actualizar el Laboratorio; se conserva la última lectura.</p>}
+      <p className="execution-status">{bots.filter(bot => bot.running).length} de {bots.length} bots activos · {bots.reduce((sum, bot) => sum + bot.stats.closedTrades, 0)} operaciones cerradas en estas cuentas simuladas. Sus resultados se registran aquí; MT5 tiene otra cuenta y otro historial.</p>
       <div className="bots-grid">
         {bots.map((b) => (
           <BotCard key={b.id} bot={b} onChanged={onChanged} />

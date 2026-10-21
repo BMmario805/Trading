@@ -1,6 +1,7 @@
 """Motor DEMO independiente del paper trading, con cuenta y cotizaciones del bróker."""
 
 import asyncio
+from collections import Counter
 import json
 import logging
 import math
@@ -15,7 +16,7 @@ from .bots import ALL_BOTS, INTERVAL_SECONDS
 from .database import Connection
 from .execution import closed_candles, fresh_signal, atr_spread_multiple
 from .indicators import atr_series
-from .mt5_gateway import DemoGateway, DemoOnlyError
+from .mt5_gateway import DemoGateway, DemoOnlyError, MAX_TICK_FUTURE_SECONDS
 from .strategy import score_series, resample, TREND_STEP, extension_atr
 from . import training
 from . import mt5_performance
@@ -31,6 +32,21 @@ MAGICS = {cfg.id: 9260900 + i for i, cfg in enumerate(ALL_BOTS)}
 log = logging.getLogger('mt5-demo')
 STATE = {'configured': False, 'connected': False, 'message': 'MT5 demo no configurado', 'positions': []}
 _task = None
+
+
+def entry_blockers(diagnostics):
+    """Motivos de la última revisión; no confunde falta de señal con avería."""
+    def label(reason):
+        if reason.startswith('El lote mínimo'): return 'Lote mínimo superior al presupuesto de riesgo'
+        if reason.startswith('Sin cruce'): return 'Sin señal nueva de entrada'
+        if 'Velas insuficientes' in reason: return 'Mercado cerrado o histórico sin actualizar'
+        if 'cotización reciente' in reason: return 'Cotización del bróker sin actualizar'
+        if 'extendido' in reason: return 'Precio alejado de la zona de entrada'
+        if 'ATR insuficiente' in reason: return 'Volatilidad insuficiente para el diferencial'
+        if 'a prueba alcanzado' in reason: return 'Cupo de posiciones a prueba ocupado'
+        return reason
+    counts=Counter(label(reason) for reason in diagnostics.values() if not reason.startswith('Orden DEMO'))
+    return [dict(reason=reason,count=count) for reason,count in counts.most_common()]
 
 
 def connection():
@@ -120,7 +136,7 @@ class DemoEngine:
                 skew = round((stamp - local) / 3600) * 3600
                 age = local + skew - stamp
                 if (previous is not None and stamp > previous and 0 <= skew <= 12*3600
-                        and -5 <= age <= 120):
+                        and -MAX_TICK_FUTURE_SECONDS <= age <= 120):
                     skews.append(skew)
         if skews:
             # Retain a confirmed offset until a new, advancing tick provides
@@ -455,6 +471,7 @@ class DemoEngine:
                      positions=position_rows,
                      diagnostics=dict(self.diagnostics), riskDiagnostics=dict(self.risk_diagnostics),
                      clockOffsetSeconds=self.clock_skew, clockConfirmed=self._clock_confirmed,
+                     tickFutureToleranceSeconds=MAX_TICK_FUTURE_SECONDS,
                      training=self.training_job[0] if self.training_job else None)
         self.reconcile_portfolio_reservations(positions,now)
         candidates = [(bot, cfg['symbols'][symbol]) for bot in ALL_BOTS for symbol in bot.universe if symbol in cfg['symbols']]
@@ -464,10 +481,13 @@ class DemoEngine:
         self.last_scan = now
         offset = self.cursor % len(candidates)
         self.cursor += 1
+        reviewed=accepted=0
         for bot, symbol in candidates[offset:] + candidates[:offset]:
             if self.stopping:
                 return
             key = bot.id+'/'+symbol
+            reviewed+=1
+            self.risk_diagnostics.pop(key,None)
             try:
                 if now < read(self.owner+'cooldown:'+symbol, 0):
                     raise DemoOnlyError('Cooldown de cinco minutos tras un cierre')
@@ -553,6 +573,7 @@ class DemoEngine:
                         exposureWarning=None if nominal_eur is not None else 'Nocional EUR sin conversión verificada')
                 result = self.submit(f'entry:{bot.id}:{symbol}:{bar}', symbol, request, portfolio_token=portfolio_token)
                 if result is not None and result.retcode in (api.TRADE_RETCODE_DONE, api.TRADE_RETCODE_DONE_PARTIAL):
+                    accepted+=1
                     for pos in self.gateway.positions():
                         if pos.symbol == symbol and pos.magic == MAGICS[bot.id]:
                             save(self.owner+f'position:{pos.ticket}', dict(risk=risk, atr=atr, best=pos.price_open,
@@ -568,6 +589,9 @@ class DemoEngine:
                     self.risk_diagnostics[key] = exc.details
             except Exception as exc:
                 self.diagnostics[key] = 'Error de evaluación: '+str(exc)
+        STATE.update(diagnostics=dict(self.diagnostics),riskDiagnostics=dict(self.risk_diagnostics),
+            scan=dict(startedAt=int(now),completedAt=int(time.time()),reviewed=reviewed,
+                      accepted=accepted,blockers=entry_blockers(self.diagnostics)))
 
 
 async def _run(config):
