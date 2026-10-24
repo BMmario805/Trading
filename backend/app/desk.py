@@ -22,6 +22,8 @@ from .economics import planned_trade,ECONOMICS_VERSION
 from .book_stream import BOOKS
 from .spot_orders import partial_quantity
 from .desk_maker import DeskMaker, valid_lot
+from .hub import hub
+from . import telemetry, ai_swarm, gpt_quant_agent
 
 DB_PATH = Path(__file__).resolve().parents[2]/'.runtime'/'desk.sqlite'
 INITIAL = 1000.0
@@ -331,6 +333,7 @@ class Desk:
         self.focus_position()
         with self.connect() as con:
             con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
+        telemetry.changed(self.desk_id)
 
     def focus_position(self):
         positions=self.state['positions']
@@ -341,9 +344,10 @@ class Desk:
         value=dict(status=status,detail=detail,at=time.time(),provider=provider or ('Gemini' if name=='Selector' else 'Reglas deterministas'))
         previous=self.state['roles'].get(name,{})
         self.state['roles'][name]=value
-        if previous.get('status')!=status or previous.get('detail')!=detail:
+        if previous.get('status')!=status or previous.get('detail')!=detail or previous.get('provider')!=value['provider']:
             with self.connect() as con:
-                con.execute('INSERT INTO events(ts,role,status,detail) VALUES (?,?,?,?)',(value['at'],name,status,detail))
+                event_id=con.execute('INSERT INTO events(ts,role,status,detail) VALUES (?,?,?,?)',(value['at'],name,status,detail)).lastrowid
+            hub.broadcast_event(dict(type='role_update',desk=self.desk_id,role=name,id=event_id,**value))
 
     def quote(self,symbol,data):
         try:
@@ -413,6 +417,7 @@ class Desk:
             self.focus_position()
             raise
         self.role('Risk','closed',f'{reason}; resultado neto {pnl:+.2f} {self.currency}')
+        telemetry.changed(self.desk_id)
 
     def take_partial(self,p,bid,data,*,qty_override=None,price_override=None,persist=True):
         """Una realización por entrada; estado y flujos se confirman juntos."""
@@ -460,6 +465,7 @@ class Desk:
             self.focus_position()
             raise
         self.role('Exec','partial',f'Salida parcial SIMULADA de {qty:g} {p["symbol"]}; costes incluidos')
+        telemetry.changed(self.desk_id)
         return True
 
     def manage(self,data):
@@ -950,6 +956,40 @@ class Desk:
             self.role('Exec','blocked','Tamaño superior a la liquidez publicada al mejor ask')
             return
         rate=(self.state.get('funding') or {}).get('netQuotePerEuro')
+        economics=gpt_quant_agent.proposal_context(self,order)
+        audit=gpt_quant_agent.local_verdict(economics,economics['requestedRiskFraction'],
+                                           learning_allowed=economics.get('learningAllowed',True))
+        candidate['quantAudit']=audit
+        hub.broadcast_event(dict(type='agent_thought',desk=self.desk_id,symbol=base,
+            agent='Motor-Quant-Local',role='Size',phase='local_audit',detail=audit['rationale'],verdict=audit))
+        ai_swarm.request_entry_audit(base,'long',economics,
+            order['risk']/rate if rate else None,order['notional']/rate if rate else None)
+        clearance=ai_swarm.execution_clearance(base,'long')
+        candidate['swarmClearance']=clearance
+        if clearance['binding']:
+            if not clearance['allowed'] or clearance.get('venue')!='spot' or not audit['approved']:
+                reason=clearance.get('reason') if not clearance['allowed'] else audit['rationale'] if not audit['approved'] else 'El quorum requiere la ruta MT5 demo'
+                self.evaluated(candidate,'blocked',reason)
+                self.role('Risk','blocked',reason,provider='GPT-Quant-Risk')
+                return
+            mult=clearance.get('sizeMultiplier')
+            if not isinstance(mult,(int,float)) or not math.isfinite(mult) or not 0<mult<=1:
+                self.evaluated(candidate,'blocked','Multiplicador del quorum inválido')
+                return
+            budget=min(order['risk']*mult,self.equity()*audit['adjusted_risk_fraction'])
+            approved_risk=clearance.get('maxRiskEUR')
+            approved_notional=clearance.get('maxNotionalEUR')
+            if not rate or any(type(v) not in (int,float) or not math.isfinite(v) or v<=0 for v in (approved_risk,approved_notional)):
+                self.evaluated(candidate,'blocked','Falta el presupuesto EUR auditado de esta propuesta')
+                return
+            budget=min(budget,approved_risk*rate*mult)
+            order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,budget,
+                fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr,
+                notional_fraction=min(MAX_NOTIONAL_FRACTION,approved_notional*rate*mult/self.equity()))
+            if not order:
+                self.evaluated(candidate,'blocked','El tamaño auditado no cumple el lote mínimo')
+                return
+            order['policyVersion']=self.policy_version
         if self.feed and not rate:
             self.evaluated(candidate,'blocked','Conversión EUR/USD reciente pendiente para el riesgo agregado')
             return
@@ -967,8 +1007,10 @@ class Desk:
                       initialDist=order['entry']-order['sl'],best=order['entry'],lastBid=bid,status='open',
                       marketFilters=meta.get('filters',[]),
                       evidence=dict(tape=self.state['tape'],wire=identity,selection=self.state['selection'],catalystGate=gate))
-        if (self.feed is None and self.task is not None and analysis.get('strategy')=='trend-pullback'
-                and key not in self.state.get('makerFallback',{})):
+        position['quantAudit']=audit
+        maker_route=clearance['binding'] and clearance.get('profile')=='maker'
+        if (self.feed is None and self.task is not None and (maker_route or (not clearance['binding'] and analysis.get('strategy')=='trend-pullback'))
+                and (maker_route or key not in self.state.get('makerFallback',{}))):
             try:
                 posted=self.maker.post(position,'buy',position['qty'])
             except BaseException:
@@ -977,6 +1019,10 @@ class Desk:
             if posted:
                 portfolio_risk.release(reservation)
                 self.evaluated(candidate,'pending','Orden limitada simulada pendiente; espera operaciones agresoras observadas')
+                return
+            if maker_route:
+                portfolio_risk.release(reservation)
+                self.evaluated(candidate,'blocked','El perfil maker requiere una cola válida; no se sustituye por mercado')
                 return
         self.state['cash']-=order['notional']+order['fee']
         self.state['positions'].append(position)
@@ -995,6 +1041,7 @@ class Desk:
         self.role('Exec','executed',f'Compra SIMULADA de {base}; comisión y deslizamiento incluidos')
         self.evaluated(candidate,'executed','Operación simulada abierta; stop, objetivo, comisión y deslizamiento aplicados')
         self.role('Risk','managing','Stop y objetivo establecidos al abrir')
+        telemetry.changed(self.desk_id)
 
     async def cycle(self):
         started=time.monotonic()
@@ -1109,10 +1156,7 @@ class Desk:
                                     dataEfficiency=dict(self.efficiency)),
                     roles=[dict(name=r,**self.state['roles'].get(r,dict(status='waiting',detail='Pendiente',provider='Gemini' if r=='Selector' else 'Reglas deterministas'))) for r in ROLES],
                     position=next((p for p in self.state['positions'] if p['symbol']==self.state['selected']),None),positions=self.state['positions'],trades=trades,events=events,curve=curve,candles=self.chart,
-                    maker=dict(mode='paper-observed-queue',ttlSeconds=60,pending=[dict(symbol=o['symbol'],side=o['side'],
-                        quantity=o['order']['quantity'],filled=o['order']['filled'],expiresAt=o['order']['expires_at']) for o in self.maker.orders],
-                        reservedCash=sum(o['reservedCash'] for o in self.maker.orders),history=self.state.get('makerHistory',[]),
-                        executionVerified=False,feeDiscountAssumed=False),
+                    maker=self.maker.public(),
                     stats=dict(closed=count,wins=wins,pnl=round(pnl,2),
                                realizedPartialPnlOpen=round(sum(p.get('realizedPnl',0) for p in self.state['positions']),6)),
                     experiment=dict(version=self.policy_version,**self.state.get('policyEpochs',{}).get(self.policy_version,{}),

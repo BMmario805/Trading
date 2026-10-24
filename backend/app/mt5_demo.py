@@ -537,9 +537,19 @@ class DemoEngine:
                 current_virtual=mt5_performance.capital(self.owner,account,current_positions,now=time.time())
                 if current_virtual and not current_virtual['entryReady']:
                     raise DemoOnlyError(current_virtual['syncError'])
+                from .ai_swarm import execution_clearance
+                clearance=execution_clearance(base,'long' if direction>0 else 'short',now=now)
+                multiplier=learning.PROBATION_SIZE if probation else 1.0
+                if clearance['binding']:
+                    if not clearance['allowed'] or clearance.get('venue')!='mt5':
+                        raise DemoOnlyError(clearance.get('reason') or 'Sin quorum para MT5 demo')
+                    size=clearance.get('sizeMultiplier')
+                    if not isinstance(size,(int,float)) or not math.isfinite(size) or not 0<size<=1:
+                        raise DemoOnlyError('Tamaño de quorum inválido')
+                    multiplier=min(multiplier,size)
                 request, risk = self.gateway.prepare_entry(symbol, direction, atr,
                     p.get('slAtr', bot.sl_atr), p.get('tpAtr', bot.tp_atr), MAGICS[bot.id], comment, time.time(),
-                    risk_mult=learning.PROBATION_SIZE if probation else 1.0,
+                    risk_mult=multiplier,
                     virtual_equity=(current_virtual or {}).get('equity'),min_atr_spread=atr_spread_multiple(bot.id))
                 if self.gateway.last_entry_diagnostics:
                     self.risk_diagnostics[key] = dict(self.gateway.last_entry_diagnostics)
@@ -550,7 +560,17 @@ class DemoEngine:
                     loss = api.order_calc_profit(request['type'],symbol,request['volume'],request['price'],request['sl'])
                     if loss is None or not math.isfinite(loss):
                         raise DemoOnlyError('Riesgo monetario global desconocido')
+                    if clearance['binding']:
+                        ceiling=clearance.get('maxRiskEUR')
+                        if (type(ceiling) not in (int,float) or not math.isfinite(ceiling) or ceiling<=0
+                                or max(0,-loss)*1.1>ceiling*clearance['sizeMultiplier']+1e-8):
+                            raise DemoOnlyError('El lote excede el presupuesto EUR aprobado por el auditor')
                     nominal_eur=self.gateway.notional_eur(symbol,request['volume'],request['price'],now,self.clock_skew)
+                    if clearance['binding']:
+                        ceiling=clearance.get('maxNotionalEUR')
+                        if (type(ceiling) not in (int,float) or not math.isfinite(ceiling) or ceiling<=0
+                                or nominal_eur is None or nominal_eur>ceiling*clearance['sizeMultiplier']+1e-8):
+                            raise DemoOnlyError('El lote excede el nominal EUR revisado por el auditor')
                     proposal = portfolio_risk.assess(symbol,'long' if direction > 0 else 'short',
                         max(0,-loss)*1.1,nominal_eur,source='mt5',bot_id=bot.id,reserve=True)
                     if not proposal['allowed']:

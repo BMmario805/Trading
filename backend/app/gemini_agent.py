@@ -464,13 +464,37 @@ class ProviderError(RuntimeError):
 AGENT = None
 
 
+def _apply_swarm_fakeout(result, symbol, direction, now):
+    """El fakeout de Grok-X-Pulse cierra el mismo veto contextual. No abre red."""
+    try:
+        from . import ai_swarm
+        pulse = ai_swarm.fresh_pulse(symbol, now)
+    except (ImportError, OSError, TypeError, ValueError):
+        return
+    if not isinstance(pulse, dict) or pulse.get('fakeout') is not True:
+        return
+    if pulse.get('trapDirection') not in (direction, 'none', None):
+        return
+    sign = 1 if direction == 'long' else -1
+    citations = pulse.get('citations') if isinstance(pulse.get('citations'), list) else []
+    result['evidence'].append(dict(id='grok-x-pulse', catalyst='other', direction=-sign,
+        confidence=pulse.get('convictionMultiplier'), publishedAt=now, url=citations[0] if citations else None,
+        scope='swarm-fakeout', observedSymbol=symbol))
+    note = 'Veto contextual: fakeout de noticias (Grok-X-Pulse)'
+    result['reason'] = note if result.get('allowed') is not False else result['reason'] + '; ' + note
+    result['allowed'] = False
+
+
 def catalyst_gate(symbol, direction, *, now=None):
-    """Veto por activo exacto o impacto macro explícito sobre su factor."""
+    """Veto por activo exacto, impacto macro explícito o fakeout reciente del enjambre."""
     from .portfolio_risk import factor
     now=time.time() if now is None else now
     result=dict(allowed=True,policy='fresh-opposing-catalyst-v2',symbol=symbol,
                 reason='Sin catalizador contrario reciente aplicable',evidence=[])
-    if AGENT is None or direction not in ('long','short') or inspect.iscoroutinefunction(AGENT.snapshot):
+    if direction not in ('long','short'):
+        return result
+    if AGENT is None or inspect.iscoroutinefunction(AGENT.snapshot):
+        _apply_swarm_fakeout(result, symbol, direction, now)
         return result
     def recent(value):
         return isinstance(value,(int,float)) and math.isfinite(value) and 0<=now-value<7200
@@ -506,6 +530,7 @@ def catalyst_gate(symbol, direction, *, now=None):
             result.update(allowed=False,reason='Veto contextual: catalizador contrario reciente ('+', '.join(sorted({e['catalyst'] for e in result['evidence']}))+')')
     except (OSError,sqlite3.Error,ValueError,TypeError,KeyError):
         result['reason']='Observación contextual no disponible; continúan los controles técnicos'
+    _apply_swarm_fakeout(result, symbol, direction, now)
     return result
 
 
@@ -515,11 +540,21 @@ def start():
         AGENT = Agent(load_settings())
     if AGENT.settings.key and (AGENT.task is None or AGENT.task.done()):
         AGENT.task = asyncio.create_task(AGENT.run(), name='gemini-observer')
+    try:
+        from . import ai_swarm
+        ai_swarm.start()
+    except Exception as exc:
+        log.warning('Enjambre híbrido no iniciado: %s', type(exc).__name__)
 
 
 async def stop():
     if AGENT:
         await AGENT.close()
+    try:
+        from . import ai_swarm
+        await ai_swarm.stop()
+    except Exception as exc:
+        log.warning('Enjambre híbrido no se detuvo: %s', type(exc).__name__)
 
 
 def snapshot(symbol):

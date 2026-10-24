@@ -103,6 +103,8 @@ class BookStream:
                                   bidQty=str(bqty), askQty=str(aqty), updateId=update,
                                   receivedAt=time.time(), monotonicAt=time.monotonic())
         self.messages += 1
+        from .telemetry import book_changed
+        book_changed(symbol)
         return True
 
     def fresh(self, symbols):

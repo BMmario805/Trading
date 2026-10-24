@@ -108,6 +108,23 @@ META_PROCESSING_VERSION = 2  # Recibos atómicos v1 + recuperación acotada de n
 _scheduler_task: asyncio.Task | None = None
 
 
+def closed_net_sample(trades):
+    """Muestra neta de una política/cuenta ya filtrada por su propietario.
+
+    Solo cierres completos; no convierte objetivos, parciales ni convicción en
+    observaciones. El payoff exige ganancias y pérdidas reales.
+    """
+    pnls = [float(row['pnl']) for row in trades if row.get('status') == 'closed'
+            and type(row.get('pnl')) in (int, float) and math.isfinite(row['pnl'])]
+    wins = [p for p in pnls if p > 0]
+    losses = [-p for p in pnls if p < 0]
+    payoff = (sum(wins)/len(wins))/(sum(losses)/len(losses)) if wins and losses else None
+    return dict(sampleSize=len(pnls), winRate=100*len(wins)/len(pnls) if pnls else None,
+                profitFactor=sum(wins)/sum(losses) if losses else None,
+                expectancyNet=sum(pnls)/len(pnls) if pnls else None,
+                payoffRatio=payoff, breakEvenWinRate=100/(1+payoff) if payoff else None)
+
+
 def _conn() -> sqlite3.Connection:
     con = sqlite3.connect(DB_PATH, factory=Connection)
     con.execute(

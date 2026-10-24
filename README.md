@@ -308,6 +308,52 @@ color y una leyenda con su PnL (`?perBot=true` en el endpoint).
 
 ## Cómo ejecutarlo
 
+La cocina recibe roles, conclusiones de agentes, órdenes maker y posiciones por
+el mismo WebSocket `/ws`. Recupera instantáneas al reconectar y conserva HTTP
+como reconciliación cada 30 segundos. Las colas por navegador están acotadas;
+un cliente lento no retiene el motor de riesgo. Los mensajes de agentes son
+resúmenes y veredictos publicados, no razonamiento interno.
+
+El auditor `GPT-Quant-Risk` comparte llamada y presupuesto con el enjambre de
+Grok. Usa [Structured Outputs de OpenAI](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat)
+y vuelve a aplicar los vetos en código. Su veredicto añade `approved`,
+`adjusted_risk_fraction`, `kelly_score`, `friction_warning` y `rationale`.
+Kelly solo se calcula con cierres netos y payoff observado; menos de 30 cierres
+limitan el tamaño al 50 %. El historial de cada mesa y política se calcula por
+separado del laboratorio.
+
+El modo configurado usa las suscripciones: `SWARM_TRANSPORT=subscription` en
+`.runtime/swarm.env`. Grok Build y Codex ejecutan las evaluaciones con sus
+sesiones oficiales, sin copiar cookies ni exportar tokens. No necesita claves
+de API y no recurre a una API de pago al fallar la sesión o agotarse el cupo.
+Consume la cuota incluida en los planes; no añade capacidad ilimitada.
+
+Los clientes deben estar instalados y autenticados (`grok login` y
+`codex login`, eligiendo ChatGPT). Se prefiere el ejecutable de la app Codex
+frente a un npm global antiguo. Pueden fijarse rutas con `SWARM_GROK_BIN` y
+`SWARM_CODEX_BIN`. Los procesos no reciben las variables de claves de API,
+Codex exige una sesión ChatGPT y Grok se detiene si detecta configuración BYOK.
+Las evaluaciones de riesgo y flujo no pueden ejecutar herramientas; el pulso
+solo tiene búsqueda/lectura públicas. No publica razonamiento interno.
+
+La configuración local limita la observación a 8 ciclos/día, 2/h, con al menos
+15 minutos entre ciclos. La observación periódica rota un símbolo cada tres
+horas; las propuestas de entrada comparten ese cupo. Se mantiene
+`SWARM_ENABLED=1`, `SWARM_MODE=shadow` y `SWARM_ARM=0`. Las llamadas pueden tardar
+decenas de segundos, mientras la vigilancia de stops continúa independiente.
+El panel distingue la preparación local de una respuesta real del proveedor.
+
+El transporte API anterior sigue disponible solo eligiendo explícitamente
+`SWARM_TRANSPORT=api` y configurando sus claves. No se selecciona como respaldo
+automático. La configuración local y las claves no se incluyen en Git.
+
+En sombra las revisiones no alteran las entradas simuladas existentes. La
+autorización del enjambre solo es vinculante en modo paper armado, dentro de
+su universo BTC/LINK/SPY; SPY conserva la ruta MT5 demo. Los cierres y stops
+siguen independientes. Antes de admitir una entrada se comprueban de nuevo
+la antigüedad del quorum, el libro actual y la cartera. El enjambre no envía
+órdenes por sí mismo.
+
 ```powershell
 # Terminal 1 — backend (puerto 8000)
 backend\.venv\Scripts\python -m uvicorn app.main:app --app-dir backend --port 8000

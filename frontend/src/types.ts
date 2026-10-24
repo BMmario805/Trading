@@ -404,3 +404,75 @@ export const INTERVAL_SECONDS: Record<Interval, number> = {
   '4h': 3600, // el backend sirve velas de 1h para "4h" en Yahoo
   '1d': 86400,
 }
+
+export interface DeskCandle { time: number; open: number; high: number; low: number; close: number }
+export interface DeskRole { name: string; status: string; detail: string; provider: string; at?: number }
+export interface QuantVerdict {
+  approved: boolean; adjusted_risk_fraction: number; kelly_score: number; friction_warning: string; rationale: string
+}
+export interface MakerOrder {
+  symbol: string; entryKey?: string; side: string; quantity: number; filled: number; expiresAt: number
+  placedAt?: number; remainingSeconds?: number; pressure?: number | null; bookFresh?: boolean; status?: string
+}
+export interface MakerState {
+  pending: MakerOrder[]; reservedCash: number; ttlSeconds?: number
+  history?: { symbol: string; side: string; at: number; status: string; filled: number; quantity: number }[]
+}
+export interface LiveEnvelope { at: number; sequence: number; streamId: string }
+export interface RoleUpdate extends LiveEnvelope {
+  type: 'role_update'; desk: string; id: number; role: string; status: string; detail: string; provider: string
+}
+export interface DeskSnapshot extends LiveEnvelope { type: 'desk_snapshot'; desk: string; data: DeskState }
+export type DeskEvent = RoleUpdate | DeskSnapshot
+export interface AgentThought extends LiveEnvelope {
+  type: 'agent_thought'; desk: string; symbol: string; agent: string; role: string; phase: string; detail: string
+  approved?: boolean; conviction?: number; score?: number | null; verdict?: QuantVerdict
+  report?: Record<string, unknown> | null
+}
+export interface MakerPulse extends LiveEnvelope { type: 'orderbook_pulse'; desk: string; maker: MakerState }
+export interface PositionUpdate extends LiveEnvelope { type: 'position_update'; desk: string; data: OpenPositions }
+export interface SwarmDecision {
+  symbol: string; at: number; score: number | null; quorum: boolean; reason: string; profile: string
+  pulse?: Record<string, unknown>; flow?: Record<string, unknown>; risk?: Record<string, unknown>; commander?: Record<string, unknown>
+}
+export interface SwarmStatus {
+  transport?: 'api' | 'subscription'; requiresApiKeys?: boolean; billing?: 'api' | 'subscription'
+  subscription?: { grokReady: boolean; chatgptReady: boolean; configured: boolean } | null
+  configured: boolean; enabled: boolean; running?: boolean; mode: 'shadow' | 'paper'; armed: boolean
+  xaiConfigured?: boolean; openaiConfigured?: boolean; remaining24h?: number
+  estimatedCostMonthUSD?: number | null; monthlyCapUSD?: number; decisions: (SwarmDecision | null)[]
+}
+export interface SwarmStatusEvent extends LiveEnvelope { type: 'swarm_status'; data: SwarmStatus }
+export type LiveEvent = DeskEvent | AgentThought | MakerPulse | PositionUpdate | SwarmStatusEvent
+export type SocketStatus = 'connecting' | 'connected' | 'disconnected'
+export interface Candidate { symbol: string; eligible: boolean; selected: boolean; change24h: number; volumeUSD: number; spreadBp: number; reason: string; qualityReason?: string; status?: string; checkedAt?: number | null; category?: string; base?: string; source?: string }
+export interface OpenPosition {
+  id: string; source: 'desk' | 'lab' | 'mt5'; sourceLabel: string; botId: string; botName: string
+  symbol: string; side: 'long' | 'short'; quantity: number | null; entryPrice: number | null; currentPrice: number | null
+  notional: number | null; unrealizedPnl: number | null; currency: string | null; openedAt: number | null
+  stopLoss: number | null; takeProfit: number | null; priceFresh: boolean; accountMode: string
+  quantityUnit: 'units' | 'lots'; pnlBasis: 'estimated-net' | 'gross' | 'broker-floating'; priceUpdatedAt: number | null
+}
+export interface PositionSource { source: 'desk' | 'lab' | 'mt5'; label: string; accountMode: 'paper' | 'demo'; available: boolean; updatedAt: number | null; stale: boolean; message: string | null }
+export interface OpenPositions { positions: OpenPosition[]; sources: PositionSource[]; updatedAt: number }
+export interface Trade { entryKey: string; symbol: string; entry: number; entryTime: number; status: string; notional: number; pnl?: number; realizedPnl?: number; partialDone?: boolean; exitReason?: string; exitTime?: number }
+export interface DeskState {
+  id: 'crypto' | 'forex' | 'stocks'; name: string; currency: 'USDT' | 'USD'; session: { open: boolean; label: string }
+  enabled: boolean; equity: number; initial: number; cash: number; benchmark: number
+  funding?: { currency: 'EUR'; amount: number; netQuotePerEuro: number; at: number } | null
+  selected: string | null; benchmarkSymbol: string | null; examined: number; discarded: number; eligible?: number; filtered?: number; notSelected?: number; scope?: string
+  filterReasons?: { reason: string; count: number }[]; roles: DeskRole[]
+  scanBatchSize?: number; scanReviewed?: number; maxPositions?: number; scanIntervalSeconds?: number; candleInterval?: string; chartInterval?: string
+  policy?: { strategyProfile?: string; riskProfile?: string; partialFraction?: number | null; maxNotionalPct: number; minNetRewardRisk: number; riskPct: number; totalRiskPct: number; maxHoldSeconds?: number; partialAtR?: number | null; trailAtr?: number; stopAtr?: number; trailAfterR?: number }
+  maker?: MakerState
+  monitoring?: { riskIndependent: boolean; riskError: string | null; quoteAt: number | null }
+  positions?: { symbol: string }[]
+  candidates: Candidate[]; candles: DeskCandle[]; trades: Trade[]
+  position: null | { symbol: string; notional: number; risk: number; sl: number; tp: number; lastBid: number; targetIsReference?: boolean }
+  stats: { closed: number; wins: number; pnl: number }
+  experiment?: { version: string; closed: number; wins: number; pnl: number; opened: number }
+  events: { id: number; at: number; role: string; status: string; detail: string }[]
+  curve: { time: number; equity: number; benchmark: number }[]
+  error: string | null; updatedAt: number | null
+  gemini: null | { model: string; estimatedCostMonthUSD: number; monthlyCapUSD: number; remaining24h: number }
+}

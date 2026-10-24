@@ -13,11 +13,11 @@ from .hub import hub
 from .indicators import technical_analysis
 from . import sentiment as sentiment_mod
 from . import tradingview
-from . import gemini_agent
+from . import gemini_agent, ai_swarm
 from . import desk
 from . import mt5_demo
 from . import mt5_performance
-from . import open_positions
+from . import open_positions, telemetry
 from . import portfolio_risk, research_jobs, performance_review, runtime_guard
 from .sentiment import get_opinions, get_sentiment
 from .cloud_runtime import health_snapshot, mount_frontend
@@ -37,9 +37,12 @@ async def lifespan(_: FastAPI):
         mt5_demo.start()
         gemini_agent.start()
         desk.start()
+        telemetry.start()
         try:
             yield
         finally:
+            await telemetry.stop()
+            await hub.stop()
             await research_jobs.stop()
             await desk.stop()
             await gemini_agent.stop()
@@ -146,6 +149,31 @@ async def gemini_status():
 @app.get('/api/agents/gemini/{symbol_id}')
 async def gemini_observation(symbol_id: str):
     return gemini_agent.snapshot(_symbol(symbol_id).id)
+
+
+@app.get('/api/agents/swarm')
+async def swarm_status():
+    ai_swarm.start()
+    return ai_swarm.snapshot_status()
+
+
+@app.get('/api/agents/swarm/{symbol_id}')
+async def swarm_observation(symbol_id: str):
+    ai_swarm.start()
+    return ai_swarm.public_symbol(_symbol(symbol_id).id)
+
+
+@app.post('/api/agents/swarm/evaluate')
+async def swarm_evaluate(body: ai_swarm.EvaluateRequest):
+    ai_swarm.start()
+    if ai_swarm.SWARM is None:
+        raise HTTPException(503, 'Enjambre no iniciado')
+    try:
+        return await ai_swarm.SWARM.evaluate(
+            body.symbol, body.direction, entry=body.entry, stop=body.stop, target=body.target,
+            qty=body.qty, risk_eur=body.riskEUR, notional_eur=body.notionalEUR)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.get('/api/mt5')
@@ -265,6 +293,7 @@ async def analysis(symbol_id: str, interval: str = "1h"):
         "technical": tech,
         "sentiment": senti,
         "gemini": gemini_agent.snapshot(sym.id),
+        "swarm": ai_swarm.public_symbol(sym.id),
         "upProbability": round(combined * 100, 1),
         "verdict": (
             "alcista" if combined >= 0.6 else
@@ -407,9 +436,13 @@ async def bot_training(bot_id: str):
 @app.websocket("/ws")
 async def ws_prices(ws: WebSocket):
     await ws.accept()
+    await hub.connect(ws)
+    telemetry.changed('all')
     try:
         while True:
             msg = await ws.receive_json()
+            if not isinstance(msg, dict):
+                continue
             action, symbol_id = msg.get("action"), str(msg.get("symbol", "")).upper()
             if action == "subscribe":
                 await hub.subscribe(ws, symbol_id)
@@ -418,7 +451,7 @@ async def ws_prices(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        hub.unsubscribe(ws)
+        hub.disconnect(ws)
 
 
 @app.get("/api/markets/quality")

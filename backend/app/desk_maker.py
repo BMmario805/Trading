@@ -13,6 +13,8 @@ import time
 from .book_stream import BOOKS
 from .maker_simulation import PostOnlyOrder
 from .economics import planned_trade
+from .hub import hub
+from . import telemetry
 
 TTL = 60
 
@@ -42,6 +44,26 @@ class DeskMaker:
     def orders(self):
         return self.desk.state.setdefault('makerOrders',[])
 
+    def public(self):
+        books=BOOKS.fresh([o['symbol'] for o in self.orders])
+        pending=[]
+        for row in self.orders:
+            order=row['order']
+            book=books.get(row['symbol'])
+            bid=float(book['bidQty']) if book else None
+            ask=float(book['askQty']) if book else None
+            pending.append(dict(symbol=row['symbol'],entryKey=row['entryKey'],side=row['side'],
+                quantity=order['quantity'],filled=order['filled'],expiresAt=order['expires_at'],
+                placedAt=order['placed_at'],remainingSeconds=max(0,order['expires_at']-time.time()),
+                pressure=(bid-ask)/(bid+ask) if book and bid+ask>0 else None,
+                bookFresh=bool(book),pressureBasis='best-bid-ask',status=order['status']))
+        return dict(mode='paper-observed-queue',ttlSeconds=TTL,pending=pending,
+            reservedCash=sum(o['reservedCash'] for o in self.orders),
+            history=self.desk.state.get('makerHistory',[]),executionVerified=False,feeDiscountAssumed=False)
+
+    def publish(self):
+        hub.broadcast_event(dict(type='orderbook_pulse',desk=self.desk.desk_id,maker=self.public()))
+
     def commit(self,mutate):
         engine=self.desk
         previous=deepcopy(engine.state)
@@ -57,6 +79,8 @@ class DeskMaker:
             engine.state=previous
             engine.focus_position()
             raise
+        self.publish()
+        telemetry.changed(engine.desk_id)
 
     def post(self,position,side,quantity):
         engine=self.desk

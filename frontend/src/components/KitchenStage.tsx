@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { CSSProperties } from 'react'
 import './KitchenStage.css'
 
@@ -11,6 +11,7 @@ export interface KitchenRole {
 }
 
 interface KitchenStageProps {
+  bubbles?: Record<string, { text: string; at: number }>
   roles: KitchenRole[]
   selectedSymbol: string | null
   hasPosition: boolean
@@ -34,6 +35,7 @@ const STATUS_LABELS: Record<string, string> = {
   waiting: 'En espera', selected: 'Seleccionado', ready: 'Preparado', blocked: 'Bloqueado',
   corroborated: 'Verificado', managing: 'Gestionando', executed: 'Ejecutado', closed: 'Cerrado',
   error: 'Revisar', evaluating: 'Evaluando', scanning: 'Explorando',
+  pending: 'En cola', partial: 'Salida parcial',
 }
 const WORKING_STATES = new Set(['selected', 'ready', 'corroborated', 'managing', 'executed', 'evaluating', 'scanning'])
 
@@ -136,7 +138,12 @@ function KitchenBackdrop({ id }: { id: string }) {
   </svg>
 }
 
-export default function KitchenStage({ roles, selectedSymbol, hasPosition, enabled, openRole, onSelectRole, motionEnabled }: KitchenStageProps) {
+export default function KitchenStage({ roles, bubbles = {}, selectedSymbol, hasPosition, enabled, openRole, onSelectRole, motionEnabled }: KitchenStageProps) {
+  const [now, setNow] = useState(() => Date.now() / 1000)
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now() / 1000), 500)
+    return () => window.clearInterval(timer)
+  }, [])
   const id = useId().replace(/:/g, '')
   return <div className={`kitchen-stage ${motionEnabled ? '' : 'kitchen-motion-off'} ${enabled ? 'kitchen-is-open' : 'kitchen-is-paused'}`} aria-label="Cocina de Mesa Siete: siete chefs representan los procesos del motor">
     <KitchenBackdrop id={id} />
@@ -159,6 +166,7 @@ export default function KitchenStage({ roles, selectedSymbol, hasPosition, enabl
           title={role?.detail ?? station.task}
         >
           <span className="kitchen-station-state"><i />{STATUS_LABELS[status] ?? status}</span>
+          {bubbles[station.name] && now - bubbles[station.name].at < 7 && now - bubbles[station.name].at >= -5 && <span className="kitchen-speech-bubble" key={bubbles[station.name].at}>{bubbles[station.name].text}</span>}
           <svg className="kitchen-station-art" viewBox="0 0 250 225" fill="none" aria-hidden="true">
             <ellipse className="kitchen-station-shadow" cx="123" cy="206" rx="100" ry="14" fill="#8c7050" opacity=".16" />
             <ellipse className="kitchen-selected-ring" cx="123" cy="205" rx="104" ry="16" stroke={station.color} strokeWidth="3" strokeDasharray="5 5" />

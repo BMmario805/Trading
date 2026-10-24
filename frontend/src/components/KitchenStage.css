@@ -132,3 +132,7 @@
   .kitchen-stage .kitchen-work-spark { opacity: 0; }
   .kitchen-stage .is-working .kitchen-steam { opacity: .65; }
 }
+.kitchen-speech-bubble{position:absolute;z-index:8;top:36px;left:50%;transform:translateX(-50%);width:min(210px,120%);padding:10px 12px;border:1px solid #e4d7bf;border-radius:12px;background:#fffdf7;color:#63513d;font-size:11px;font-weight:500;line-height:1.45;text-align:left;box-shadow:0 5px 16px #6e543224;pointer-events:none;overflow-wrap:anywhere;animation:kitchen-speech-in .18s ease-out}
+.kitchen-speech-bubble:after{content:'';position:absolute;bottom:-6px;left:50%;width:10px;height:10px;background:#fffdf7;border-right:1px solid #e4d7bf;border-bottom:1px solid #e4d7bf;transform:rotate(45deg)}
+@keyframes kitchen-speech-in{from{opacity:0;translate:0 5px}to{opacity:1;translate:0 0}}
+@media(prefers-reduced-motion:reduce){.kitchen-speech-bubble{animation:none}}

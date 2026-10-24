@@ -1,43 +1,13 @@
 import { lazy, memo, Suspense, useEffect, useRef, useState } from 'react'
 import { CandlestickSeries, ColorType, createChart, type IChartApi, type ISeriesApi, type Time } from 'lightweight-charts'
-import KitchenStage, { type KitchenRole } from './KitchenStage'
+import KitchenStage from './KitchenStage'
+import { PriceSocket } from '../api'
+import type { DeskState as Desk, DeskCandle as Candle, OpenPositions, DeskRole as KitchenRole } from '../types'
+import LiveSwarmTicker from './LiveSwarmTicker'
 import ResearchPanel from './ResearchPanel'
 import './DeskPanel.css'
 
 const PerformanceReview = lazy(() => import('./PerformanceReview'))
-
-interface Candle { time: number; open: number; high: number; low: number; close: number }
-interface Candidate { symbol: string; eligible: boolean; selected: boolean; change24h: number; volumeUSD: number; spreadBp: number; reason: string; qualityReason?: string; status?: string; checkedAt?: number | null; category?: string; base?: string; source?: string }
-interface OpenPosition {
-  id: string; source: 'desk' | 'lab' | 'mt5'; sourceLabel: string; botId: string; botName: string
-  symbol: string; side: 'long' | 'short'; quantity: number | null; entryPrice: number | null; currentPrice: number | null
-  notional: number | null; unrealizedPnl: number | null; currency: string | null; openedAt: number | null
-  stopLoss: number | null; takeProfit: number | null; priceFresh: boolean; accountMode: string
-  quantityUnit: 'units' | 'lots'; pnlBasis: 'estimated-net' | 'gross' | 'broker-floating'; priceUpdatedAt: number | null
-}
-interface PositionSource { source: 'desk' | 'lab' | 'mt5'; label: string; accountMode: 'paper' | 'demo'; available: boolean; updatedAt: number | null; stale: boolean; message: string | null }
-interface OpenPositions { positions: OpenPosition[]; sources: PositionSource[]; updatedAt: number }
-interface Trade { entryKey: string; symbol: string; entry: number; entryTime: number; status: string; notional: number; pnl?: number; realizedPnl?: number; partialDone?: boolean; exitReason?: string; exitTime?: number }
-interface Desk {
-  id: 'crypto' | 'forex' | 'stocks'; name: string; currency: 'USDT' | 'USD'; session: { open: boolean; label: string }
-  enabled: boolean; equity: number; initial: number; cash: number; benchmark: number
-  funding?: { currency: 'EUR'; amount: number; netQuotePerEuro: number; at: number } | null
-  selected: string | null; benchmarkSymbol: string | null; examined: number; discarded: number; eligible?: number; filtered?: number; notSelected?: number; scope?: string
-  filterReasons?: { reason: string; count: number }[]; roles: KitchenRole[]
-  scanBatchSize?: number; scanReviewed?: number; maxPositions?: number; scanIntervalSeconds?: number; candleInterval?: string; chartInterval?: string
-  policy?: { strategyProfile?: string; riskProfile?: string; partialFraction?: number | null; maxNotionalPct: number; minNetRewardRisk: number; riskPct: number; totalRiskPct: number; maxHoldSeconds?: number; partialAtR?: number | null; trailAtr?: number; stopAtr?: number; trailAfterR?: number }
-  maker?: { pending: {symbol: string; side: string; quantity: number; filled: number; expiresAt: number}[]; reservedCash: number }
-  monitoring?: { riskIndependent: boolean; riskError: string | null; quoteAt: number | null }
-  positions?: { symbol: string }[]
-  candidates: Candidate[]; candles: Candle[]; trades: Trade[]
-  position: null | { symbol: string; notional: number; risk: number; sl: number; tp: number; lastBid: number; targetIsReference?: boolean }
-  stats: { closed: number; wins: number; pnl: number }
-  experiment?: { version: string; closed: number; wins: number; pnl: number; opened: number }
-  events: { id: number; at: number; role: string; status: string; detail: string }[]
-  curve: { time: number; equity: number; benchmark: number }[]
-  error: string | null; updatedAt: number | null
-  gemini: null | { model: string; estimatedCostMonthUSD: number; monthlyCapUSD: number; remaining24h: number }
-}
 
 const PURPOSES: Record<string, string> = { Selector: 'Escoge el ingrediente', Tape: 'Lee la temperatura', Price: 'Busca el punto de entrada', Wire: 'Revisa las fuentes', Size: 'Mide las cantidades', Exec: 'Sirve la orden simulada', Risk: 'Cuida cada posición' }
 const STATES: Record<string, string> = { waiting: 'En espera', selected: 'Seleccionado', ready: 'Preparado', blocked: 'Bloqueado', corroborated: 'Referencia corroborada', managing: 'Gestionando', executed: 'Ejecutado', closed: 'Cerrado', partial: 'Salida parcial' }
@@ -86,26 +56,32 @@ function EquityChart({ rows }: { rows: Desk['curve'] }) {
   </svg>
 }
 
-function OpenPositionsPanel() {
+function OpenPositionsPanel({ socket }: { socket: PriceSocket }) {
   const [data, setData] = useState<OpenPositions | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    let cancelled = false, pending = false
+    let cancelled = false, pending = false, revision = 0
     const load = async () => {
       if (pending) return
       pending = true
+      const before = revision
       try {
         const response = await fetch('/api/positions/open')
         if (!response.ok) throw new Error('unavailable')
         const value: OpenPositions = await response.json()
-        if (!cancelled) { setData(value); setError(null) }
+        if (!cancelled && before === revision) { setData(value); setError(null) }
       } catch { if (!cancelled) setError('No se pudieron actualizar las operaciones. Se conserva la última lectura disponible.') }
       finally { pending = false }
     }
+    const stop = socket.onPositionUpdate(event => { revision++; setData(event.data); setError(null) })
+    const stopStatus = socket.onStatus(status => {
+      if (status === 'connected') void load()
+      else setError('Conexión en vivo pendiente. Se conserva la última lectura disponible.')
+    })
     void load()
-    const timer = window.setInterval(() => { void load() }, 5_000)
-    return () => { cancelled = true; window.clearInterval(timer) }
-  }, [])
+    const timer = window.setInterval(() => { void load() }, 30_000)
+    return () => { cancelled = true; stop(); stopStatus(); window.clearInterval(timer) }
+  }, [socket])
   return <section className="kitchen-open-positions" aria-labelledby="kitchen-positions-title">
     <div className="kitchen-section-title"><div><span className="kitchen-eyebrow">LOS PLATOS EN MARCHA</span><h2 id="kitchen-positions-title">Operaciones abiertas <span className="kitchen-count">{data?.positions.length ?? '—'}</span></h2><p>Mesa Siete, Laboratorio y MT5, reunidos en una misma vista.</p></div>{data && <time>Lectura {timeOf(data.updatedAt)}</time>}</div>
     {error && <p className="kitchen-error" role="status">{error}</p>}
@@ -149,6 +125,8 @@ function AvailableMarkets({ desk }: { desk: Desk }) {
 }
 
 function DeskPanel({ market }: { market: Desk['id'] }) {
+  const [socket] = useState(() => new PriceSocket())
+  const [bubbles, setBubbles] = useState<Record<string, { text: string; at: number }>>({})
   const [desk, setDesk] = useState<Desk | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -162,34 +140,63 @@ function DeskPanel({ market }: { market: Desk['id'] }) {
   const eventTimer = useRef<number | undefined>(undefined)
   const chartDetails = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
-    let cancelled = false, pending = false
+    let cancelled = false, pending = false, revision = 0
+    const announce = (events: Desk['events']) => {
+      if (seenEvents.current) {
+        const fresh = events.filter(event => !seenEvents.current!.has(event.id))
+        if (fresh.length) {
+          setNewEvents(new Set(fresh.map(event => event.id)))
+          setAnnouncement(`${fresh[0].role}: ${fresh[0].detail}`)
+          window.clearTimeout(eventTimer.current)
+          eventTimer.current = window.setTimeout(() => setNewEvents(new Set()), 2_800)
+        }
+      }
+      seenEvents.current = new Set(events.map(event => event.id))
+    }
     const load = async () => {
       if (pending) return
       pending = true
+      const before = revision
       try {
         const response = await fetch(`/api/desks/${market}`)
         if (!response.ok) throw new Error('unavailable')
         const value: Desk = await response.json()
-        if (!cancelled) {
-          if (seenEvents.current) {
-            const fresh = value.events.filter(event => !seenEvents.current!.has(event.id))
-            if (fresh.length) {
-              setNewEvents(new Set(fresh.map(event => event.id)))
-              setAnnouncement(`${fresh[0].role}: ${fresh[0].detail}`)
-              window.clearTimeout(eventTimer.current)
-              eventTimer.current = window.setTimeout(() => setNewEvents(new Set()), 2_800)
-            }
-          }
-          seenEvents.current = new Set(value.events.map(event => event.id))
-          setDesk(value); setError(null)
-        }
+        if (!cancelled && revision === before) { announce(value.events); setDesk(value); setError(null) }
       } catch { if (!cancelled) setError('No se pudo actualizar la mesa. Se conservan los últimos datos.') }
       finally { pending = false }
     }
+    const stopDesk = socket.onDeskEvent(event => {
+      if (event.desk !== market) return
+      revision++
+      setError(null)
+      if (event.type === 'desk_snapshot') {
+        announce(event.data.events)
+        setDesk(event.data)
+      } else {
+        const role: KitchenRole = { name: event.role, status: event.status, detail: event.detail, provider: event.provider, at: event.at }
+        setDesk(previous => previous ? { ...previous,
+          roles: previous.roles.some(row => row.name === event.role) ? previous.roles.map(row => row.name === event.role ? role : row) : [...previous.roles, role],
+          events: [{ id: event.id, at: event.at, role: event.role, status: event.status, detail: event.detail }, ...previous.events.filter(row => row.id !== event.id)].slice(0, 30),
+        } : previous)
+        setNewEvents(new Set([event.id])); setAnnouncement(`${event.role}: ${event.detail}`)
+        setBubbles(previous => ({ ...previous, [event.role]: { text: `${event.provider}: ${event.detail}`, at: event.at } }))
+      }
+    })
+    const stopMaker = socket.onMakerPulse(event => {
+      if (event.desk === market) { revision++; setDesk(previous => previous ? { ...previous, maker: event.maker } : previous) }
+    })
+    const stopThought = socket.onAgentThought(event => {
+      if (event.desk === market) setBubbles(previous => ({ ...previous, [event.role]: { text: `${event.agent}: ${event.detail}`, at: event.at } }))
+    })
+    const stopStatus = socket.onStatus(status => {
+      if (status === 'connected') { setError(null); void load() }
+      else setError('Reconectando con la cocina. Se conserva la última lectura.')
+    })
+    socket.open()
     void load()
-    const timer = window.setInterval(() => { void load() }, 5_000)
-    return () => { cancelled = true; window.clearInterval(timer); window.clearTimeout(eventTimer.current) }
-  }, [market])
+    const timer = window.setInterval(() => { void load() }, 30_000)
+    return () => { cancelled = true; stopDesk(); stopMaker(); stopThought(); stopStatus(); socket.close(); window.clearInterval(timer); window.clearTimeout(eventTimer.current) }
+  }, [market, socket])
   const action = async (name: string) => {
     setBusy(true)
     try {
@@ -234,7 +241,7 @@ function DeskPanel({ market }: { market: Desk['id'] }) {
     <div className="kitchen-hero-grid">
       <section className="kitchen-workspace" aria-label="Los siete chefs y el proceso de la mesa">
         <div className="kitchen-section-head"><div><span className="kitchen-eyebrow">EL EQUIPO, EN DIRECTO</span><h2>Cada chef tiene su punto.</h2></div><span className="kitchen-scene-hint"><i />Toca un puesto para verlo</span></div>
-        <KitchenStage roles={desk.roles} selectedSymbol={desk.selected} hasPosition={Boolean(desk.position)} enabled={desk.enabled && desk.session.open} openRole={openRole} onSelectRole={setOpenRole} motionEnabled={motionEnabled && !error && !desk.error} />
+        <KitchenStage bubbles={bubbles} roles={desk.roles} selectedSymbol={desk.selected} hasPosition={Boolean(desk.position)} enabled={desk.enabled && desk.session.open} openRole={openRole} onSelectRole={setOpenRole} motionEnabled={motionEnabled && !error && !desk.error} />
         {activeRole && <div className={`kitchen-role-detail role-${activeRole.status}`} key={activeRole.name}><div className="kitchen-role-number">{String(desk.roles.findIndex(role => role.name === openRole) + 1).padStart(2, '0')}</div><div className="kitchen-role-copy"><div><strong>{activeRole.name}</strong><span>{PURPOSES[activeRole.name]}</span><b className={`kitchen-state state-${activeRole.status}`}>{statusOf(activeRole.status)}</b></div><p>{activeRole.detail}</p><small>{activeRole.provider}{activeRole.at ? ` · ${timeOf(activeRole.at)}` : ''}</small></div></div>}
       </section>
       <aside className="kitchen-order-wrap" aria-label="Pedido y controles de la posición simulada">
@@ -251,7 +258,8 @@ function DeskPanel({ market }: { market: Desk['id'] }) {
       </aside>
     </div>
     {market === 'crypto' && <Suspense fallback={<p className="kitchen-session-note">Preparando el diagnóstico económico…</p>}><PerformanceReview /></Suspense>}
-    <OpenPositionsPanel />
+    <LiveSwarmTicker socket={socket} maker={desk.maker} market={market} />
+    <OpenPositionsPanel socket={socket} />
     {market === 'crypto' && <ResearchPanel />}
     <AvailableMarkets desk={desk} />
     <section className="kitchen-activity" aria-label="Últimos procesos registrados"><div className="kitchen-activity-head"><span className="kitchen-activity-icon" aria-hidden="true">⌁</span><div><h2>Recién salido de cocina</h2><p>Lo que está haciendo el equipo.</p></div><span className="kitchen-live-note">Registro del motor</span></div><div className="kitchen-activity-grid">{desk.events.length ? desk.events.slice(0, 3).map(event => <article className={`kitchen-activity-item ${newEvents.has(event.id) ? 'is-new' : ''}`} key={event.id}><div><span className={`kitchen-event-dot state-${event.status}`} /><strong>{event.role}</strong><time>{timeOf(event.at)}</time></div><p>{event.detail}</p><span className={`kitchen-event-status state-${event.status}`}>{statusOf(event.status)}</span></article>) : <p className="kitchen-empty">Todavía no hay decisiones registradas. El equipo está esperando datos.</p>}</div></section>
