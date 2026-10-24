@@ -29,7 +29,7 @@ class DeskEconomicsTests(unittest.IsolatedAsyncioTestCase):
     async def test_round_trip_friction_blocks_tiny_targets_and_keeps_reduced_allocation(self):
         self.assertIsNone(desk.size_order(1000,1000,100,.01,data()['metadata']['SOLUSDT']))
         order=desk.size_order(1000,1000,100,2,data()['metadata']['SOLUSDT'])
-        self.assertLessEqual(order['notional'],1000/6)
+        self.assertLessEqual(order['notional'],1000*desk.MAX_NOTIONAL_FRACTION)
         self.assertGreaterEqual(order['economics']['netRewardRisk'],1)
 
     async def test_old_scan_cannot_rewind_execution_mark(self):

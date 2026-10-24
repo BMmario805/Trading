@@ -157,6 +157,33 @@ class DemoGateway:
                        type_time=api.ORDER_TIME_GTC)
         return self.check_deal(request, info), abs(price-sl)
 
+    def notional_eur(self,symbol,volume,price,now,clock_skew=None):
+        """Nominal del contrato con conversión corroborada por ticks del bróker."""
+        info=self.api.symbol_info(symbol)
+        size=getattr(info,'trade_contract_size',None)
+        if not isinstance(size,(int,float)) or not math.isfinite(size) or size<=0:
+            return None
+        if not all(isinstance(v,(int,float)) and math.isfinite(v) and v>0 for v in (volume,price)):
+            return None
+        base,quote=getattr(info,'currency_base',None),getattr(info,'currency_profit',None)
+        mode=getattr(info,'trade_calc_mode',None)
+        forex=isinstance(mode,int) and mode in (0,5)
+        if forex and base=='EUR': return volume*size
+        if quote=='EUR': return volume*size*price
+        # En acciones MT5 puede declarar base=USD y beneficio=USD: son títulos,
+        # no unidades de dólar. Se multiplican por su precio; USDJPY sí usa base.
+        amount=volume*size*price if quote=='USD' else volume*size if forex and base=='USD' else None
+        if amount is None: return None
+        conversion=self.config.get('symbols',{}).get('EURUSD')
+        if not conversion or not self.api.symbol_select(conversion,True): return None
+        metadata=self.api.symbol_info(conversion)
+        if getattr(metadata,'currency_base',None)!='EUR' or getattr(metadata,'currency_profit',None)!='USD': return None
+        try:
+            tick=self.tick(conversion,now,clock_skew)
+        except DemoOnlyError:
+            return None
+        return amount/tick.bid  # Lado conservador: no se usa un cambio fijo inventado.
+
     def check_deal(self, request, info):
         api = self.api
         modes = []

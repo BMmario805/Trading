@@ -18,6 +18,7 @@ from . import learning, gemini_agent
 from . import market_data
 from . import sentiment as sentiment_mod
 from . import systems
+from . import aggressive
 from .config import SYMBOLS_BY_ID, Symbol, EXTRA_CRYPTO
 from . import opportunities
 from .history import DB_PATH
@@ -282,6 +283,8 @@ FLOW = replace(
     tp_atr=3.0,
     require_validation=False,
 )
+SCALPER,SWING,TREND,MEANREV,ORB,SQUEEZE,FLOW=tuple(
+    replace(c,**aggressive.BOT_UPDATES[c.id]) for c in (SCALPER,SWING,TREND,MEANREV,ORB,SQUEEZE,FLOW))
 ALL_BOTS = (SCALPER, SWING, TREND, MEANREV, ORB, SQUEEZE, FLOW)
 
 # ---------------------------------------------------------------------------
@@ -358,6 +361,8 @@ class Position:
     execution_costs: dict | None = None  # None conserva el contrato de costes antiguo
     entry_fee: float = 0.0              # importes en moneda cotizada
     economic_risk_dist: float | None = None
+    exit_policy: dict | None = None
+    max_hold_seconds: int | None = None
 
     def exit_fill(self, price: float) -> float:
         if self.execution_costs is None:
@@ -571,11 +576,12 @@ class TradingBot:
             open_rows = con.execute(
                 """SELECT id, symbol, direction, qty, entry_price, entry_time,
                           sl, tp, reasons, atr_entry, best_price, initial_risk_dist, trail_multiple, quote_to_account,
-                          execution_costs, entry_fee, economic_risk_dist FROM bot_trades
+                          execution_costs, entry_fee, economic_risk_dist,snapshot FROM bot_trades
                    WHERE bot = ? AND status = 'open'""",
                 (self.cfg.id,),
             ).fetchall()
         for r in open_rows:
+            frozen=json.loads(r[17]) if r[17] else {}
             pos = Position(
                 id=r[0], symbol=r[1], direction=r[2], qty=r[3],
                 entry_price=r[4], entry_time=r[5], sl=r[6], tp=r[7],
@@ -589,6 +595,8 @@ class TradingBot:
                 execution_costs=json.loads(r[14]) if r[14] else None,
                 entry_fee=r[15] or 0.0,
                 economic_risk_dist=r[16],
+                exit_policy=frozen.get('exitPolicy'),
+                max_hold_seconds=frozen.get('maxHoldSeconds',aggressive.LEGACY_MAX_HOLD[self.cfg.id]),
             )
             self.positions[pos.symbol] = pos
             if any(str(r).startswith("A prueba") for r in pos.reasons):
@@ -685,10 +693,10 @@ class TradingBot:
                 # tras avanzar 1R: stop a breakeven y trailing por ATR.
                 # Tras 2R el trailing se estrecha (×0.75) para blindar la
                 # ganancia acumulada sin cortar antes de tiempo el tramo bueno.
-                if pos.best_price >= pos.entry_price + pos.r_dist:
+                if pos.best_price >= pos.entry_price + (pos.exit_policy or {}).get('trailStartR',1)*pos.r_dist:
                     trail = pos.trail_atr
-                    if pos.best_price >= pos.entry_price + 2 * pos.r_dist:
-                        trail *= 0.75
+                    if pos.best_price >= pos.entry_price + (pos.exit_policy or {}).get('tightenAtR',2)*pos.r_dist:
+                        trail *= (pos.exit_policy or {}).get('tightenMultiple',.75)
                     break_even = pos.break_even_price()
                     if break_even is None:
                         break_even = pos.entry_price + 2 * half_spread
@@ -709,10 +717,10 @@ class TradingBot:
                     self._close(pos, pos.exit_fill(pos.tp), "take-profit")
                     continue
                 pos.best_price = min(pos.best_price, price)
-                if pos.best_price <= pos.entry_price - pos.r_dist:
+                if pos.best_price <= pos.entry_price - (pos.exit_policy or {}).get('trailStartR',1)*pos.r_dist:
                     trail = pos.trail_atr
-                    if pos.best_price <= pos.entry_price - 2 * pos.r_dist:
-                        trail *= 0.75
+                    if pos.best_price <= pos.entry_price - (pos.exit_policy or {}).get('tightenAtR',2)*pos.r_dist:
+                        trail *= (pos.exit_policy or {}).get('tightenMultiple',.75)
                     break_even = pos.break_even_price()
                     if break_even is None:
                         break_even = pos.entry_price - 2 * half_spread
@@ -726,7 +734,7 @@ class TradingBot:
                     if new_sl < pos.sl:
                         self._update_stop(pos, new_sl)
 
-            if time.time() - pos.entry_time >= self.cfg.max_hold_seconds:
+            if time.time() - pos.entry_time >= (pos.max_hold_seconds or self.cfg.max_hold_seconds):
                 exit_p = pos.exit_fill(price)
                 self._close(pos, exit_p, "tiempo agotado")
 
@@ -770,7 +778,7 @@ class TradingBot:
                     self.diagnostics[symbol_id]["reason"] = _why
                     continue
                 if pre_mode == "probation" and (
-                    len(self.probation_open) >= learning.MAX_PROBATION_POSITIONS
+                    len(self.probation_open) >= learning.LAB_MAX_PROBATION_POSITIONS
                 ):
                     self.diagnostics[symbol_id]["reason"] = "Límite de posiciones a prueba alcanzado"
                     continue
@@ -850,7 +858,7 @@ class TradingBot:
                 self.diagnostics[symbol_id]["reason"] = mode_why
                 log.debug("%s: %s %s vetado: %s", self.cfg.id, symbol_id, direction, mode_why)
                 continue
-            if mode == "probation" and len(self.probation_open) >= learning.MAX_PROBATION_POSITIONS:
+            if mode == "probation" and len(self.probation_open) >= learning.LAB_MAX_PROBATION_POSITIONS:
                 self.diagnostics[symbol_id]["reason"] = "Límite de posiciones a prueba alcanzado"
                 continue
             if gemini_agent.AGENT:
@@ -1059,8 +1067,8 @@ class TradingBot:
         # modo a prueba: tamaño muy reducido para ganarse la reentrada
         prob_mult = 1.0
         if probation_why:
-            prob_mult = learning.PROBATION_SIZE
-            reasons.insert(0, f"A prueba ({learning.PROBATION_SIZE:.0%} del tamaño): {probation_why}")
+            prob_mult = learning.LAB_PROBATION_SIZE
+            reasons.insert(0, f"A prueba ({learning.LAB_PROBATION_SIZE:.0%} del tamaño): {probation_why}")
         # El aumento experimental requiere validación vigente y modelo maduro.
         meta_mult = 1.0
         if p_win is not None:
@@ -1104,6 +1112,10 @@ class TradingBot:
         window = signal["candles"][-SNAPSHOT_BARS:]
         snapshot = {
             "engineVersion": ENGINE_VERSION,
+            "strategyProfile": aggressive.VERSION,
+            "riskProfile": aggressive.CAPACITY_VERSION,
+            "exitPolicy": aggressive.exit_policy(self.cfg.id),
+            "maxHoldSeconds": self.cfg.max_hold_seconds,
             "metaFeatureVersion": learning.META_FEATURE_VERSION,
             "entryContext": learning.entry_context(price, atr_val, signal.get('extension'), costs['spreadPct']),
             "interval": self.cfg.work_interval,
@@ -1151,6 +1163,7 @@ class TradingBot:
                 quote_to_account=conversion,
                 execution_costs=costs, entry_fee=entry * qty * costs["feeRate"],
                 economic_risk_dist=economy["netRisk"] / qty / conversion,
+                exit_policy=aggressive.exit_policy(self.cfg.id),max_hold_seconds=self.cfg.max_hold_seconds,
             )
             self.positions[sym.id] = pos
         finally:
@@ -1289,6 +1302,9 @@ class TradingBot:
             "trainedSymbols": sorted(self.trained_params),
             "learning": learn,
             "config": {
+                "strategyProfile": aggressive.VERSION,
+                "riskProfile": aggressive.CAPACITY_VERSION,
+                "exitPolicy": aggressive.exit_policy(self.cfg.id),
                 "universe": list(self.cfg.universe),
                 "workInterval": self.cfg.work_interval,
                 "trendInterval": self.cfg.trend_interval,
@@ -1296,8 +1312,8 @@ class TradingBot:
                 "entryThreshold": self.cfg.entry_threshold,
                 "riskPct": self.cfg.risk_pct * 100,
                 "requireValidation": self.cfg.require_validation,
-                "probationSizePct": learning.PROBATION_SIZE * 100,
-                "maxProbationPositions": learning.MAX_PROBATION_POSITIONS,
+                "probationSizePct": learning.LAB_PROBATION_SIZE * 100,
+                "maxProbationPositions": learning.LAB_MAX_PROBATION_POSITIONS,
                 "maxLeverage": self.cfg.max_leverage,
                 "slAtr": self.cfg.sl_atr,
                 "tpAtr": self.cfg.tp_atr,

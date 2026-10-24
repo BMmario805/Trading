@@ -29,7 +29,7 @@ def flow_scores(candles: list[dict], higher: list[dict]) -> list[float]:
     out = [0.0] * len(candles)
     j = -1
     for i, c in enumerate(candles):
-        while j + 1 < len(higher) and higher[j + 1]['time'] + 3600 <= c['time']:
+        while j + 1 < len(higher) and higher[j + 1]['time'] + 14400 <= c['time']:
             j += 1
         if i < 55 or j < 0 or htf[j] is None or money[i] is None:
             continue

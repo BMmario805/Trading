@@ -246,6 +246,8 @@ export interface BotStatus {
   trainedSymbols: string[]
   learning: BotLearning | null
   config: {
+    strategyProfile?: string
+    riskProfile?: string
     universe: string[]
     workInterval: string
     trendInterval: string

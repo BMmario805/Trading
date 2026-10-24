@@ -1,0 +1,6288 @@
+{
+  "generatedAt": 1792598645.532497,
+  "profile": "aggressive-adaptive-v3",
+  "lab": {
+    "version": "strategy-review-v1",
+    "manifest": {
+      "frozenAt": 1792597576.2159703,
+      "profile": "aggressive-adaptive-v1",
+      "configs": [
+        {
+          "id": "scalper",
+          "name": "Bot Scalper",
+          "horizon": "corto plazo (minutos)",
+          "universe": [
+            "XAUUSD",
+            "PAXG",
+            "BTC",
+            "ETH",
+            "SOL",
+            "XRP",
+            "DOGE",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY",
+            "BNB",
+            "ADA",
+            "LINK",
+            "AVAX",
+            "LTC"
+          ],
+          "work_interval": "1m",
+          "trend_interval": "5m",
+          "scan_seconds": 15,
+          "tick_seconds": 5,
+          "weight_tech": 0.85,
+          "weight_senti": 0.15,
+          "entry_threshold": 0.15,
+          "atr_period": 14,
+          "sl_atr": 1.5,
+          "tp_atr": 2.25,
+          "trail_atr": 1.2,
+          "risk_pct": 0.01,
+          "max_leverage": 20.0,
+          "max_positions": 10,
+          "max_hold_seconds": 2700,
+          "cooldown_seconds": 60,
+          "focus_threshold_mult": 0.85,
+          "initial_balance": 10000.0,
+          "require_validation": false,
+          "max_open_risk_pct": 0.06,
+          "max_daily_loss_pct": 0.05,
+          "max_same_category": 6,
+          "overext_atr": 2.0
+        },
+        {
+          "id": "swing",
+          "name": "Bot Swing",
+          "horizon": "largo plazo (horas/días)",
+          "universe": [
+            "XAUUSD",
+            "PAXG",
+            "BTC",
+            "ETH",
+            "SOL",
+            "XRP",
+            "AAPL",
+            "MSFT",
+            "NVDA",
+            "TSLA",
+            "AMZN",
+            "META",
+            "GOOGL",
+            "SPY",
+            "QQQ",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY",
+            "CL",
+            "BNB",
+            "ADA",
+            "LINK",
+            "AVAX",
+            "LTC",
+            "BCH",
+            "DOT",
+            "NEAR",
+            "SUI",
+            "TRX"
+          ],
+          "work_interval": "1h",
+          "trend_interval": "1d",
+          "scan_seconds": 120,
+          "tick_seconds": 20,
+          "weight_tech": 0.6,
+          "weight_senti": 0.4,
+          "entry_threshold": 0.18,
+          "atr_period": 14,
+          "sl_atr": 2.5,
+          "tp_atr": 4.0,
+          "trail_atr": 1.5,
+          "risk_pct": 0.02,
+          "max_leverage": 5.0,
+          "max_positions": 8,
+          "max_hold_seconds": 432000,
+          "cooldown_seconds": 600,
+          "focus_threshold_mult": 0.85,
+          "initial_balance": 10000.0,
+          "require_validation": false,
+          "max_open_risk_pct": 0.06,
+          "max_daily_loss_pct": 0.08,
+          "max_same_category": 6,
+          "overext_atr": 2.5
+        },
+        {
+          "id": "trend",
+          "name": "Bot Tendencia (Turtle)",
+          "horizon": "seguimiento de tendencia (días/semanas)",
+          "universe": [
+            "XAUUSD",
+            "PAXG",
+            "BTC",
+            "ETH",
+            "SOL",
+            "XRP",
+            "DOGE",
+            "CL",
+            "NVDA",
+            "TSLA",
+            "SPY",
+            "QQQ",
+            "EURUSD",
+            "USDJPY",
+            "BNB",
+            "ADA",
+            "LINK",
+            "AVAX",
+            "LTC",
+            "BCH",
+            "DOT",
+            "NEAR",
+            "SUI",
+            "TRX"
+          ],
+          "work_interval": "1h",
+          "trend_interval": "4h",
+          "scan_seconds": 60,
+          "tick_seconds": 20,
+          "weight_tech": 0.9,
+          "weight_senti": 0.1,
+          "entry_threshold": 0.35,
+          "atr_period": 14,
+          "sl_atr": 2.0,
+          "tp_atr": 8.0,
+          "trail_atr": 2.4,
+          "risk_pct": 0.02,
+          "max_leverage": 5.0,
+          "max_positions": 10,
+          "max_hold_seconds": 864000,
+          "cooldown_seconds": 1800,
+          "focus_threshold_mult": 1.0,
+          "initial_balance": 10000.0,
+          "require_validation": false,
+          "max_open_risk_pct": 0.06,
+          "max_daily_loss_pct": 0.08,
+          "max_same_category": 6,
+          "overext_atr": 3.5
+        },
+        {
+          "id": "meanrev",
+          "name": "Bot Reversión (RSI2)",
+          "horizon": "reversión a la media (horas/días)",
+          "universe": [
+            "SPY",
+            "QQQ",
+            "AAPL",
+            "MSFT",
+            "NVDA",
+            "AMZN",
+            "META",
+            "GOOGL",
+            "TSLA",
+            "BTC",
+            "ETH",
+            "SOL"
+          ],
+          "work_interval": "1h",
+          "trend_interval": "1d",
+          "scan_seconds": 60,
+          "tick_seconds": 20,
+          "weight_tech": 0.85,
+          "weight_senti": 0.15,
+          "entry_threshold": 0.4,
+          "atr_period": 14,
+          "sl_atr": 2.5,
+          "tp_atr": 1.5,
+          "trail_atr": 1.6,
+          "risk_pct": 0.015,
+          "max_leverage": 5.0,
+          "max_positions": 10,
+          "max_hold_seconds": 259200,
+          "cooldown_seconds": 1800,
+          "focus_threshold_mult": 1.0,
+          "initial_balance": 10000.0,
+          "require_validation": false,
+          "max_open_risk_pct": 0.06,
+          "max_daily_loss_pct": 0.06,
+          "max_same_category": 6,
+          "overext_atr": 2.0
+        },
+        {
+          "id": "orb",
+          "name": "Bot Apertura (ORB)",
+          "horizon": "intradía (ruptura de apertura)",
+          "universe": [
+            "SPY",
+            "QQQ",
+            "NVDA",
+            "TSLA",
+            "AAPL",
+            "META",
+            "AMZN",
+            "MSFT",
+            "ES",
+            "NQ"
+          ],
+          "work_interval": "5m",
+          "trend_interval": "15m",
+          "scan_seconds": 20,
+          "tick_seconds": 5,
+          "weight_tech": 1.0,
+          "weight_senti": 0.0,
+          "entry_threshold": 0.45,
+          "atr_period": 14,
+          "sl_atr": 1.0,
+          "tp_atr": 3.0,
+          "trail_atr": 1.2,
+          "risk_pct": 0.01,
+          "max_leverage": 10.0,
+          "max_positions": 8,
+          "max_hold_seconds": 18000,
+          "cooldown_seconds": 900,
+          "focus_threshold_mult": 1.0,
+          "initial_balance": 10000.0,
+          "require_validation": false,
+          "max_open_risk_pct": 0.06,
+          "max_daily_loss_pct": 0.05,
+          "max_same_category": 6,
+          "overext_atr": 3.0
+        },
+        {
+          "id": "squeeze",
+          "name": "Bot Volatilidad (Squeeze)",
+          "horizon": "expansiones de volatilidad (horas)",
+          "universe": [
+            "PAXG",
+            "XAUUSD",
+            "BTC",
+            "ETH",
+            "SOL",
+            "XRP",
+            "DOGE",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY",
+            "BNB",
+            "ADA",
+            "LINK",
+            "AVAX",
+            "LTC",
+            "BCH",
+            "DOT",
+            "NEAR",
+            "SUI",
+            "TRX"
+          ],
+          "work_interval": "1h",
+          "trend_interval": "4h",
+          "scan_seconds": 60,
+          "tick_seconds": 10,
+          "weight_tech": 0.9,
+          "weight_senti": 0.1,
+          "entry_threshold": 0.15,
+          "atr_period": 14,
+          "sl_atr": 1.5,
+          "tp_atr": 4.0,
+          "trail_atr": 1.2,
+          "risk_pct": 0.015,
+          "max_leverage": 10.0,
+          "max_positions": 10,
+          "max_hold_seconds": 172800,
+          "cooldown_seconds": 1200,
+          "focus_threshold_mult": 1.0,
+          "initial_balance": 10000.0,
+          "require_validation": false,
+          "max_open_risk_pct": 0.06,
+          "max_daily_loss_pct": 0.06,
+          "max_same_category": 6,
+          "overext_atr": 3.0
+        },
+        {
+          "id": "flow",
+          "name": "Bot Flujo (CMF)",
+          "horizon": "continuación con flujo y tendencia (horas)",
+          "universe": [
+            "XAUUSD",
+            "BTC",
+            "ETH",
+            "SOL",
+            "XRP",
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY",
+            "NVDA",
+            "TSLA",
+            "AAPL",
+            "MSFT",
+            "BNB",
+            "ADA",
+            "LINK",
+            "AVAX",
+            "LTC",
+            "BCH",
+            "DOT",
+            "NEAR",
+            "SUI",
+            "TRX"
+          ],
+          "work_interval": "1h",
+          "trend_interval": "4h",
+          "scan_seconds": 60,
+          "tick_seconds": 10,
+          "weight_tech": 1.0,
+          "weight_senti": 0.0,
+          "entry_threshold": 0.5,
+          "atr_period": 14,
+          "sl_atr": 2.0,
+          "tp_atr": 3.0,
+          "trail_atr": 1.2,
+          "risk_pct": 0.005,
+          "max_leverage": 10.0,
+          "max_positions": 8,
+          "max_hold_seconds": 172800,
+          "cooldown_seconds": 1200,
+          "focus_threshold_mult": 1.0,
+          "initial_balance": 10000.0,
+          "require_validation": false,
+          "max_open_risk_pct": 0.06,
+          "max_daily_loss_pct": 0.06,
+          "max_same_category": 6,
+          "overext_atr": 3.0
+        }
+      ],
+      "proposed": {
+        "scalper": {
+          "work_interval": "5m",
+          "trend_interval": "15m",
+          "entry_threshold": 0.55,
+          "sl_atr": 1.6,
+          "tp_atr": 4.8,
+          "trail_atr": 1.8,
+          "max_hold_seconds": 14400,
+          "cooldown_seconds": 600,
+          "overext_atr": 2.25
+        },
+        "swing": {
+          "trend_interval": "4h",
+          "entry_threshold": 0.55,
+          "sl_atr": 2.0,
+          "tp_atr": 7.0,
+          "trail_atr": 2.6,
+          "overext_atr": 2.5
+        },
+        "trend": {
+          "entry_threshold": 0.6,
+          "sl_atr": 2.5,
+          "tp_atr": 12.0,
+          "trail_atr": 3.0,
+          "overext_atr": 2.75
+        },
+        "meanrev": {
+          "entry_threshold": 0.55,
+          "sl_atr": 2.0,
+          "tp_atr": 3.5,
+          "trail_atr": 1.6,
+          "max_hold_seconds": 172800
+        },
+        "orb": {
+          "entry_threshold": 0.6,
+          "sl_atr": 1.25,
+          "tp_atr": 5.0,
+          "trail_atr": 2.0,
+          "overext_atr": 2.5
+        },
+        "squeeze": {
+          "entry_threshold": 0.6,
+          "sl_atr": 2.0,
+          "tp_atr": 8.0,
+          "trail_atr": 2.8,
+          "max_hold_seconds": 259200,
+          "overext_atr": 2.75
+        },
+        "flow": {
+          "entry_threshold": 0.55,
+          "sl_atr": 2.0,
+          "tp_atr": 6.0,
+          "trail_atr": 2.3,
+          "max_hold_seconds": 259200,
+          "overext_atr": 2.5
+        }
+      },
+      "symbols": [
+        "BTC",
+        "ETH",
+        "SOL",
+        "EURUSD",
+        "GBPUSD",
+        "SPY",
+        "NVDA"
+      ],
+      "revision": "v3",
+      "actualProfile": "aggressive-adaptive-v3",
+      "actualProposed": {
+        "scalper": {
+          "work_interval": "5m",
+          "trend_interval": "15m",
+          "entry_threshold": 0.55,
+          "sl_atr": 1.6,
+          "tp_atr": 4.8,
+          "trail_atr": 1.8,
+          "max_hold_seconds": 14400,
+          "cooldown_seconds": 600,
+          "overext_atr": 2.25
+        },
+        "swing": {
+          "trend_interval": "4h",
+          "entry_threshold": 0.55,
+          "sl_atr": 2.0,
+          "tp_atr": 7.0,
+          "trail_atr": 2.6,
+          "overext_atr": 2.5
+        },
+        "trend": {},
+        "meanrev": {},
+        "orb": {
+          "entry_threshold": 0.6,
+          "sl_atr": 1.25,
+          "tp_atr": 5.0,
+          "trail_atr": 2.0,
+          "overext_atr": 2.5
+        },
+        "squeeze": {
+          "entry_threshold": 0.6,
+          "sl_atr": 2.0,
+          "tp_atr": 8.0,
+          "trail_atr": 2.8,
+          "max_hold_seconds": 259200,
+          "overext_atr": 2.75
+        },
+        "flow": {}
+      },
+      "priorResultsObserved": true
+    },
+    "results": [
+      {
+        "bot": "scalper",
+        "symbol": "BTC",
+        "baseline": {
+          "interval": "1m",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4244,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "5m",
+          "bars": 1199,
+          "periods": {
+            "development": [
+              599,
+              839
+            ],
+            "final": [
+              887,
+              1199
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.6534,
+              "trades": 2,
+              "wins": 0,
+              "pnl": -1.31,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.56,
+              "fees": 0.668011,
+              "carry": 0.009024,
+              "turnover": 668.0108
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.1666,
+              "trades": 2,
+              "wins": 1,
+              "pnl": 0.33,
+              "winRate": 50.0,
+              "profitFactor": 1.33,
+              "maxDrawdown": 1.48,
+              "fees": 0.659592,
+              "carry": 0.005119,
+              "turnover": 659.592
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "datasetHash": "1860eb7340630996892c7035a0d8900d0dc4016e3ed931dd4d0c426c2d4558dd"
+      },
+      {
+        "bot": "scalper",
+        "symbol": "ETH",
+        "baseline": {
+          "interval": "1m",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4244,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "5m",
+          "bars": 1199,
+          "periods": {
+            "development": [
+              599,
+              839
+            ],
+            "final": [
+              887,
+              1199
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.9964,
+              "trades": 2,
+              "wins": 0,
+              "pnl": -1.99,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.99,
+              "fees": 0.602631,
+              "carry": 0.00795,
+              "turnover": 602.631
+            },
+            "stress": {
+              "expectancy": -0.9962,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -1.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.0,
+              "fees": 0.344456,
+              "carry": 0.00483,
+              "turnover": 229.6371
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.7253,
+              "trades": 3,
+              "wins": 2,
+              "pnl": 2.18,
+              "winRate": 66.7,
+              "profitFactor": 3.18,
+              "maxDrawdown": 1.68,
+              "fees": 0.821355,
+              "carry": 0.004796,
+              "turnover": 821.3551
+            },
+            "stress": {
+              "expectancy": -0.495,
+              "trades": 2,
+              "wins": 1,
+              "pnl": -0.99,
+              "winRate": 50.0,
+              "profitFactor": 0.01,
+              "maxDrawdown": 1.19,
+              "fees": 0.650126,
+              "carry": 0.004063,
+              "turnover": 433.4175
+            }
+          }
+        },
+        "datasetHash": "b37098e05148b0e7e00952fa915dfda77d38af58ed6035f8b8463656b9e8293e"
+      },
+      {
+        "bot": "scalper",
+        "symbol": "SOL",
+        "baseline": {
+          "interval": "1m",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4244,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "5m",
+          "bars": 1199,
+          "periods": {
+            "development": [
+              599,
+              839
+            ],
+            "final": [
+              887,
+              1199
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.4988,
+              "trades": 2,
+              "wins": 0,
+              "pnl": -1.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.16,
+              "fees": 0.580032,
+              "carry": 0.005199,
+              "turnover": 580.0318
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.3482,
+              "trades": 5,
+              "wins": 2,
+              "pnl": -1.74,
+              "winRate": 40.0,
+              "profitFactor": 0.19,
+              "maxDrawdown": 2.8,
+              "fees": 1.368764,
+              "carry": 0.00973,
+              "turnover": 1368.7637
+            },
+            "stress": {
+              "expectancy": -0.3391,
+              "trades": 3,
+              "wins": 0,
+              "pnl": -1.02,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.8,
+              "fees": 0.913191,
+              "carry": 0.004371,
+              "turnover": 608.7938
+            }
+          }
+        },
+        "datasetHash": "9b93ce048c98d69e2bc4aac573b83c8a1c1d9662d2e65763255cd33c49e154c5"
+      },
+      {
+        "bot": "scalper",
+        "symbol": "EURUSD",
+        "baseline": {
+          "interval": "1m",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4245,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "5m",
+          "bars": 1200,
+          "periods": {
+            "development": [
+              600,
+              840
+            ],
+            "final": [
+              888,
+              1200
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "datasetHash": "e972f5829e06878b7506278b78f4e094f991013d0592fe1cb48af578d95ba296"
+      },
+      {
+        "bot": "scalper",
+        "symbol": "GBPUSD",
+        "baseline": {
+          "interval": "1m",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4245,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "5m",
+          "bars": 1201,
+          "periods": {
+            "development": [
+              600,
+              840
+            ],
+            "final": [
+              888,
+              1201
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "datasetHash": "84f7b54049265881380277e858614968c7003a5bbc95a832e32c5af56ec00625"
+      },
+      {
+        "bot": "swing",
+        "symbol": "BTC",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4319,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.2929,
+              "trades": 42,
+              "wins": 15,
+              "pnl": -12.3,
+              "winRate": 35.7,
+              "profitFactor": 0.5,
+              "maxDrawdown": 16.05,
+              "fees": 4.982479,
+              "carry": 0.524483,
+              "turnover": 4982.4787
+            },
+            "stress": {
+              "expectancy": -0.318,
+              "trades": 41,
+              "wins": 15,
+              "pnl": -13.04,
+              "winRate": 36.6,
+              "profitFactor": 0.44,
+              "maxDrawdown": 15.54,
+              "fees": 6.39556,
+              "carry": 0.687456,
+              "turnover": 4263.7065
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.3245,
+              "trades": 53,
+              "wins": 22,
+              "pnl": -17.2,
+              "winRate": 41.5,
+              "profitFactor": 0.4,
+              "maxDrawdown": 18.59,
+              "fees": 6.578681,
+              "carry": 0.747605,
+              "turnover": 6578.6808
+            },
+            "stress": {
+              "expectancy": -0.3788,
+              "trades": 54,
+              "wins": 22,
+              "pnl": -20.46,
+              "winRate": 40.7,
+              "profitFactor": 0.29,
+              "maxDrawdown": 21.51,
+              "fees": 8.780649,
+              "carry": 0.987172,
+              "turnover": 5853.766
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4319,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.4175,
+              "trades": 15,
+              "wins": 3,
+              "pnl": -6.26,
+              "winRate": 20.0,
+              "profitFactor": 0.38,
+              "maxDrawdown": 10.3,
+              "fees": 2.112093,
+              "carry": 0.385626,
+              "turnover": 2112.0928
+            },
+            "stress": {
+              "expectancy": -0.4725,
+              "trades": 16,
+              "wins": 3,
+              "pnl": -7.56,
+              "winRate": 18.8,
+              "profitFactor": 0.29,
+              "maxDrawdown": 10.79,
+              "fees": 3.002414,
+              "carry": 0.50775,
+              "turnover": 2001.6095
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2677,
+              "trades": 33,
+              "wins": 11,
+              "pnl": -8.84,
+              "winRate": 33.3,
+              "profitFactor": 0.53,
+              "maxDrawdown": 11.68,
+              "fees": 5.421091,
+              "carry": 0.460995,
+              "turnover": 5421.091
+            },
+            "stress": {
+              "expectancy": -0.3636,
+              "trades": 31,
+              "wins": 9,
+              "pnl": -11.27,
+              "winRate": 29.0,
+              "profitFactor": 0.39,
+              "maxDrawdown": 14.71,
+              "fees": 6.337118,
+              "carry": 0.599019,
+              "turnover": 4224.7453
+            }
+          }
+        },
+        "datasetHash": "afa9418eb95d9ed087acebb4e5dfe2d2eae969a7f593ebf291dcc7a16c15d8b7"
+      },
+      {
+        "bot": "swing",
+        "symbol": "ETH",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4319,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.0786,
+              "trades": 45,
+              "wins": 24,
+              "pnl": -3.53,
+              "winRate": 53.3,
+              "profitFactor": 0.81,
+              "maxDrawdown": 10.23,
+              "fees": 4.188915,
+              "carry": 0.405672,
+              "turnover": 4188.915
+            },
+            "stress": {
+              "expectancy": -0.1096,
+              "trades": 44,
+              "wins": 24,
+              "pnl": -4.82,
+              "winRate": 54.5,
+              "profitFactor": 0.72,
+              "maxDrawdown": 10.43,
+              "fees": 5.588165,
+              "carry": 0.560309,
+              "turnover": 3725.4432
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.0989,
+              "trades": 52,
+              "wins": 26,
+              "pnl": -5.14,
+              "winRate": 50.0,
+              "profitFactor": 0.78,
+              "maxDrawdown": 8.91,
+              "fees": 4.811892,
+              "carry": 0.598996,
+              "turnover": 4811.892
+            },
+            "stress": {
+              "expectancy": -0.1656,
+              "trades": 53,
+              "wins": 26,
+              "pnl": -8.78,
+              "winRate": 49.1,
+              "profitFactor": 0.64,
+              "maxDrawdown": 11.15,
+              "fees": 6.713026,
+              "carry": 0.818384,
+              "turnover": 4475.3507
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4319,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.5131,
+              "trades": 25,
+              "wins": 4,
+              "pnl": -12.83,
+              "winRate": 16.0,
+              "profitFactor": 0.32,
+              "maxDrawdown": 13.71,
+              "fees": 2.763499,
+              "carry": 0.348238,
+              "turnover": 2763.4994
+            },
+            "stress": {
+              "expectancy": -0.529,
+              "trades": 25,
+              "wins": 4,
+              "pnl": -13.23,
+              "winRate": 16.0,
+              "profitFactor": 0.28,
+              "maxDrawdown": 13.71,
+              "fees": 3.724974,
+              "carry": 0.464293,
+              "turnover": 2483.3162
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.0404,
+              "trades": 30,
+              "wins": 13,
+              "pnl": -1.21,
+              "winRate": 43.3,
+              "profitFactor": 0.92,
+              "maxDrawdown": 6.62,
+              "fees": 3.692093,
+              "carry": 0.35526,
+              "turnover": 3692.0926
+            },
+            "stress": {
+              "expectancy": -0.1353,
+              "trades": 31,
+              "wins": 13,
+              "pnl": -4.19,
+              "winRate": 41.9,
+              "profitFactor": 0.74,
+              "maxDrawdown": 6.78,
+              "fees": 5.160741,
+              "carry": 0.450548,
+              "turnover": 3440.4938
+            }
+          }
+        },
+        "datasetHash": "cf1e5fe4900bdaa919b93af6e88e48491a936cd019cb1cdbd46ebdba09e5d1f9"
+      },
+      {
+        "bot": "swing",
+        "symbol": "SOL",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4319,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.1389,
+              "trades": 45,
+              "wins": 21,
+              "pnl": -6.25,
+              "winRate": 46.7,
+              "profitFactor": 0.72,
+              "maxDrawdown": 8.57,
+              "fees": 3.952772,
+              "carry": 0.402164,
+              "turnover": 3952.7722
+            },
+            "stress": {
+              "expectancy": -0.185,
+              "trades": 45,
+              "wins": 20,
+              "pnl": -8.32,
+              "winRate": 44.4,
+              "profitFactor": 0.62,
+              "maxDrawdown": 9.83,
+              "fees": 5.424906,
+              "carry": 0.550162,
+              "turnover": 3616.6041
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.0402,
+              "trades": 49,
+              "wins": 25,
+              "pnl": -1.97,
+              "winRate": 51.0,
+              "profitFactor": 0.91,
+              "maxDrawdown": 10.53,
+              "fees": 3.898775,
+              "carry": 0.521116,
+              "turnover": 3898.7752
+            },
+            "stress": {
+              "expectancy": -0.1084,
+              "trades": 50,
+              "wins": 25,
+              "pnl": -5.42,
+              "winRate": 50.0,
+              "profitFactor": 0.77,
+              "maxDrawdown": 12.53,
+              "fees": 5.548275,
+              "carry": 0.72162,
+              "turnover": 3698.8497
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4319,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.383,
+              "trades": 23,
+              "wins": 6,
+              "pnl": -8.81,
+              "winRate": 26.1,
+              "profitFactor": 0.45,
+              "maxDrawdown": 12.85,
+              "fees": 2.240117,
+              "carry": 0.283339,
+              "turnover": 2240.1174
+            },
+            "stress": {
+              "expectancy": -0.4068,
+              "trades": 23,
+              "wins": 6,
+              "pnl": -9.36,
+              "winRate": 26.1,
+              "profitFactor": 0.4,
+              "maxDrawdown": 12.67,
+              "fees": 3.047567,
+              "carry": 0.389262,
+              "turnover": 2031.7115
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.1806,
+              "trades": 31,
+              "wins": 12,
+              "pnl": 5.6,
+              "winRate": 38.7,
+              "profitFactor": 1.31,
+              "maxDrawdown": 8.03,
+              "fees": 2.96819,
+              "carry": 0.293248,
+              "turnover": 2968.1899
+            },
+            "stress": {
+              "expectancy": 0.106,
+              "trades": 31,
+              "wins": 12,
+              "pnl": 3.29,
+              "winRate": 38.7,
+              "profitFactor": 1.19,
+              "maxDrawdown": 8.08,
+              "fees": 4.050631,
+              "carry": 0.397877,
+              "turnover": 2700.4209
+            }
+          }
+        },
+        "datasetHash": "0809a4f719a6dc467351be9429c60cb7a896edacef08b499145b967431a68d64"
+      },
+      {
+        "bot": "swing",
+        "symbol": "EURUSD",
+        "baseline": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4320,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.472,
+              "trades": 41,
+              "wins": 12,
+              "pnl": -19.35,
+              "winRate": 29.3,
+              "profitFactor": 0.12,
+              "maxDrawdown": 19.35,
+              "fees": 4.186133,
+              "carry": 2.060931,
+              "turnover": 20930.6641
+            },
+            "stress": {
+              "expectancy": -0.4874,
+              "trades": 43,
+              "wins": 9,
+              "pnl": -20.96,
+              "winRate": 20.9,
+              "profitFactor": 0.07,
+              "maxDrawdown": 20.96,
+              "fees": 5.405006,
+              "carry": 2.56221,
+              "turnover": 18016.6863
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2614,
+              "trades": 56,
+              "wins": 22,
+              "pnl": -14.64,
+              "winRate": 39.3,
+              "profitFactor": 0.35,
+              "maxDrawdown": 14.71,
+              "fees": 6.03693,
+              "carry": 3.333788,
+              "turnover": 30184.6488
+            },
+            "stress": {
+              "expectancy": -0.313,
+              "trades": 53,
+              "wins": 14,
+              "pnl": -16.59,
+              "winRate": 26.4,
+              "profitFactor": 0.22,
+              "maxDrawdown": 16.64,
+              "fees": 6.839933,
+              "carry": 3.671449,
+              "turnover": 22799.7751
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4320,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.5249,
+              "trades": 37,
+              "wins": 7,
+              "pnl": -19.42,
+              "winRate": 18.9,
+              "profitFactor": 0.17,
+              "maxDrawdown": 20.48,
+              "fees": 4.370893,
+              "carry": 2.08972,
+              "turnover": 21854.4665
+            },
+            "stress": {
+              "expectancy": -0.5285,
+              "trades": 36,
+              "wins": 5,
+              "pnl": -19.03,
+              "winRate": 13.9,
+              "profitFactor": 0.11,
+              "maxDrawdown": 19.73,
+              "fees": 5.11863,
+              "carry": 2.521593,
+              "turnover": 17062.0999
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2117,
+              "trades": 36,
+              "wins": 11,
+              "pnl": -7.62,
+              "winRate": 30.6,
+              "profitFactor": 0.56,
+              "maxDrawdown": 8.51,
+              "fees": 4.36144,
+              "carry": 2.875698,
+              "turnover": 21807.1978
+            },
+            "stress": {
+              "expectancy": -0.305,
+              "trades": 39,
+              "wins": 11,
+              "pnl": -11.89,
+              "winRate": 28.2,
+              "profitFactor": 0.34,
+              "maxDrawdown": 11.89,
+              "fees": 5.632341,
+              "carry": 3.262056,
+              "turnover": 18774.4693
+            }
+          }
+        },
+        "datasetHash": "8002d6e81a563322c573c0e8d5991f4beecde649a2ae06ab027d6bd237c10c98"
+      },
+      {
+        "bot": "swing",
+        "symbol": "GBPUSD",
+        "baseline": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4320,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3858,
+              "trades": 47,
+              "wins": 16,
+              "pnl": -18.13,
+              "winRate": 34.0,
+              "profitFactor": 0.28,
+              "maxDrawdown": 18.71,
+              "fees": 4.486812,
+              "carry": 1.929521,
+              "turnover": 22434.0611
+            },
+            "stress": {
+              "expectancy": -0.4142,
+              "trades": 47,
+              "wins": 13,
+              "pnl": -19.47,
+              "winRate": 27.7,
+              "profitFactor": 0.19,
+              "maxDrawdown": 20.18,
+              "fees": 5.590538,
+              "carry": 2.425175,
+              "turnover": 18635.1279
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2281,
+              "trades": 62,
+              "wins": 29,
+              "pnl": -14.14,
+              "winRate": 46.8,
+              "profitFactor": 0.45,
+              "maxDrawdown": 17.11,
+              "fees": 6.626724,
+              "carry": 3.085435,
+              "turnover": 33133.6203
+            },
+            "stress": {
+              "expectancy": -0.2723,
+              "trades": 57,
+              "wins": 24,
+              "pnl": -15.52,
+              "winRate": 42.1,
+              "profitFactor": 0.31,
+              "maxDrawdown": 17.64,
+              "fees": 7.373186,
+              "carry": 3.822737,
+              "turnover": 24577.2858
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4320,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.4539,
+              "trades": 27,
+              "wins": 5,
+              "pnl": -12.26,
+              "winRate": 18.5,
+              "profitFactor": 0.29,
+              "maxDrawdown": 13.02,
+              "fees": 3.017941,
+              "carry": 1.651882,
+              "turnover": 15089.7054
+            },
+            "stress": {
+              "expectancy": -0.537,
+              "trades": 28,
+              "wins": 3,
+              "pnl": -15.03,
+              "winRate": 10.7,
+              "profitFactor": 0.15,
+              "maxDrawdown": 15.49,
+              "fees": 3.807699,
+              "carry": 2.012583,
+              "turnover": 12692.3285
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2272,
+              "trades": 39,
+              "wins": 12,
+              "pnl": -8.86,
+              "winRate": 30.8,
+              "profitFactor": 0.57,
+              "maxDrawdown": 13.3,
+              "fees": 4.774684,
+              "carry": 2.584207,
+              "turnover": 23873.421
+            },
+            "stress": {
+              "expectancy": -0.3418,
+              "trades": 43,
+              "wins": 9,
+              "pnl": -14.7,
+              "winRate": 20.9,
+              "profitFactor": 0.33,
+              "maxDrawdown": 17.82,
+              "fees": 6.283238,
+              "carry": 3.065248,
+              "turnover": 20944.127
+            }
+          }
+        },
+        "datasetHash": "f3eae2690a7c4371d73343bd38a0e7faaed7d1a8116a1e95576a3c5ec90f8a09"
+      },
+      {
+        "bot": "swing",
+        "symbol": "SPY",
+        "baseline": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1345,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.0306,
+              "trades": 14,
+              "wins": 8,
+              "pnl": 0.43,
+              "winRate": 57.1,
+              "profitFactor": 1.08,
+              "maxDrawdown": 3.35,
+              "fees": 0.502076,
+              "carry": 0.653103,
+              "turnover": 2510.3793
+            },
+            "stress": {
+              "expectancy": -0.0261,
+              "trades": 14,
+              "wins": 8,
+              "pnl": -0.37,
+              "winRate": 57.1,
+              "profitFactor": 0.93,
+              "maxDrawdown": 3.29,
+              "fees": 0.697418,
+              "carry": 0.912176,
+              "turnover": 2324.7256
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.4317,
+              "trades": 16,
+              "wins": 6,
+              "pnl": -6.91,
+              "winRate": 37.5,
+              "profitFactor": 0.33,
+              "maxDrawdown": 9.27,
+              "fees": 0.704683,
+              "carry": 1.026169,
+              "turnover": 3523.4145
+            },
+            "stress": {
+              "expectancy": -0.4625,
+              "trades": 16,
+              "wins": 6,
+              "pnl": -7.4,
+              "winRate": 37.5,
+              "profitFactor": 0.27,
+              "maxDrawdown": 9.42,
+              "fees": 0.964132,
+              "carry": 1.405971,
+              "turnover": 3213.7734
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1345,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.388,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 2.33,
+              "winRate": 66.7,
+              "profitFactor": 2.76,
+              "maxDrawdown": 2.48,
+              "fees": 0.256458,
+              "carry": 0.842485,
+              "turnover": 1282.2899
+            },
+            "stress": {
+              "expectancy": 0.2392,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 1.44,
+              "winRate": 66.7,
+              "profitFactor": 2.07,
+              "maxDrawdown": 2.43,
+              "fees": 0.352241,
+              "carry": 1.157595,
+              "turnover": 1174.1373
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.3605,
+              "trades": 8,
+              "wins": 1,
+              "pnl": -2.88,
+              "winRate": 12.5,
+              "profitFactor": 0.5,
+              "maxDrawdown": 6.39,
+              "fees": 0.350047,
+              "carry": 0.6998,
+              "turnover": 1750.2353
+            },
+            "stress": {
+              "expectancy": -0.4116,
+              "trades": 7,
+              "wins": 1,
+              "pnl": -2.88,
+              "winRate": 14.3,
+              "profitFactor": 0.47,
+              "maxDrawdown": 5.94,
+              "fees": 0.454848,
+              "carry": 0.952555,
+              "turnover": 1516.1592
+            }
+          }
+        },
+        "datasetHash": "0cef4519a125d5a92b36b1e6590b2d5405437a0d31780162830cbfddc39e3a8b"
+      },
+      {
+        "bot": "swing",
+        "symbol": "NVDA",
+        "baseline": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1345,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.2566,
+              "trades": 15,
+              "wins": 6,
+              "pnl": -3.85,
+              "winRate": 40.0,
+              "profitFactor": 0.55,
+              "maxDrawdown": 5.11,
+              "fees": 0.183182,
+              "carry": 0.214732,
+              "turnover": 915.9081
+            },
+            "stress": {
+              "expectancy": -0.2704,
+              "trades": 15,
+              "wins": 6,
+              "pnl": -4.06,
+              "winRate": 40.0,
+              "profitFactor": 0.52,
+              "maxDrawdown": 5.13,
+              "fees": 0.263626,
+              "carry": 0.30938,
+              "turnover": 878.7523
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.1649,
+              "trades": 11,
+              "wins": 4,
+              "pnl": -1.81,
+              "winRate": 36.4,
+              "profitFactor": 0.7,
+              "maxDrawdown": 2.92,
+              "fees": 0.168874,
+              "carry": 0.191269,
+              "turnover": 844.3715
+            },
+            "stress": {
+              "expectancy": -0.3607,
+              "trades": 10,
+              "wins": 3,
+              "pnl": -3.61,
+              "winRate": 30.0,
+              "profitFactor": 0.48,
+              "maxDrawdown": 4.44,
+              "fees": 0.240014,
+              "carry": 0.270104,
+              "turnover": 800.047
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1345,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.1846,
+              "trades": 8,
+              "wins": 4,
+              "pnl": 1.48,
+              "winRate": 50.0,
+              "profitFactor": 1.38,
+              "maxDrawdown": 3.19,
+              "fees": 0.125127,
+              "carry": 0.171208,
+              "turnover": 625.6372
+            },
+            "stress": {
+              "expectancy": 0.1343,
+              "trades": 8,
+              "wins": 4,
+              "pnl": 1.07,
+              "winRate": 50.0,
+              "profitFactor": 1.28,
+              "maxDrawdown": 3.13,
+              "fees": 0.175868,
+              "carry": 0.235115,
+              "turnover": 586.2267
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.818,
+              "trades": 7,
+              "wins": 2,
+              "pnl": -5.73,
+              "winRate": 28.6,
+              "profitFactor": 0.24,
+              "maxDrawdown": 7.15,
+              "fees": 0.127074,
+              "carry": 0.230463,
+              "turnover": 635.3723
+            },
+            "stress": {
+              "expectancy": -0.838,
+              "trades": 7,
+              "wins": 2,
+              "pnl": -5.87,
+              "winRate": 28.6,
+              "profitFactor": 0.21,
+              "maxDrawdown": 7.0,
+              "fees": 0.179453,
+              "carry": 0.327226,
+              "turnover": 598.177
+            }
+          }
+        },
+        "datasetHash": "11b93b3e4a0cdff9112ab07bf6c53a361e19d774e867d600b93dbde651f12ca1"
+      },
+      {
+        "bot": "trend",
+        "symbol": "BTC",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4439,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.2426,
+              "trades": 12,
+              "wins": 3,
+              "pnl": -2.91,
+              "winRate": 25.0,
+              "profitFactor": 0.3,
+              "maxDrawdown": 3.86,
+              "fees": 1.344487,
+              "carry": 0.216589,
+              "turnover": 1344.4865
+            },
+            "stress": {
+              "expectancy": -0.3146,
+              "trades": 12,
+              "wins": 2,
+              "pnl": -3.77,
+              "winRate": 16.7,
+              "profitFactor": 0.2,
+              "maxDrawdown": 4.37,
+              "fees": 1.743397,
+              "carry": 0.293502,
+              "turnover": 1162.265
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.3164,
+              "trades": 18,
+              "wins": 6,
+              "pnl": -5.7,
+              "winRate": 33.3,
+              "profitFactor": 0.38,
+              "maxDrawdown": 7.33,
+              "fees": 2.146096,
+              "carry": 0.146473,
+              "turnover": 2146.0963
+            },
+            "stress": {
+              "expectancy": -0.3409,
+              "trades": 18,
+              "wins": 6,
+              "pnl": -6.14,
+              "winRate": 33.3,
+              "profitFactor": 0.29,
+              "maxDrawdown": 7.01,
+              "fees": 2.746454,
+              "carry": 0.191176,
+              "turnover": 1830.9695
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4439,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.2426,
+              "trades": 12,
+              "wins": 3,
+              "pnl": -2.91,
+              "winRate": 25.0,
+              "profitFactor": 0.3,
+              "maxDrawdown": 3.86,
+              "fees": 1.344487,
+              "carry": 0.216589,
+              "turnover": 1344.4865
+            },
+            "stress": {
+              "expectancy": -0.3146,
+              "trades": 12,
+              "wins": 2,
+              "pnl": -3.77,
+              "winRate": 16.7,
+              "profitFactor": 0.2,
+              "maxDrawdown": 4.37,
+              "fees": 1.743397,
+              "carry": 0.293502,
+              "turnover": 1162.265
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.3164,
+              "trades": 18,
+              "wins": 6,
+              "pnl": -5.7,
+              "winRate": 33.3,
+              "profitFactor": 0.38,
+              "maxDrawdown": 7.33,
+              "fees": 2.146096,
+              "carry": 0.146473,
+              "turnover": 2146.0963
+            },
+            "stress": {
+              "expectancy": -0.3409,
+              "trades": 18,
+              "wins": 6,
+              "pnl": -6.14,
+              "winRate": 33.3,
+              "profitFactor": 0.29,
+              "maxDrawdown": 7.01,
+              "fees": 2.746454,
+              "carry": 0.191176,
+              "turnover": 1830.9695
+            }
+          }
+        },
+        "datasetHash": "afa9418eb95d9ed087acebb4e5dfe2d2eae969a7f593ebf291dcc7a16c15d8b7"
+      },
+      {
+        "bot": "trend",
+        "symbol": "ETH",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4439,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3946,
+              "trades": 15,
+              "wins": 3,
+              "pnl": -5.92,
+              "winRate": 20.0,
+              "profitFactor": 0.19,
+              "maxDrawdown": 6.63,
+              "fees": 1.577675,
+              "carry": 0.09877,
+              "turnover": 1577.6746
+            },
+            "stress": {
+              "expectancy": -0.4033,
+              "trades": 15,
+              "wins": 3,
+              "pnl": -6.05,
+              "winRate": 20.0,
+              "profitFactor": 0.13,
+              "maxDrawdown": 6.3,
+              "fees": 2.053115,
+              "carry": 0.12885,
+              "turnover": 1368.7434
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.1586,
+              "trades": 20,
+              "wins": 6,
+              "pnl": -3.17,
+              "winRate": 30.0,
+              "profitFactor": 0.69,
+              "maxDrawdown": 7.14,
+              "fees": 2.024144,
+              "carry": 0.098478,
+              "turnover": 2024.1436
+            },
+            "stress": {
+              "expectancy": -0.2044,
+              "trades": 20,
+              "wins": 6,
+              "pnl": -4.09,
+              "winRate": 30.0,
+              "profitFactor": 0.58,
+              "maxDrawdown": 7.17,
+              "fees": 2.643732,
+              "carry": 0.130937,
+              "turnover": 1762.488
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4439,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3946,
+              "trades": 15,
+              "wins": 3,
+              "pnl": -5.92,
+              "winRate": 20.0,
+              "profitFactor": 0.19,
+              "maxDrawdown": 6.63,
+              "fees": 1.577675,
+              "carry": 0.09877,
+              "turnover": 1577.6746
+            },
+            "stress": {
+              "expectancy": -0.4033,
+              "trades": 15,
+              "wins": 3,
+              "pnl": -6.05,
+              "winRate": 20.0,
+              "profitFactor": 0.13,
+              "maxDrawdown": 6.3,
+              "fees": 2.053115,
+              "carry": 0.12885,
+              "turnover": 1368.7434
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.1586,
+              "trades": 20,
+              "wins": 6,
+              "pnl": -3.17,
+              "winRate": 30.0,
+              "profitFactor": 0.69,
+              "maxDrawdown": 7.14,
+              "fees": 2.024144,
+              "carry": 0.098478,
+              "turnover": 2024.1436
+            },
+            "stress": {
+              "expectancy": -0.2044,
+              "trades": 20,
+              "wins": 6,
+              "pnl": -4.09,
+              "winRate": 30.0,
+              "profitFactor": 0.58,
+              "maxDrawdown": 7.17,
+              "fees": 2.643732,
+              "carry": 0.130937,
+              "turnover": 1762.488
+            }
+          }
+        },
+        "datasetHash": "cf1e5fe4900bdaa919b93af6e88e48491a936cd019cb1cdbd46ebdba09e5d1f9"
+      },
+      {
+        "bot": "trend",
+        "symbol": "SOL",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4439,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.2455,
+              "trades": 13,
+              "wins": 5,
+              "pnl": -3.19,
+              "winRate": 38.5,
+              "profitFactor": 0.49,
+              "maxDrawdown": 5.87,
+              "fees": 1.098105,
+              "carry": 0.131715,
+              "turnover": 1098.1053
+            },
+            "stress": {
+              "expectancy": -0.2745,
+              "trades": 13,
+              "wins": 5,
+              "pnl": -3.57,
+              "winRate": 38.5,
+              "profitFactor": 0.4,
+              "maxDrawdown": 5.71,
+              "fees": 1.46953,
+              "carry": 0.175399,
+              "turnover": 979.6867
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.225,
+              "trades": 17,
+              "wins": 9,
+              "pnl": 3.82,
+              "winRate": 52.9,
+              "profitFactor": 1.55,
+              "maxDrawdown": 4.83,
+              "fees": 1.422656,
+              "carry": 0.085124,
+              "turnover": 1422.6556
+            },
+            "stress": {
+              "expectancy": 0.1513,
+              "trades": 17,
+              "wins": 8,
+              "pnl": 2.57,
+              "winRate": 47.1,
+              "profitFactor": 1.39,
+              "maxDrawdown": 4.74,
+              "fees": 1.909854,
+              "carry": 0.114383,
+              "turnover": 1273.2357
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4439,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.2455,
+              "trades": 13,
+              "wins": 5,
+              "pnl": -3.19,
+              "winRate": 38.5,
+              "profitFactor": 0.49,
+              "maxDrawdown": 5.87,
+              "fees": 1.098105,
+              "carry": 0.131715,
+              "turnover": 1098.1053
+            },
+            "stress": {
+              "expectancy": -0.2745,
+              "trades": 13,
+              "wins": 5,
+              "pnl": -3.57,
+              "winRate": 38.5,
+              "profitFactor": 0.4,
+              "maxDrawdown": 5.71,
+              "fees": 1.46953,
+              "carry": 0.175399,
+              "turnover": 979.6867
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.225,
+              "trades": 17,
+              "wins": 9,
+              "pnl": 3.82,
+              "winRate": 52.9,
+              "profitFactor": 1.55,
+              "maxDrawdown": 4.83,
+              "fees": 1.422656,
+              "carry": 0.085124,
+              "turnover": 1422.6556
+            },
+            "stress": {
+              "expectancy": 0.1513,
+              "trades": 17,
+              "wins": 8,
+              "pnl": 2.57,
+              "winRate": 47.1,
+              "profitFactor": 1.39,
+              "maxDrawdown": 4.74,
+              "fees": 1.909854,
+              "carry": 0.114383,
+              "turnover": 1273.2357
+            }
+          }
+        },
+        "datasetHash": "0809a4f719a6dc467351be9429c60cb7a896edacef08b499145b967431a68d64"
+      },
+      {
+        "bot": "trend",
+        "symbol": "EURUSD",
+        "baseline": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4440,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3205,
+              "trades": 16,
+              "wins": 3,
+              "pnl": -5.13,
+              "winRate": 18.8,
+              "profitFactor": 0.32,
+              "maxDrawdown": 5.82,
+              "fees": 1.439797,
+              "carry": 0.522451,
+              "turnover": 7198.9842
+            },
+            "stress": {
+              "expectancy": -0.3694,
+              "trades": 20,
+              "wins": 2,
+              "pnl": -7.39,
+              "winRate": 10.0,
+              "profitFactor": 0.08,
+              "maxDrawdown": 7.39,
+              "fees": 2.101741,
+              "carry": 0.513451,
+              "turnover": 7005.8029
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2101,
+              "trades": 22,
+              "wins": 3,
+              "pnl": -4.62,
+              "winRate": 13.6,
+              "profitFactor": 0.35,
+              "maxDrawdown": 4.62,
+              "fees": 2.03859,
+              "carry": 0.516013,
+              "turnover": 10192.9479
+            },
+            "stress": {
+              "expectancy": -0.245,
+              "trades": 22,
+              "wins": 3,
+              "pnl": -5.39,
+              "winRate": 13.6,
+              "profitFactor": 0.23,
+              "maxDrawdown": 5.39,
+              "fees": 2.329379,
+              "carry": 0.630302,
+              "turnover": 7764.5971
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4440,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3205,
+              "trades": 16,
+              "wins": 3,
+              "pnl": -5.13,
+              "winRate": 18.8,
+              "profitFactor": 0.32,
+              "maxDrawdown": 5.82,
+              "fees": 1.439797,
+              "carry": 0.522451,
+              "turnover": 7198.9842
+            },
+            "stress": {
+              "expectancy": -0.3694,
+              "trades": 20,
+              "wins": 2,
+              "pnl": -7.39,
+              "winRate": 10.0,
+              "profitFactor": 0.08,
+              "maxDrawdown": 7.39,
+              "fees": 2.101741,
+              "carry": 0.513451,
+              "turnover": 7005.8029
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2101,
+              "trades": 22,
+              "wins": 3,
+              "pnl": -4.62,
+              "winRate": 13.6,
+              "profitFactor": 0.35,
+              "maxDrawdown": 4.62,
+              "fees": 2.03859,
+              "carry": 0.516013,
+              "turnover": 10192.9479
+            },
+            "stress": {
+              "expectancy": -0.245,
+              "trades": 22,
+              "wins": 3,
+              "pnl": -5.39,
+              "winRate": 13.6,
+              "profitFactor": 0.23,
+              "maxDrawdown": 5.39,
+              "fees": 2.329379,
+              "carry": 0.630302,
+              "turnover": 7764.5971
+            }
+          }
+        },
+        "datasetHash": "8002d6e81a563322c573c0e8d5991f4beecde649a2ae06ab027d6bd237c10c98"
+      },
+      {
+        "bot": "trend",
+        "symbol": "SPY",
+        "baseline": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1465,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.2402,
+              "trades": 6,
+              "wins": 1,
+              "pnl": -1.44,
+              "winRate": 16.7,
+              "profitFactor": 0.27,
+              "maxDrawdown": 2.31,
+              "fees": 0.244461,
+              "carry": 0.501612,
+              "turnover": 1222.303
+            },
+            "stress": {
+              "expectancy": -0.2814,
+              "trades": 6,
+              "wins": 1,
+              "pnl": -1.69,
+              "winRate": 16.7,
+              "profitFactor": 0.16,
+              "maxDrawdown": 2.24,
+              "fees": 0.321352,
+              "carry": 0.660553,
+              "turnover": 1071.1738
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.778,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -3.11,
+              "winRate": 25.0,
+              "profitFactor": 0.07,
+              "maxDrawdown": 3.75,
+              "fees": 0.190409,
+              "carry": 0.107499,
+              "turnover": 952.0433
+            },
+            "stress": {
+              "expectancy": -0.7257,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -2.9,
+              "winRate": 25.0,
+              "profitFactor": 0.04,
+              "maxDrawdown": 3.36,
+              "fees": 0.245805,
+              "carry": 0.139057,
+              "turnover": 819.3484
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1465,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.2402,
+              "trades": 6,
+              "wins": 1,
+              "pnl": -1.44,
+              "winRate": 16.7,
+              "profitFactor": 0.27,
+              "maxDrawdown": 2.31,
+              "fees": 0.244461,
+              "carry": 0.501612,
+              "turnover": 1222.303
+            },
+            "stress": {
+              "expectancy": -0.2814,
+              "trades": 6,
+              "wins": 1,
+              "pnl": -1.69,
+              "winRate": 16.7,
+              "profitFactor": 0.16,
+              "maxDrawdown": 2.24,
+              "fees": 0.321352,
+              "carry": 0.660553,
+              "turnover": 1071.1738
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.778,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -3.11,
+              "winRate": 25.0,
+              "profitFactor": 0.07,
+              "maxDrawdown": 3.75,
+              "fees": 0.190409,
+              "carry": 0.107499,
+              "turnover": 952.0433
+            },
+            "stress": {
+              "expectancy": -0.7257,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -2.9,
+              "winRate": 25.0,
+              "profitFactor": 0.04,
+              "maxDrawdown": 3.36,
+              "fees": 0.245805,
+              "carry": 0.139057,
+              "turnover": 819.3484
+            }
+          }
+        },
+        "datasetHash": "0cef4519a125d5a92b36b1e6590b2d5405437a0d31780162830cbfddc39e3a8b"
+      },
+      {
+        "bot": "trend",
+        "symbol": "NVDA",
+        "baseline": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1465,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.4561,
+              "trades": 5,
+              "wins": 4,
+              "pnl": 2.28,
+              "winRate": 80.0,
+              "profitFactor": 55.28,
+              "maxDrawdown": 1.65,
+              "fees": 0.067374,
+              "carry": 0.09652,
+              "turnover": 336.8716
+            },
+            "stress": {
+              "expectancy": 0.3926,
+              "trades": 5,
+              "wins": 4,
+              "pnl": 1.96,
+              "winRate": 80.0,
+              "profitFactor": 25.82,
+              "maxDrawdown": 1.58,
+              "fees": 0.094083,
+              "carry": 0.1354,
+              "turnover": 313.6114
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.3364,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -1.35,
+              "winRate": 25.0,
+              "profitFactor": 0.28,
+              "maxDrawdown": 2.64,
+              "fees": 0.077984,
+              "carry": 0.082829,
+              "turnover": 389.9196
+            },
+            "stress": {
+              "expectancy": -0.3499,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -1.4,
+              "winRate": 25.0,
+              "profitFactor": 0.25,
+              "maxDrawdown": 2.52,
+              "fees": 0.109544,
+              "carry": 0.11625,
+              "turnover": 365.1481
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1465,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.4561,
+              "trades": 5,
+              "wins": 4,
+              "pnl": 2.28,
+              "winRate": 80.0,
+              "profitFactor": 55.28,
+              "maxDrawdown": 1.65,
+              "fees": 0.067374,
+              "carry": 0.09652,
+              "turnover": 336.8716
+            },
+            "stress": {
+              "expectancy": 0.3926,
+              "trades": 5,
+              "wins": 4,
+              "pnl": 1.96,
+              "winRate": 80.0,
+              "profitFactor": 25.82,
+              "maxDrawdown": 1.58,
+              "fees": 0.094083,
+              "carry": 0.1354,
+              "turnover": 313.6114
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.3364,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -1.35,
+              "winRate": 25.0,
+              "profitFactor": 0.28,
+              "maxDrawdown": 2.64,
+              "fees": 0.077984,
+              "carry": 0.082829,
+              "turnover": 389.9196
+            },
+            "stress": {
+              "expectancy": -0.3499,
+              "trades": 4,
+              "wins": 1,
+              "pnl": -1.4,
+              "winRate": 25.0,
+              "profitFactor": 0.25,
+              "maxDrawdown": 2.52,
+              "fees": 0.109544,
+              "carry": 0.11625,
+              "turnover": 365.1481
+            }
+          }
+        },
+        "datasetHash": "11b93b3e4a0cdff9112ab07bf6c53a361e19d774e867d600b93dbde651f12ca1"
+      },
+      {
+        "bot": "meanrev",
+        "symbol": "BTC",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4271,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.1188,
+              "trades": 3,
+              "wins": 2,
+              "pnl": -0.36,
+              "winRate": 66.7,
+              "profitFactor": 0.62,
+              "maxDrawdown": 0.95,
+              "fees": 0.397346,
+              "carry": 0.00674,
+              "turnover": 397.3461
+            },
+            "stress": {
+              "expectancy": -0.1817,
+              "trades": 3,
+              "wins": 2,
+              "pnl": -0.55,
+              "winRate": 66.7,
+              "profitFactor": 0.41,
+              "maxDrawdown": 0.93,
+              "fees": 0.535008,
+              "carry": 0.009066,
+              "turnover": 356.6722
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2072,
+              "trades": 5,
+              "wins": 3,
+              "pnl": -1.04,
+              "winRate": 60.0,
+              "profitFactor": 0.44,
+              "maxDrawdown": 1.98,
+              "fees": 0.790765,
+              "carry": 0.024649,
+              "turnover": 790.7654
+            },
+            "stress": {
+              "expectancy": -0.1503,
+              "trades": 3,
+              "wins": 2,
+              "pnl": -0.45,
+              "winRate": 66.7,
+              "profitFactor": 0.51,
+              "maxDrawdown": 1.17,
+              "fees": 0.523788,
+              "carry": 0.014369,
+              "turnover": 349.1919
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4271,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.1188,
+              "trades": 3,
+              "wins": 2,
+              "pnl": -0.36,
+              "winRate": 66.7,
+              "profitFactor": 0.62,
+              "maxDrawdown": 0.95,
+              "fees": 0.397346,
+              "carry": 0.00674,
+              "turnover": 397.3461
+            },
+            "stress": {
+              "expectancy": -0.1817,
+              "trades": 3,
+              "wins": 2,
+              "pnl": -0.55,
+              "winRate": 66.7,
+              "profitFactor": 0.41,
+              "maxDrawdown": 0.93,
+              "fees": 0.535008,
+              "carry": 0.009066,
+              "turnover": 356.6722
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2072,
+              "trades": 5,
+              "wins": 3,
+              "pnl": -1.04,
+              "winRate": 60.0,
+              "profitFactor": 0.44,
+              "maxDrawdown": 1.98,
+              "fees": 0.790765,
+              "carry": 0.024649,
+              "turnover": 790.7654
+            },
+            "stress": {
+              "expectancy": -0.1503,
+              "trades": 3,
+              "wins": 2,
+              "pnl": -0.45,
+              "winRate": 66.7,
+              "profitFactor": 0.51,
+              "maxDrawdown": 1.17,
+              "fees": 0.523788,
+              "carry": 0.014369,
+              "turnover": 349.1919
+            }
+          }
+        },
+        "datasetHash": "afa9418eb95d9ed087acebb4e5dfe2d2eae969a7f593ebf291dcc7a16c15d8b7"
+      },
+      {
+        "bot": "meanrev",
+        "symbol": "ETH",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4271,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.3569,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 0.71,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.08,
+              "fees": 0.217623,
+              "carry": 0.00301,
+              "turnover": 217.6235
+            },
+            "stress": {
+              "expectancy": 0.2668,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 0.53,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.13,
+              "fees": 0.298337,
+              "carry": 0.004094,
+              "turnover": 198.8915
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.3589,
+              "trades": 1,
+              "wins": 1,
+              "pnl": 0.36,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.10765,
+              "carry": 0.0,
+              "turnover": 107.6495
+            },
+            "stress": {
+              "expectancy": 0.2685,
+              "trades": 1,
+              "wins": 1,
+              "pnl": 0.27,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.147974,
+              "carry": 0.0,
+              "turnover": 98.649
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4271,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.3569,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 0.71,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.08,
+              "fees": 0.217623,
+              "carry": 0.00301,
+              "turnover": 217.6235
+            },
+            "stress": {
+              "expectancy": 0.2668,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 0.53,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.13,
+              "fees": 0.298337,
+              "carry": 0.004094,
+              "turnover": 198.8915
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.3589,
+              "trades": 1,
+              "wins": 1,
+              "pnl": 0.36,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.10765,
+              "carry": 0.0,
+              "turnover": 107.6495
+            },
+            "stress": {
+              "expectancy": 0.2685,
+              "trades": 1,
+              "wins": 1,
+              "pnl": 0.27,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.147974,
+              "carry": 0.0,
+              "turnover": 98.649
+            }
+          }
+        },
+        "datasetHash": "cf1e5fe4900bdaa919b93af6e88e48491a936cd019cb1cdbd46ebdba09e5d1f9"
+      },
+      {
+        "bot": "meanrev",
+        "symbol": "SOL",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4271,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.413,
+              "trades": 3,
+              "wins": 3,
+              "pnl": 1.24,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.3,
+              "fees": 0.24924,
+              "carry": 0.006328,
+              "turnover": 249.2403
+            },
+            "stress": {
+              "expectancy": 0.338,
+              "trades": 3,
+              "wins": 3,
+              "pnl": 1.01,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.33,
+              "fees": 0.348613,
+              "carry": 0.01055,
+              "turnover": 232.4087
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4271,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.413,
+              "trades": 3,
+              "wins": 3,
+              "pnl": 1.24,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.3,
+              "fees": 0.24924,
+              "carry": 0.006328,
+              "turnover": 249.2403
+            },
+            "stress": {
+              "expectancy": 0.338,
+              "trades": 3,
+              "wins": 3,
+              "pnl": 1.01,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.33,
+              "fees": 0.348613,
+              "carry": 0.01055,
+              "turnover": 232.4087
+            }
+          }
+        },
+        "datasetHash": "0809a4f719a6dc467351be9429c60cb7a896edacef08b499145b967431a68d64"
+      },
+      {
+        "bot": "meanrev",
+        "symbol": "SPY",
+        "baseline": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1297,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1297,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "datasetHash": "0cef4519a125d5a92b36b1e6590b2d5405437a0d31780162830cbfddc39e3a8b"
+      },
+      {
+        "bot": "meanrev",
+        "symbol": "NVDA",
+        "baseline": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1297,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.5322,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 1.06,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.8,
+              "fees": 0.026143,
+              "carry": 0.03371,
+              "turnover": 130.7167
+            },
+            "stress": {
+              "expectancy": 0.5004,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 1.0,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.81,
+              "fees": 0.038345,
+              "carry": 0.049657,
+              "turnover": 127.8158
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -1.0075,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -1.01,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.08,
+              "fees": 0.016992,
+              "carry": 0.033293,
+              "turnover": 84.9614
+            },
+            "stress": {
+              "expectancy": -1.011,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -1.01,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.06,
+              "fees": 0.024778,
+              "carry": 0.048553,
+              "turnover": 82.5946
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1297,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.5322,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 1.06,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.8,
+              "fees": 0.026143,
+              "carry": 0.03371,
+              "turnover": 130.7167
+            },
+            "stress": {
+              "expectancy": 0.5004,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 1.0,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.81,
+              "fees": 0.038345,
+              "carry": 0.049657,
+              "turnover": 127.8158
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -1.0075,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -1.01,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.08,
+              "fees": 0.016992,
+              "carry": 0.033293,
+              "turnover": 84.9614
+            },
+            "stress": {
+              "expectancy": -1.011,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -1.01,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.06,
+              "fees": 0.024778,
+              "carry": 0.048553,
+              "turnover": 82.5946
+            }
+          }
+        },
+        "datasetHash": "11b93b3e4a0cdff9112ab07bf6c53a361e19d774e867d600b93dbde651f12ca1"
+      },
+      {
+        "bot": "orb",
+        "symbol": "SPY",
+        "baseline": {
+          "interval": "5m",
+          "bars": 4629,
+          "periods": {
+            "development": [
+              2314,
+              3240
+            ],
+            "final": [
+              3300,
+              4629
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.795,
+              "trades": 19,
+              "wins": 0,
+              "pnl": -15.11,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 15.11,
+              "fees": 4.431517,
+              "carry": 0.017903,
+              "turnover": 22157.5861
+            },
+            "stress": {
+              "expectancy": -0.9075,
+              "trades": 15,
+              "wins": 0,
+              "pnl": -13.61,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 13.61,
+              "fees": 4.115968,
+              "carry": 0.012904,
+              "turnover": 13719.8929
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.5096,
+              "trades": 24,
+              "wins": 5,
+              "pnl": -12.23,
+              "winRate": 20.8,
+              "profitFactor": 0.26,
+              "maxDrawdown": 12.54,
+              "fees": 5.477896,
+              "carry": 0.024527,
+              "turnover": 27389.4788
+            },
+            "stress": {
+              "expectancy": -0.5975,
+              "trades": 17,
+              "wins": 2,
+              "pnl": -10.16,
+              "winRate": 11.8,
+              "profitFactor": 0.11,
+              "maxDrawdown": 10.16,
+              "fees": 4.503529,
+              "carry": 0.01578,
+              "turnover": 15011.7647
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "5m",
+          "bars": 4629,
+          "periods": {
+            "development": [
+              2314,
+              3240
+            ],
+            "final": [
+              3300,
+              4629
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.9765,
+              "trades": 2,
+              "wins": 0,
+              "pnl": -1.95,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.95,
+              "fees": 0.466748,
+              "carry": 0.001622,
+              "turnover": 2333.7382
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2996,
+              "trades": 8,
+              "wins": 1,
+              "pnl": -2.4,
+              "winRate": 12.5,
+              "profitFactor": 0.42,
+              "maxDrawdown": 2.76,
+              "fees": 1.620024,
+              "carry": 0.041451,
+              "turnover": 8100.1224
+            },
+            "stress": {
+              "expectancy": -0.6599,
+              "trades": 5,
+              "wins": 0,
+              "pnl": -3.3,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 3.53,
+              "fees": 1.175056,
+              "carry": 0.012506,
+              "turnover": 3916.8542
+            }
+          }
+        },
+        "datasetHash": "5d081abcc93365719624bfc841c60781597ed47f36f5edd3be214d965f9f68d5"
+      },
+      {
+        "bot": "orb",
+        "symbol": "NVDA",
+        "baseline": {
+          "interval": "5m",
+          "bars": 4629,
+          "periods": {
+            "development": [
+              2314,
+              3240
+            ],
+            "final": [
+              3300,
+              4629
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3839,
+              "trades": 12,
+              "wins": 4,
+              "pnl": -4.61,
+              "winRate": 33.3,
+              "profitFactor": 0.33,
+              "maxDrawdown": 4.62,
+              "fees": 1.310175,
+              "carry": 0.026989,
+              "turnover": 6550.8735
+            },
+            "stress": {
+              "expectancy": -0.4347,
+              "trades": 12,
+              "wins": 3,
+              "pnl": -5.22,
+              "winRate": 25.0,
+              "profitFactor": 0.24,
+              "maxDrawdown": 5.22,
+              "fees": 1.771579,
+              "carry": 0.035532,
+              "turnover": 5905.2625
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2462,
+              "trades": 22,
+              "wins": 8,
+              "pnl": -5.42,
+              "winRate": 36.4,
+              "profitFactor": 0.54,
+              "maxDrawdown": 8.97,
+              "fees": 2.303696,
+              "carry": 0.025361,
+              "turnover": 11518.4787
+            },
+            "stress": {
+              "expectancy": -0.402,
+              "trades": 23,
+              "wins": 7,
+              "pnl": -9.25,
+              "winRate": 30.4,
+              "profitFactor": 0.33,
+              "maxDrawdown": 9.54,
+              "fees": 3.278387,
+              "carry": 0.035805,
+              "turnover": 10927.9556
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "5m",
+          "bars": 4629,
+          "periods": {
+            "development": [
+              2314,
+              3240
+            ],
+            "final": [
+              3300,
+              4629
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.9877,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -0.99,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 0.99,
+              "fees": 0.122381,
+              "carry": 0.000426,
+              "turnover": 611.9074
+            },
+            "stress": {
+              "expectancy": -0.9835,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -0.98,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 0.98,
+              "fees": 0.163758,
+              "carry": 0.000569,
+              "turnover": 545.8603
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.7932,
+              "trades": 5,
+              "wins": 0,
+              "pnl": -3.97,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 4.44,
+              "fees": 0.427969,
+              "carry": 0.003809,
+              "turnover": 2139.8462
+            },
+            "stress": {
+              "expectancy": -0.7905,
+              "trades": 5,
+              "wins": 0,
+              "pnl": -3.95,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 3.95,
+              "fees": 0.590434,
+              "carry": 0.004434,
+              "turnover": 1968.1138
+            }
+          }
+        },
+        "datasetHash": "b26a61d53569af6f31d446a0a67b8973cd625719cd7bdb82834930bf52f3f841"
+      },
+      {
+        "bot": "squeeze",
+        "symbol": "BTC",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4247,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.0699,
+              "trades": 15,
+              "wins": 9,
+              "pnl": 1.05,
+              "winRate": 60.0,
+              "profitFactor": 1.35,
+              "maxDrawdown": 2.66,
+              "fees": 2.985623,
+              "carry": 0.11356,
+              "turnover": 2985.6232
+            },
+            "stress": {
+              "expectancy": -0.014,
+              "trades": 15,
+              "wins": 7,
+              "pnl": -0.21,
+              "winRate": 46.7,
+              "profitFactor": 0.93,
+              "maxDrawdown": 2.92,
+              "fees": 3.86983,
+              "carry": 0.16287,
+              "turnover": 2579.8867
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2098,
+              "trades": 26,
+              "wins": 7,
+              "pnl": -5.45,
+              "winRate": 26.9,
+              "profitFactor": 0.63,
+              "maxDrawdown": 8.56,
+              "fees": 5.477711,
+              "carry": 0.228306,
+              "turnover": 5477.7115
+            },
+            "stress": {
+              "expectancy": -0.3936,
+              "trades": 24,
+              "wins": 5,
+              "pnl": -9.45,
+              "winRate": 20.8,
+              "profitFactor": 0.35,
+              "maxDrawdown": 10.68,
+              "fees": 6.225946,
+              "carry": 0.25938,
+              "turnover": 4150.631
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4271,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.8182,
+              "trades": 11,
+              "wins": 0,
+              "pnl": -9.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 9.02,
+              "fees": 1.568434,
+              "carry": 0.278558,
+              "turnover": 1568.4342
+            },
+            "stress": {
+              "expectancy": -0.8263,
+              "trades": 11,
+              "wins": 0,
+              "pnl": -9.09,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 9.09,
+              "fees": 2.088053,
+              "carry": 0.372408,
+              "turnover": 1392.0356
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.0461,
+              "trades": 20,
+              "wins": 9,
+              "pnl": 0.92,
+              "winRate": 45.0,
+              "profitFactor": 1.1,
+              "maxDrawdown": 3.54,
+              "fees": 3.565656,
+              "carry": 0.29489,
+              "turnover": 3565.656
+            },
+            "stress": {
+              "expectancy": -0.1066,
+              "trades": 18,
+              "wins": 8,
+              "pnl": -1.92,
+              "winRate": 44.4,
+              "profitFactor": 0.78,
+              "maxDrawdown": 3.66,
+              "fees": 3.948472,
+              "carry": 0.360691,
+              "turnover": 2632.3146
+            }
+          }
+        },
+        "datasetHash": "afa9418eb95d9ed087acebb4e5dfe2d2eae969a7f593ebf291dcc7a16c15d8b7"
+      },
+      {
+        "bot": "squeeze",
+        "symbol": "ETH",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4247,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.2381,
+              "trades": 20,
+              "wins": 8,
+              "pnl": -4.76,
+              "winRate": 40.0,
+              "profitFactor": 0.51,
+              "maxDrawdown": 6.58,
+              "fees": 3.084916,
+              "carry": 0.126297,
+              "turnover": 3084.9163
+            },
+            "stress": {
+              "expectancy": -0.2973,
+              "trades": 20,
+              "wins": 8,
+              "pnl": -5.95,
+              "winRate": 40.0,
+              "profitFactor": 0.38,
+              "maxDrawdown": 7.4,
+              "fees": 4.125615,
+              "carry": 0.170323,
+              "turnover": 2750.41
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.084,
+              "trades": 24,
+              "wins": 13,
+              "pnl": -2.01,
+              "winRate": 54.2,
+              "profitFactor": 0.81,
+              "maxDrawdown": 6.86,
+              "fees": 4.330366,
+              "carry": 0.181804,
+              "turnover": 4330.3657
+            },
+            "stress": {
+              "expectancy": -0.214,
+              "trades": 24,
+              "wins": 9,
+              "pnl": -5.13,
+              "winRate": 37.5,
+              "profitFactor": 0.5,
+              "maxDrawdown": 8.99,
+              "fees": 5.652032,
+              "carry": 0.217482,
+              "turnover": 3768.021
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4271,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3826,
+              "trades": 14,
+              "wins": 3,
+              "pnl": -5.36,
+              "winRate": 21.4,
+              "profitFactor": 0.46,
+              "maxDrawdown": 5.36,
+              "fees": 1.563098,
+              "carry": 0.162634,
+              "turnover": 1563.0981
+            },
+            "stress": {
+              "expectancy": -0.4163,
+              "trades": 14,
+              "wins": 3,
+              "pnl": -5.83,
+              "winRate": 21.4,
+              "profitFactor": 0.4,
+              "maxDrawdown": 5.83,
+              "fees": 2.136413,
+              "carry": 0.221577,
+              "turnover": 1424.2751
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.1424,
+              "trades": 20,
+              "wins": 10,
+              "pnl": 2.85,
+              "winRate": 50.0,
+              "profitFactor": 1.3,
+              "maxDrawdown": 4.83,
+              "fees": 2.580207,
+              "carry": 0.195974,
+              "turnover": 2580.2066
+            },
+            "stress": {
+              "expectancy": 0.0434,
+              "trades": 20,
+              "wins": 10,
+              "pnl": 0.87,
+              "winRate": 50.0,
+              "profitFactor": 1.09,
+              "maxDrawdown": 4.97,
+              "fees": 3.467705,
+              "carry": 0.223722,
+              "turnover": 2311.8036
+            }
+          }
+        },
+        "datasetHash": "cf1e5fe4900bdaa919b93af6e88e48491a936cd019cb1cdbd46ebdba09e5d1f9"
+      },
+      {
+        "bot": "squeeze",
+        "symbol": "SOL",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4247,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.1188,
+              "trades": 15,
+              "wins": 9,
+              "pnl": -1.78,
+              "winRate": 60.0,
+              "profitFactor": 0.69,
+              "maxDrawdown": 3.59,
+              "fees": 1.984473,
+              "carry": 0.058108,
+              "turnover": 1984.4731
+            },
+            "stress": {
+              "expectancy": -0.1902,
+              "trades": 15,
+              "wins": 8,
+              "pnl": -2.85,
+              "winRate": 53.3,
+              "profitFactor": 0.5,
+              "maxDrawdown": 4.23,
+              "fees": 2.690315,
+              "carry": 0.079811,
+              "turnover": 1793.5435
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.1776,
+              "trades": 30,
+              "wins": 14,
+              "pnl": -5.33,
+              "winRate": 46.7,
+              "profitFactor": 0.65,
+              "maxDrawdown": 7.01,
+              "fees": 4.414435,
+              "carry": 0.193895,
+              "turnover": 4414.4349
+            },
+            "stress": {
+              "expectancy": -0.2428,
+              "trades": 30,
+              "wins": 13,
+              "pnl": -7.28,
+              "winRate": 43.3,
+              "profitFactor": 0.52,
+              "maxDrawdown": 8.04,
+              "fees": 5.899328,
+              "carry": 0.252816,
+              "turnover": 3932.8853
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4271,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.7826,
+              "trades": 11,
+              "wins": 1,
+              "pnl": -8.61,
+              "winRate": 9.1,
+              "profitFactor": 0.1,
+              "maxDrawdown": 8.71,
+              "fees": 1.12592,
+              "carry": 0.093921,
+              "turnover": 1125.9197
+            },
+            "stress": {
+              "expectancy": -0.7856,
+              "trades": 11,
+              "wins": 1,
+              "pnl": -8.64,
+              "winRate": 9.1,
+              "profitFactor": 0.08,
+              "maxDrawdown": 8.67,
+              "fees": 1.553406,
+              "carry": 0.127374,
+              "turnover": 1035.6039
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.3654,
+              "trades": 17,
+              "wins": 7,
+              "pnl": 6.21,
+              "winRate": 41.2,
+              "profitFactor": 1.64,
+              "maxDrawdown": 3.37,
+              "fees": 1.777236,
+              "carry": 0.227847,
+              "turnover": 1777.2364
+            },
+            "stress": {
+              "expectancy": 0.1482,
+              "trades": 19,
+              "wins": 7,
+              "pnl": 2.82,
+              "winRate": 36.8,
+              "profitFactor": 1.25,
+              "maxDrawdown": 4.68,
+              "fees": 2.736683,
+              "carry": 0.292665,
+              "turnover": 1824.4554
+            }
+          }
+        },
+        "datasetHash": "0809a4f719a6dc467351be9429c60cb7a896edacef08b499145b967431a68d64"
+      },
+      {
+        "bot": "squeeze",
+        "symbol": "EURUSD",
+        "baseline": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4248,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3492,
+              "trades": 16,
+              "wins": 5,
+              "pnl": -5.59,
+              "winRate": 31.2,
+              "profitFactor": 0.27,
+              "maxDrawdown": 6.77,
+              "fees": 2.767628,
+              "carry": 0.279701,
+              "turnover": 13838.1381
+            },
+            "stress": {
+              "expectancy": -0.4814,
+              "trades": 17,
+              "wins": 2,
+              "pnl": -8.18,
+              "winRate": 11.8,
+              "profitFactor": 0.05,
+              "maxDrawdown": 8.18,
+              "fees": 3.596634,
+              "carry": 0.324536,
+              "turnover": 11988.7787
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.611,
+              "trades": 20,
+              "wins": 2,
+              "pnl": -12.22,
+              "winRate": 10.0,
+              "profitFactor": 0.09,
+              "maxDrawdown": 13.13,
+              "fees": 3.853284,
+              "carry": 0.692044,
+              "turnover": 19266.4193
+            },
+            "stress": {
+              "expectancy": -0.6669,
+              "trades": 20,
+              "wins": 2,
+              "pnl": -13.34,
+              "winRate": 10.0,
+              "profitFactor": 0.04,
+              "maxDrawdown": 14.05,
+              "fees": 4.606673,
+              "carry": 0.871183,
+              "turnover": 15355.5765
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4272,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.4795,
+              "trades": 19,
+              "wins": 4,
+              "pnl": -9.11,
+              "winRate": 21.1,
+              "profitFactor": 0.3,
+              "maxDrawdown": 10.53,
+              "fees": 2.555594,
+              "carry": 1.31085,
+              "turnover": 12777.9679
+            },
+            "stress": {
+              "expectancy": -0.5051,
+              "trades": 19,
+              "wins": 3,
+              "pnl": -9.6,
+              "winRate": 15.8,
+              "profitFactor": 0.22,
+              "maxDrawdown": 10.32,
+              "fees": 3.164197,
+              "carry": 1.378957,
+              "turnover": 10547.3247
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2885,
+              "trades": 19,
+              "wins": 6,
+              "pnl": -5.48,
+              "winRate": 31.6,
+              "profitFactor": 0.47,
+              "maxDrawdown": 5.48,
+              "fees": 2.770882,
+              "carry": 0.771402,
+              "turnover": 13854.4125
+            },
+            "stress": {
+              "expectancy": -0.3576,
+              "trades": 19,
+              "wins": 6,
+              "pnl": -6.79,
+              "winRate": 31.6,
+              "profitFactor": 0.31,
+              "maxDrawdown": 6.79,
+              "fees": 3.37233,
+              "carry": 0.907528,
+              "turnover": 11241.0984
+            }
+          }
+        },
+        "datasetHash": "8002d6e81a563322c573c0e8d5991f4beecde649a2ae06ab027d6bd237c10c98"
+      },
+      {
+        "bot": "squeeze",
+        "symbol": "GBPUSD",
+        "baseline": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4248,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.4515,
+              "trades": 14,
+              "wins": 4,
+              "pnl": -6.32,
+              "winRate": 28.6,
+              "profitFactor": 0.27,
+              "maxDrawdown": 6.67,
+              "fees": 2.215828,
+              "carry": 0.276478,
+              "turnover": 11079.1401
+            },
+            "stress": {
+              "expectancy": -0.6182,
+              "trades": 14,
+              "wins": 2,
+              "pnl": -8.66,
+              "winRate": 14.3,
+              "profitFactor": 0.04,
+              "maxDrawdown": 8.91,
+              "fees": 2.750744,
+              "carry": 0.270529,
+              "turnover": 9169.1482
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.4306,
+              "trades": 25,
+              "wins": 4,
+              "pnl": -10.77,
+              "winRate": 16.0,
+              "profitFactor": 0.23,
+              "maxDrawdown": 11.23,
+              "fees": 4.50104,
+              "carry": 0.631927,
+              "turnover": 22505.2025
+            },
+            "stress": {
+              "expectancy": -0.5135,
+              "trades": 25,
+              "wins": 3,
+              "pnl": -12.84,
+              "winRate": 12.0,
+              "profitFactor": 0.13,
+              "maxDrawdown": 13.01,
+              "fees": 5.452596,
+              "carry": 0.758366,
+              "turnover": 18175.3188
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4272,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3584,
+              "trades": 19,
+              "wins": 4,
+              "pnl": -6.81,
+              "winRate": 21.1,
+              "profitFactor": 0.46,
+              "maxDrawdown": 7.52,
+              "fees": 2.388311,
+              "carry": 0.618809,
+              "turnover": 11941.5544
+            },
+            "stress": {
+              "expectancy": -0.4031,
+              "trades": 19,
+              "wins": 4,
+              "pnl": -7.66,
+              "winRate": 21.1,
+              "profitFactor": 0.36,
+              "maxDrawdown": 7.8,
+              "fees": 2.991248,
+              "carry": 0.754063,
+              "turnover": 9970.8251
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.1656,
+              "trades": 24,
+              "wins": 8,
+              "pnl": -3.97,
+              "winRate": 33.3,
+              "profitFactor": 0.68,
+              "maxDrawdown": 5.76,
+              "fees": 3.466685,
+              "carry": 1.606536,
+              "turnover": 17333.4249
+            },
+            "stress": {
+              "expectancy": -0.2697,
+              "trades": 24,
+              "wins": 8,
+              "pnl": -6.47,
+              "winRate": 33.3,
+              "profitFactor": 0.46,
+              "maxDrawdown": 7.53,
+              "fees": 4.23732,
+              "carry": 1.967192,
+              "turnover": 14124.3984
+            }
+          }
+        },
+        "datasetHash": "f3eae2690a7c4371d73343bd38a0e7faaed7d1a8116a1e95576a3c5ec90f8a09"
+      },
+      {
+        "bot": "flow",
+        "symbol": "BTC",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4247,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.4577,
+              "trades": 18,
+              "wins": 6,
+              "pnl": -8.24,
+              "winRate": 33.3,
+              "profitFactor": 0.26,
+              "maxDrawdown": 9.1,
+              "fees": 2.64438,
+              "carry": 0.166112,
+              "turnover": 2644.3801
+            },
+            "stress": {
+              "expectancy": -0.5002,
+              "trades": 18,
+              "wins": 5,
+              "pnl": -9.0,
+              "winRate": 27.8,
+              "profitFactor": 0.18,
+              "maxDrawdown": 9.68,
+              "fees": 3.551304,
+              "carry": 0.224611,
+              "turnover": 2367.5361
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.185,
+              "trades": 26,
+              "wins": 13,
+              "pnl": -4.81,
+              "winRate": 50.0,
+              "profitFactor": 0.61,
+              "maxDrawdown": 8.26,
+              "fees": 4.3918,
+              "carry": 0.204371,
+              "turnover": 4391.8003
+            },
+            "stress": {
+              "expectancy": -0.384,
+              "trades": 26,
+              "wins": 10,
+              "pnl": -9.98,
+              "winRate": 38.5,
+              "profitFactor": 0.29,
+              "maxDrawdown": 11.98,
+              "fees": 5.647508,
+              "carry": 0.249975,
+              "turnover": 3765.0052
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4247,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.4577,
+              "trades": 18,
+              "wins": 6,
+              "pnl": -8.24,
+              "winRate": 33.3,
+              "profitFactor": 0.26,
+              "maxDrawdown": 9.1,
+              "fees": 2.64438,
+              "carry": 0.166112,
+              "turnover": 2644.3801
+            },
+            "stress": {
+              "expectancy": -0.5002,
+              "trades": 18,
+              "wins": 5,
+              "pnl": -9.0,
+              "winRate": 27.8,
+              "profitFactor": 0.18,
+              "maxDrawdown": 9.68,
+              "fees": 3.551304,
+              "carry": 0.224611,
+              "turnover": 2367.5361
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.185,
+              "trades": 26,
+              "wins": 13,
+              "pnl": -4.81,
+              "winRate": 50.0,
+              "profitFactor": 0.61,
+              "maxDrawdown": 8.26,
+              "fees": 4.3918,
+              "carry": 0.204371,
+              "turnover": 4391.8003
+            },
+            "stress": {
+              "expectancy": -0.384,
+              "trades": 26,
+              "wins": 10,
+              "pnl": -9.98,
+              "winRate": 38.5,
+              "profitFactor": 0.29,
+              "maxDrawdown": 11.98,
+              "fees": 5.647508,
+              "carry": 0.249975,
+              "turnover": 3765.0052
+            }
+          }
+        },
+        "datasetHash": "afa9418eb95d9ed087acebb4e5dfe2d2eae969a7f593ebf291dcc7a16c15d8b7"
+      },
+      {
+        "bot": "flow",
+        "symbol": "ETH",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4247,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3296,
+              "trades": 16,
+              "wins": 7,
+              "pnl": -5.27,
+              "winRate": 43.8,
+              "profitFactor": 0.4,
+              "maxDrawdown": 6.64,
+              "fees": 1.899941,
+              "carry": 0.088707,
+              "turnover": 1899.9409
+            },
+            "stress": {
+              "expectancy": -0.3807,
+              "trades": 16,
+              "wins": 7,
+              "pnl": -6.09,
+              "winRate": 43.8,
+              "profitFactor": 0.3,
+              "maxDrawdown": 7.15,
+              "fees": 2.601307,
+              "carry": 0.121747,
+              "turnover": 1734.2049
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.0472,
+              "trades": 23,
+              "wins": 13,
+              "pnl": 1.09,
+              "winRate": 56.5,
+              "profitFactor": 1.11,
+              "maxDrawdown": 3.69,
+              "fees": 3.26897,
+              "carry": 0.089628,
+              "turnover": 3268.9699
+            },
+            "stress": {
+              "expectancy": -0.0291,
+              "trades": 22,
+              "wins": 12,
+              "pnl": -0.64,
+              "winRate": 54.5,
+              "profitFactor": 0.93,
+              "maxDrawdown": 4.54,
+              "fees": 3.986572,
+              "carry": 0.13118,
+              "turnover": 2657.7149
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4247,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": -0.3296,
+              "trades": 16,
+              "wins": 7,
+              "pnl": -5.27,
+              "winRate": 43.8,
+              "profitFactor": 0.4,
+              "maxDrawdown": 6.64,
+              "fees": 1.899941,
+              "carry": 0.088707,
+              "turnover": 1899.9409
+            },
+            "stress": {
+              "expectancy": -0.3807,
+              "trades": 16,
+              "wins": 7,
+              "pnl": -6.09,
+              "winRate": 43.8,
+              "profitFactor": 0.3,
+              "maxDrawdown": 7.15,
+              "fees": 2.601307,
+              "carry": 0.121747,
+              "turnover": 1734.2049
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.0472,
+              "trades": 23,
+              "wins": 13,
+              "pnl": 1.09,
+              "winRate": 56.5,
+              "profitFactor": 1.11,
+              "maxDrawdown": 3.69,
+              "fees": 3.26897,
+              "carry": 0.089628,
+              "turnover": 3268.9699
+            },
+            "stress": {
+              "expectancy": -0.0291,
+              "trades": 22,
+              "wins": 12,
+              "pnl": -0.64,
+              "winRate": 54.5,
+              "profitFactor": 0.93,
+              "maxDrawdown": 4.54,
+              "fees": 3.986572,
+              "carry": 0.13118,
+              "turnover": 2657.7149
+            }
+          }
+        },
+        "datasetHash": "cf1e5fe4900bdaa919b93af6e88e48491a936cd019cb1cdbd46ebdba09e5d1f9"
+      },
+      {
+        "bot": "flow",
+        "symbol": "SOL",
+        "baseline": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4247,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.0796,
+              "trades": 17,
+              "wins": 10,
+              "pnl": 1.35,
+              "winRate": 58.8,
+              "profitFactor": 1.2,
+              "maxDrawdown": 2.47,
+              "fees": 1.79943,
+              "carry": 0.151143,
+              "turnover": 1799.4296
+            },
+            "stress": {
+              "expectancy": 0.0114,
+              "trades": 17,
+              "wins": 10,
+              "pnl": 0.19,
+              "winRate": 58.8,
+              "profitFactor": 1.03,
+              "maxDrawdown": 2.48,
+              "fees": 2.480903,
+              "carry": 0.208334,
+              "turnover": 1653.9356
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2154,
+              "trades": 27,
+              "wins": 11,
+              "pnl": -5.82,
+              "winRate": 40.7,
+              "profitFactor": 0.61,
+              "maxDrawdown": 8.5,
+              "fees": 2.967021,
+              "carry": 0.112311,
+              "turnover": 2967.0214
+            },
+            "stress": {
+              "expectancy": -0.2273,
+              "trades": 27,
+              "wins": 11,
+              "pnl": -6.14,
+              "winRate": 40.7,
+              "profitFactor": 0.58,
+              "maxDrawdown": 8.32,
+              "fees": 4.07499,
+              "carry": 0.165125,
+              "turnover": 2716.6599
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 5999,
+          "periods": {
+            "development": [
+              2999,
+              4199
+            ],
+            "final": [
+              4247,
+              5999
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.0796,
+              "trades": 17,
+              "wins": 10,
+              "pnl": 1.35,
+              "winRate": 58.8,
+              "profitFactor": 1.2,
+              "maxDrawdown": 2.47,
+              "fees": 1.79943,
+              "carry": 0.151143,
+              "turnover": 1799.4296
+            },
+            "stress": {
+              "expectancy": 0.0114,
+              "trades": 17,
+              "wins": 10,
+              "pnl": 0.19,
+              "winRate": 58.8,
+              "profitFactor": 1.03,
+              "maxDrawdown": 2.48,
+              "fees": 2.480903,
+              "carry": 0.208334,
+              "turnover": 1653.9356
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": -0.2154,
+              "trades": 27,
+              "wins": 11,
+              "pnl": -5.82,
+              "winRate": 40.7,
+              "profitFactor": 0.61,
+              "maxDrawdown": 8.5,
+              "fees": 2.967021,
+              "carry": 0.112311,
+              "turnover": 2967.0214
+            },
+            "stress": {
+              "expectancy": -0.2273,
+              "trades": 27,
+              "wins": 11,
+              "pnl": -6.14,
+              "winRate": 40.7,
+              "profitFactor": 0.58,
+              "maxDrawdown": 8.32,
+              "fees": 4.07499,
+              "carry": 0.165125,
+              "turnover": 2716.6599
+            }
+          }
+        },
+        "datasetHash": "0809a4f719a6dc467351be9429c60cb7a896edacef08b499145b967431a68d64"
+      },
+      {
+        "bot": "flow",
+        "symbol": "EURUSD",
+        "baseline": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4248,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4248,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "datasetHash": "8002d6e81a563322c573c0e8d5991f4beecde649a2ae06ab027d6bd237c10c98"
+      },
+      {
+        "bot": "flow",
+        "symbol": "GBPUSD",
+        "baseline": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4248,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 6000,
+          "periods": {
+            "development": [
+              3000,
+              4200
+            ],
+            "final": [
+              4248,
+              6000
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            },
+            "stress": {
+              "expectancy": null,
+              "trades": 0,
+              "wins": 0,
+              "pnl": 0.0,
+              "winRate": null,
+              "profitFactor": null,
+              "maxDrawdown": 0.0,
+              "fees": 0.0,
+              "carry": 0.0,
+              "turnover": 0.0
+            }
+          }
+        },
+        "datasetHash": "f3eae2690a7c4371d73343bd38a0e7faaed7d1a8116a1e95576a3c5ec90f8a09"
+      },
+      {
+        "bot": "flow",
+        "symbol": "NVDA",
+        "baseline": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1273,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.1134,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 0.68,
+              "winRate": 66.7,
+              "profitFactor": 1.34,
+              "maxDrawdown": 1.71,
+              "fees": 0.086193,
+              "carry": 0.132832,
+              "turnover": 430.9641
+            },
+            "stress": {
+              "expectancy": 0.0665,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 0.4,
+              "winRate": 66.7,
+              "profitFactor": 1.2,
+              "maxDrawdown": 1.68,
+              "fees": 0.124579,
+              "carry": 0.194169,
+              "turnover": 415.2631
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.2345,
+              "trades": 8,
+              "wins": 6,
+              "pnl": 1.88,
+              "winRate": 75.0,
+              "profitFactor": 1.51,
+              "maxDrawdown": 3.06,
+              "fees": 0.161103,
+              "carry": 0.094974,
+              "turnover": 805.5143
+            },
+            "stress": {
+              "expectancy": 0.1968,
+              "trades": 8,
+              "wins": 6,
+              "pnl": 1.57,
+              "winRate": 75.0,
+              "profitFactor": 1.43,
+              "maxDrawdown": 3.01,
+              "fees": 0.234606,
+              "carry": 0.13828,
+              "turnover": 782.021
+            }
+          }
+        },
+        "aggressive": {
+          "interval": "1h",
+          "bars": 1751,
+          "periods": {
+            "development": [
+              875,
+              1225
+            ],
+            "final": [
+              1273,
+              1751
+            ]
+          },
+          "development": {
+            "normal": {
+              "expectancy": 0.1134,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 0.68,
+              "winRate": 66.7,
+              "profitFactor": 1.34,
+              "maxDrawdown": 1.71,
+              "fees": 0.086193,
+              "carry": 0.132832,
+              "turnover": 430.9641
+            },
+            "stress": {
+              "expectancy": 0.0665,
+              "trades": 6,
+              "wins": 4,
+              "pnl": 0.4,
+              "winRate": 66.7,
+              "profitFactor": 1.2,
+              "maxDrawdown": 1.68,
+              "fees": 0.124579,
+              "carry": 0.194169,
+              "turnover": 415.2631
+            }
+          },
+          "final": {
+            "normal": {
+              "expectancy": 0.2345,
+              "trades": 8,
+              "wins": 6,
+              "pnl": 1.88,
+              "winRate": 75.0,
+              "profitFactor": 1.51,
+              "maxDrawdown": 3.06,
+              "fees": 0.161103,
+              "carry": 0.094974,
+              "turnover": 805.5143
+            },
+            "stress": {
+              "expectancy": 0.1968,
+              "trades": 8,
+              "wins": 6,
+              "pnl": 1.57,
+              "winRate": 75.0,
+              "profitFactor": 1.43,
+              "maxDrawdown": 3.01,
+              "fees": 0.234606,
+              "carry": 0.13828,
+              "turnover": 782.021
+            }
+          }
+        },
+        "datasetHash": "11b93b3e4a0cdff9112ab07bf6c53a361e19d774e867d600b93dbde651f12ca1"
+      }
+    ],
+    "promotionApplied": false,
+    "scope": "Exploración; datos solapados con estudios anteriores. Cada serie usa riesgo fijo de 1 unidad; no sumar monedas ni interpretar como cartera."
+  },
+  "desks": {
+    "results": [
+      {
+        "market": "crypto",
+        "symbol": "BTC",
+        "interval": "1h",
+        "bars": 5999,
+        "baseline": {
+          "normal": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.779092,
+            "trades": 30,
+            "wins": 10,
+            "profitFactor": 0.8206742639642792,
+            "maxDrawdownUSDT": 2.30014,
+            "fees": 0.969901,
+            "partials": 7,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 30,
+              "mean": -0.02596972123791989,
+              "lower95": -0.12423304611050785,
+              "upper95": 0.05838814535713989,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.898731,
+            "trades": 18,
+            "wins": 5,
+            "profitFactor": 0.7455434113310011,
+            "maxDrawdownUSDT": 1.941197,
+            "fees": 0.876566,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 18,
+              "mean": -0.04992951935804696,
+              "lower95": -0.19255530202976093,
+              "upper95": 0.10509386675328859,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        "aggressive": {
+          "normal": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": 0.376214,
+            "trades": 16,
+            "wins": 5,
+            "profitFactor": 1.1289435421663778,
+            "maxDrawdownUSDT": 2.301807,
+            "fees": 0.789944,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 16,
+              "mean": 0.023513385379087343,
+              "lower95": -0.20121769765974776,
+              "upper95": 0.2301207827962386,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.788796,
+            "trades": 17,
+            "wins": 4,
+            "profitFactor": 0.8260407772295838,
+            "maxDrawdownUSDT": 3.004654,
+            "fees": 1.247258,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 17,
+              "mean": -0.046399752752781576,
+              "lower95": -0.2588628271339112,
+              "upper95": 0.1629671614328714,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      },
+      {
+        "market": "crypto",
+        "symbol": "ETH",
+        "interval": "1h",
+        "bars": 5999,
+        "baseline": {
+          "normal": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.345048,
+            "trades": 34,
+            "wins": 11,
+            "profitFactor": 0.9327603808234712,
+            "maxDrawdownUSDT": 2.674937,
+            "fees": 1.131269,
+            "partials": 7,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 34,
+              "mean": -0.010148466360732558,
+              "lower95": -0.12001804684026307,
+              "upper95": 0.10217525701695757,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.913004,
+            "trades": 31,
+            "wins": 8,
+            "profitFactor": 0.8377195319620265,
+            "maxDrawdownUSDT": 3.45948,
+            "fees": 1.544646,
+            "partials": 5,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 31,
+              "mean": -0.02945175065066978,
+              "lower95": -0.1742798954648404,
+              "upper95": 0.13151016044673544,
+              "blockLength": 5,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        "aggressive": {
+          "normal": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": -3.524562,
+            "trades": 24,
+            "wins": 6,
+            "profitFactor": 0.5028459490536819,
+            "maxDrawdownUSDT": 6.205393,
+            "fees": 1.175627,
+            "partials": 4,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 24,
+              "mean": -0.1468567437994093,
+              "lower95": -0.3346187539958556,
+              "upper95": 0.04778537839410465,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": -4.122657,
+            "trades": 23,
+            "wins": 5,
+            "profitFactor": 0.4588649388607294,
+            "maxDrawdownUSDT": 6.923889,
+            "fees": 1.681458,
+            "partials": 3,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 23,
+              "mean": -0.17924596770491846,
+              "lower95": -0.4059212350841109,
+              "upper95": 0.07486166564847879,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      },
+      {
+        "market": "crypto",
+        "symbol": "SOL",
+        "interval": "1h",
+        "bars": 5999,
+        "baseline": {
+          "normal": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": 2.378931,
+            "trades": 37,
+            "wins": 15,
+            "profitFactor": 1.3766963399333727,
+            "maxDrawdownUSDT": 2.69986,
+            "fees": 1.238836,
+            "partials": 12,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 37,
+              "mean": 0.06429543434126546,
+              "lower95": -0.07268878254595745,
+              "upper95": 0.22514881479383997,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": 1.534361,
+            "trades": 36,
+            "wins": 13,
+            "profitFactor": 1.2250478573692225,
+            "maxDrawdownUSDT": 2.87959,
+            "fees": 1.799548,
+            "partials": 11,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 36,
+              "mean": 0.042621147615140104,
+              "lower95": -0.10617956423151081,
+              "upper95": 0.19294510668838644,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        "aggressive": {
+          "normal": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": 6.072239,
+            "trades": 17,
+            "wins": 10,
+            "profitFactor": 2.590067497876429,
+            "maxDrawdownUSDT": 2.563891,
+            "fees": 0.847942,
+            "partials": 7,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 17,
+              "mean": 0.35719052475806035,
+              "lower95": -0.034054295798248715,
+              "upper95": 0.7228078948935259,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 172800,
+              "partial": true,
+              "trail_atr": 2.5,
+              "trail_start_r": 1
+            },
+            "pnl": 5.748725,
+            "trades": 17,
+            "wins": 9,
+            "profitFactor": 2.449685186717241,
+            "maxDrawdownUSDT": 2.636805,
+            "fees": 1.265084,
+            "partials": 7,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 17,
+              "mean": 0.33816031919667044,
+              "lower95": -0.04816016498321521,
+              "upper95": 0.7036368824529764,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      },
+      {
+        "market": "forex",
+        "symbol": "EURUSD",
+        "interval": "15m",
+        "bars": 5658,
+        "baseline": {
+          "normal": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.286606,
+            "trades": 43,
+            "wins": 12,
+            "profitFactor": 0.2882016150721568,
+            "maxDrawdownUSDT": 0.288432,
+            "fees": 0.028621,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 43,
+              "mean": -0.006665263183235285,
+              "lower95": -0.009952140393998993,
+              "upper95": -0.002853545437456806,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.387672,
+            "trades": 44,
+            "wins": 10,
+            "profitFactor": 0.15437766633753308,
+            "maxDrawdownUSDT": 0.388997,
+            "fees": 0.043905,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 44,
+              "mean": -0.008810718990777691,
+              "lower95": -0.01128920678902648,
+              "upper95": -0.006034367545892893,
+              "blockLength": 6,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        "aggressive": {
+          "normal": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 2.5,
+              "trail_start_r": 2
+            },
+            "pnl": -0.071261,
+            "trades": 15,
+            "wins": 6,
+            "profitFactor": 0.6755539473940183,
+            "maxDrawdownUSDT": 0.0977,
+            "fees": 0.014995,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 15,
+              "mean": -0.0047507539452048666,
+              "lower95": -0.01568287827960836,
+              "upper95": 0.006099193941850639,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 2.5,
+              "trail_start_r": 2
+            },
+            "pnl": -0.126838,
+            "trades": 16,
+            "wins": 6,
+            "profitFactor": 0.5122413828963718,
+            "maxDrawdownUSDT": 0.140894,
+            "fees": 0.023985,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 16,
+              "mean": -0.007927384278749235,
+              "lower95": -0.019192147595010676,
+              "upper95": 0.0009717907944334595,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      },
+      {
+        "market": "forex",
+        "symbol": "GBPUSD",
+        "interval": "15m",
+        "bars": 5659,
+        "baseline": {
+          "normal": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.384801,
+            "trades": 60,
+            "wins": 13,
+            "profitFactor": 0.28265453969386645,
+            "maxDrawdownUSDT": 0.396466,
+            "fees": 0.039897,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 60,
+              "mean": -0.006413347500588976,
+              "lower95": -0.01000394525298878,
+              "upper95": -0.0024990829770489566,
+              "blockLength": 7,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.552484,
+            "trades": 61,
+            "wins": 9,
+            "profitFactor": 0.15569509673298773,
+            "maxDrawdownUSDT": 0.55623,
+            "fees": 0.060797,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 61,
+              "mean": -0.009057112101330332,
+              "lower95": -0.011622907053203886,
+              "upper95": -0.005742771469061671,
+              "blockLength": 7,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        "aggressive": {
+          "normal": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 2.5,
+              "trail_start_r": 2
+            },
+            "pnl": -0.209232,
+            "trades": 22,
+            "wins": 5,
+            "profitFactor": 0.4351025742956978,
+            "maxDrawdownUSDT": 0.334932,
+            "fees": 0.021954,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 22,
+              "mean": -0.009510551984040343,
+              "lower95": -0.020294578891230253,
+              "upper95": 0.0022628761264666497,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 2.5,
+              "trail_start_r": 2
+            },
+            "pnl": -0.238682,
+            "trades": 22,
+            "wins": 5,
+            "profitFactor": 0.384161783732221,
+            "maxDrawdownUSDT": 0.354237,
+            "fees": 0.032926,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 22,
+              "mean": -0.010849175071000373,
+              "lower95": -0.021496965032757484,
+              "upper95": 0.0007101578023043794,
+              "blockLength": 4,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      },
+      {
+        "market": "stocks",
+        "symbol": "SPY",
+        "interval": "15m",
+        "bars": 1543,
+        "baseline": {
+          "normal": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.012385,
+            "trades": 1,
+            "wins": 0,
+            "profitFactor": 0.0,
+            "maxDrawdownUSDT": 0.04594,
+            "fees": 0.016669,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 1,
+              "mean": -0.012384930731337979,
+              "lower95": null,
+              "upper95": null,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5,
+              "trail_start_r": 1
+            },
+            "pnl": 0.0,
+            "trades": 0,
+            "wins": 0,
+            "profitFactor": null,
+            "maxDrawdownUSDT": 0.0,
+            "fees": 0,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 0,
+              "mean": null,
+              "lower95": null,
+              "upper95": null,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false
+            },
+            "promotionApplied": false
+          }
+        },
+        "aggressive": {
+          "normal": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 2.5,
+              "trail_start_r": 2
+            },
+            "pnl": -0.033524,
+            "trades": 1,
+            "wins": 0,
+            "profitFactor": 0.0,
+            "maxDrawdownUSDT": 0.077984,
+            "fees": 0.024996,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 1,
+              "mean": -0.033523804915236065,
+              "lower95": null,
+              "upper95": null,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 2.5,
+              "trail_start_r": 2
+            },
+            "pnl": 0.0,
+            "trades": 0,
+            "wins": 0,
+            "profitFactor": null,
+            "maxDrawdownUSDT": 0.0,
+            "fees": 0,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 0,
+              "mean": null,
+              "lower95": null,
+              "upper95": null,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false
+            },
+            "promotionApplied": false
+          }
+        }
+      },
+      {
+        "market": "stocks",
+        "symbol": "NVDA",
+        "interval": "15m",
+        "bars": 1543,
+        "baseline": {
+          "normal": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.483406,
+            "trades": 13,
+            "wins": 4,
+            "profitFactor": 0.5595378786606634,
+            "maxDrawdownUSDT": 1.036259,
+            "fees": 0.21539,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 13,
+              "mean": -0.0371850387544378,
+              "lower95": -0.11387755656127936,
+              "upper95": 0.04751898063372663,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "baseline",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 1.5,
+              "trail_start_r": 1
+            },
+            "pnl": -0.340931,
+            "trades": 12,
+            "wins": 4,
+            "profitFactor": 0.7272619375910322,
+            "maxDrawdownUSDT": 0.878579,
+            "fees": 0.298635,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": true,
+            "uncertainty": {
+              "sample": 12,
+              "mean": -0.028410888363733663,
+              "lower95": -0.1119704432399345,
+              "upper95": 0.056022942325626136,
+              "blockLength": 3,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        },
+        "aggressive": {
+          "normal": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 2.5,
+              "trail_start_r": 2
+            },
+            "pnl": 0.030753,
+            "trades": 8,
+            "wins": 4,
+            "profitFactor": 1.0328399909102397,
+            "maxDrawdownUSDT": 1.028294,
+            "fees": 0.199665,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 8,
+              "mean": 0.00384407488536049,
+              "lower95": -0.17259768411317972,
+              "upper95": 0.19285072422361418,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          },
+          "stress": {
+            "policy": {
+              "id": "aggressive",
+              "max_hold_seconds": 21600,
+              "partial": false,
+              "trail_atr": 2.5,
+              "trail_start_r": 2
+            },
+            "pnl": 0.048628,
+            "trades": 7,
+            "wins": 3,
+            "profitFactor": 1.0578158307870362,
+            "maxDrawdownUSDT": 1.095765,
+            "fees": 0.26184,
+            "partials": 0,
+            "partialsSkippedByFilters": 0,
+            "forcedFinalClose": false,
+            "uncertainty": {
+              "sample": 7,
+              "mean": 0.0069468838330205935,
+              "lower95": -0.2262570621059749,
+              "upper95": 0.23061073870609317,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "promotionApplied": false
+          }
+        }
+      }
+    ],
+    "promotionApplied": false,
+    "scope": "Muestra exploratoria conocida. 100 unidades por símbolo; no cartera conjunta. Taker, sin suponer fills maker."
+  },
+  "previousComparisons": [
+    ".runtime/aggressive-research-20261021/results.json",
+    ".runtime/aggressive-research-20261021/results-v2.json",
+    ".runtime/aggressive-research-20261021/desks.json",
+    ".runtime/aggressive-research-20261021/desks-v2.json"
+  ],
+  "independentValidation": false,
+  "promotionApplied": false
+}

@@ -470,6 +470,7 @@ export default function BotsPanel() {
       </div>
       {error && <p role="status">No se puede actualizar el Laboratorio; se conserva la última lectura.</p>}
       <p className="execution-status">{bots.filter(bot => bot.running).length} de {bots.length} bots activos · {bots.reduce((sum, bot) => sum + bot.stats.closedTrades, 0)} operaciones cerradas en estas cuentas simuladas. Sus resultados se registran aquí; MT5 tiene otra cuenta y otro historial.</p>
+      {bots.some(bot => bot.config.strategyProfile?.startsWith('aggressive')) && <p className="execution-status">Perfil agresivo ampliado en evaluación. Los mercados sin validar pueden usar hasta el {Math.max(...bots.map(bot => bot.config.probationSizePct ?? 0))}% del riesgo habitual y hasta {Math.max(...bots.map(bot => bot.config.maxProbationPositions ?? 0))} posiciones a prueba por bot. Los límites diarios, de margen y de riesgo conjunto siguen aplicándose al tamaño final.</p>}
       <div className="bots-grid">
         {bots.map((b) => (
           <BotCard key={b.id} bot={b} onChanged={onChanged} />

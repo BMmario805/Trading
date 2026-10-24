@@ -49,7 +49,7 @@ import math
 import sqlite3
 import time
 
-from . import training
+from . import training, aggressive
 from .config import SYMBOLS_BY_ID
 from .history import DB_PATH
 from .database import Connection
@@ -72,10 +72,12 @@ BLOCK_EXPECTANCY_R = -0.15
 MIN_TRADES_HOUR = 10
 BLOCK_HOUR_EXPECTANCY_R = -0.25
 
-PROBATION_SIZE = 0.15         # máximo 15% del riesgo normal en pares sin validar
+PROBATION_SIZE = 0.25         # MT5 DEMO: conserva su presupuesto autorizado.
+LAB_PROBATION_SIZE = aggressive.LAB_CAPACITY['probationSize']     # Laboratorio: 50% del riesgo normal, aún sin validación.
 PROBATION_THRESHOLD_MULT = 1.0   # sin recargo sobre el umbral de entrada
 PROBATION_META_P = 0.30        # puntuación ponderada mínima (modelo maduro)
-MAX_PROBATION_POSITIONS = 1    # posiciones a prueba simultáneas por bot
+MAX_PROBATION_POSITIONS = 2    # MT5 DEMO: posiciones a prueba por bot.
+LAB_MAX_PROBATION_POSITIONS = aggressive.LAB_CAPACITY['maxProbationPositions']  # Laboratorio: más señales simultáneas; siguen los límites agregados.
 
 # --- Meta-modelo (regresión logística online) ---
 META_MIN_SAMPLES = 30     # madurez mínima antes de que pueda vetar señales
@@ -373,7 +375,7 @@ def _trade_features(bot_id: str, row: tuple) -> dict[str, float] | None:
                 and costs.get('version')==ECONOMICS_VERSION and economy.get('version')==ECONOMICS_VERSION
                 and all(isinstance(costs.get(k),(int,float)) and math.isfinite(costs[k]) and 0<=costs[k]<1
                         for k in ('feeRate','slippageRate','spreadPct','carryDailyRate')))
-    if version not in (3,META_FEATURE_VERSION) and not legacy_net and not (version is None and snap.get('engineVersion') in (5,6)):
+    if version not in (3,META_FEATURE_VERSION) and not legacy_net and not (version is None and snap.get('engineVersion') in (5,6,training.ENGINE_VERSION)):
         return None
     confs = snap.get("confirmations") or []
     if not isinstance(confs,list) or any(not isinstance(c,dict) or not isinstance(c.get('system'),str)

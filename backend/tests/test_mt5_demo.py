@@ -200,11 +200,11 @@ class ProbationEngineTests(unittest.TestCase):
     def test_unvalidated_demo_pair_uses_reduced_risk(self):
         prepare, submit = self.cycle()
         prepare.assert_called_once()
-        self.assertEqual(prepare.call_args.kwargs['risk_mult'], .15)
+        self.assertEqual(prepare.call_args.kwargs['risk_mult'], learning.PROBATION_SIZE)
         self.assertTrue(prepare.call_args.args[6].startswith('cxp-'))
         submit.assert_called_once()
-        self.assertIn('15%', self.engine.diagnostics['scalper/XAUUSD'])
-        self.assertEqual(mt5_demo.STATE['probationRiskPct'], .015)
+        self.assertIn('25%', self.engine.diagnostics['scalper/XAUUSD'])
+        self.assertEqual(mt5_demo.STATE['probationRiskPct'], self.config['risk_pct']*learning.PROBATION_SIZE*100)
         self.assertEqual(mt5_demo.STATE['scan']['reviewed'],1)
         self.assertEqual(mt5_demo.STATE['scan']['accepted'],1)
 

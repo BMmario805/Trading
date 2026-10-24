@@ -11,7 +11,7 @@ import time
 from decimal import Decimal, ROUND_DOWN
 from pathlib import Path
 
-from . import gemini_agent, market_data, opportunities, portfolio_risk
+from . import gemini_agent, market_data, opportunities, portfolio_risk, aggressive
 from .config import Symbol
 from .database import Connection
 from .execution import closed_candles
@@ -31,9 +31,9 @@ ROLES = ('Selector','Tape','Price','Wire','Size','Exec','Risk')
 log=logging.getLogger('desk')
 # Señales experimentales confirmadas; sin validación económica para promoción.
 ENTRY_RSI_MIN = 35
-ENTRY_RSI_MAX = 72
+ENTRY_RSI_MAX = 78
 ENTRY_EXTENSION_MIN = -1.0
-ENTRY_EXTENSION_MAX = 1.5
+ENTRY_EXTENSION_MAX = 2.25
 STABLES = {'USDT','USDC','FDUSD','TUSD','DAI','USDP','USD1','USDD','EUR','AEUR','EURI',
            'RLUSD','USDE','USDS','PYUSD','USDG','USDD','USDF','USDX','USDSB','EURCV'}
 # Nombres completos de productos apalancados legacy, no un filtro por sufijo:
@@ -55,18 +55,18 @@ TOKENIZED_EQUITIES={ticker+'B' for ticker in (
     'SMCI','SMH','SNDK','SNXX','SOXL','SOXS','SPCX','SPY','TQQQ','TSLA','TSM',
     'USAR','WDC','BOT','BRKB','KSTR','TMF','VST')}
 SCAN_BATCH_SIZE = 40  # Tamaño de cada grupo de descargas; el barrido cubre todos.
-MAX_OPEN_POSITIONS = 3
-SCAN_INTERVAL_S = 20
+MAX_OPEN_POSITIONS = aggressive.DESK_CAPACITY['maxPositions']
+SCAN_INTERVAL_S = aggressive.DESK_CAPACITY['scanSeconds']
 CANDLE_INTERVAL = '1h'
 CANDLE_SECONDS = 3600
 MAX_HOLD_S = 48*3600
-MAX_NOTIONAL_FRACTION = 1/6  # Conserva el límite reducido solicitado en el archivo local.
-MIN_NET_REWARD_RISK = 1.2
-POLICY_VERSION = 'desk-partial-1h-v5'
-CASH_POLICY_VERSION = 'desk-cash-context-v3'
+MAX_NOTIONAL_FRACTION = aggressive.DESK_CAPACITY['maxNotionalFraction']
+MIN_NET_REWARD_RISK = 1.5
+POLICY_VERSION = 'desk-aggressive-1h-v7'
+CASH_POLICY_VERSION = 'desk-cash-aggressive-v2'
 MIN_QUOTE_VOLUME = 2_000_000
-RISK_FRACTION = .005
-TOTAL_RISK_FRACTION = .015
+RISK_FRACTION = aggressive.DESK_CAPACITY['riskFraction']
+TOTAL_RISK_FRACTION = aggressive.DESK_CAPACITY['totalRiskFraction']
 SELECTION_INTERVAL = CANDLE_SECONDS
 
 
@@ -123,7 +123,7 @@ def universe(data):
     return sorted(candidates,key=lambda c:(-c['volumeUSD'],c['symbol']))
 
 
-def tape(rows, now, candle_seconds=CANDLE_SECONDS):
+def baseline_tape(rows, now, candle_seconds=CANDLE_SECONDS):
     rows=closed_candles(rows,candle_seconds,now)
     if len(rows)<60 or now-rows[-1]['time']>3*candle_seconds:
         return None
@@ -149,15 +149,20 @@ def tape(rows, now, candle_seconds=CANDLE_SECONDS):
                 entryAllowed=setup is not None,strategy=setup,relativeVolume=relative_volume,rows=rows[-90:])
 
 
+def tape(rows,now,candle_seconds=CANDLE_SECONDS):
+    return aggressive.desk_signal(rows,now,candle_seconds)
+
+
 def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage=SLIPPAGE,
-               partial=True):
+               partial=True,risk_fraction=RISK_FRACTION,notional_fraction=MAX_NOTIONAL_FRACTION,
+               stop_atr=2.0,target_atr=6.0,min_net_rr=MIN_NET_REWARD_RISK):
     if not all(math.isfinite(v) and v>0 for v in (equity,cash,ask,a)): return None
     fill=ask*(1+slippage)
-    stop=fill-(2.0 if partial else 1.5)*a
+    stop=fill-stop_atr*a
     if stop<=0: return None
     risk_per_unit=fill*(1+fee)-stop*(1-slippage)*(1-fee)
-    allowed_risk=min(equity*RISK_FRACTION,risk_budget) if risk_budget is not None else equity*RISK_FRACTION
-    budget=min(equity*MAX_NOTIONAL_FRACTION,cash/(1+fee),max(0,allowed_risk)/risk_per_unit*fill)
+    allowed_risk=min(equity*risk_fraction,risk_budget) if risk_budget is not None else equity*risk_fraction
+    budget=min(equity*notional_fraction,cash/(1+fee),max(0,allowed_risk)/risk_per_unit*fill)
     lot=next((f for f in info.get('filters',[]) if f['filterType']=='LOT_SIZE'),{})
     step=Decimal(str(lot.get('stepSize','.00000001')))
     if step<=0: raise ValueError('Paso inválido')
@@ -168,16 +173,18 @@ def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage
         return None
     max_qty=float(lot.get('maxQty',0))
     if max_qty>0 and qty>max_qty: return None
-    target=fill+(4.0 if partial else 3.0)*a
+    target=fill+target_atr*a
     plan=planned_trade(fill,stop,target,qty,fee_rate=fee,exit_slippage=slippage)
-    if not plan['viable'] or plan['netRewardRisk']<MIN_NET_REWARD_RISK:
+    if not plan['viable'] or plan['netRewardRisk']<min_net_rr:
         return None
     return dict(qty=qty,entry=fill,notional=qty*fill,fee=qty*fill*fee,
                 sl=stop,tp=target,risk=qty*risk_per_unit,economics=plan,
                 costPolicy=dict(version=ECONOMICS_VERSION,feeRate=fee,slippageRate=slippage),policyVersion=POLICY_VERSION,
                 maxHoldSeconds=MAX_HOLD_S if partial else 6*3600,
                 candleInterval=CANDLE_INTERVAL if partial else '15m',
-                exitPolicy=dict(partialAtR=1.5,trailAtr=2.5,trailAfterR=2.0,residualStopR=-.5) if partial else None,
+                riskProfile=aggressive.CAPACITY_VERSION,
+                exitPolicy=dict(partialAtR=1.5,partialFraction=1/3,trailAtr=2.5,trailAfterR=2.0,residualStopR=-.5) if partial else
+                    dict(partialEnabled=False,fixedTarget=True,trailStartR=2.0,trailAtr=2.5),
                 targetIsReference=partial)
 
 
@@ -203,6 +210,7 @@ class Desk:
         self.candle_interval=CANDLE_INTERVAL if self.feed is None else '15m'
         self.candle_seconds=CANDLE_SECONDS if self.feed is None else 900
         self.policy_version=POLICY_VERSION if self.feed is None else CASH_POLICY_VERSION
+        self.min_net_rr=2.0 if market=='stocks' else MIN_NET_REWARD_RISK
         with self.connect() as con:
             row=con.execute("SELECT payload FROM state WHERE key='desk'").fetchone()
         self.state=json.loads(row[0]) if row else dict(initial=INITIAL,cash=INITIAL,enabled=True,position=None,
@@ -315,7 +323,7 @@ class Desk:
             self.chart=[]
             self.last_curve=now
             self.last_error=None
-            self.role('Risk','ready','Nueva sesión desde 100 EUR; tamaño proporcional al capital, riesgo objetivo 0,5%')
+            self.role('Risk','ready',f'Nueva sesión desde 100 EUR; tamaño proporcional al capital, riesgo objetivo {RISK_FRACTION:.2%}')
             self.save()
         return self.public()
 
@@ -413,7 +421,7 @@ class Desk:
             return False  # Esperar metadatos; nunca inventar mínimos de mercado.
         fee,slip=self.costs(p)
         price=price_override if price_override is not None else bid*(1-slip)
-        qty=qty_override if qty_override is not None else partial_quantity(p['qty'],price,info)
+        qty=qty_override if qty_override is not None else partial_quantity(p['qty'],price,info,fraction=(p.get('exitPolicy') or {}).get('partialFraction',.5))
         if qty_override is not None and (not math.isfinite(qty) or qty>p['qty'] or qty<=0): return False
         if not qty:
             p['partialSkippedByFilters']=True
@@ -459,7 +467,7 @@ class Desk:
         if not self.state['positions']:
             self.state.pop('flatten',None)
             if not self.state['dailyStopped']:
-                self.role('Risk','ready','Riesgo objetivo 0,5%; riesgo conjunto 1,5%; exposición máxima 1/6 al entrar')
+                self.role('Risk','ready',f'Riesgo objetivo {RISK_FRACTION:.2%}; riesgo conjunto {TOTAL_RISK_FRACTION:.0%}; exposición máxima {MAX_NOTIONAL_FRACTION:.0%} al entrar')
         for p in list(self.state['positions']):
             # Un escaneo lento no debe sustituir el último libro de vigilancia.
             if data.get('at',0)<p.get('quoteAt',0): continue
@@ -476,7 +484,7 @@ class Desk:
                 continue
             hold=p.get('maxHoldSeconds',45*60)
             policy=p.get('exitPolicy') or {}
-            fixed_target=not policy or p.get('partialSkippedByFilters',False)
+            fixed_target=policy.get('fixedTarget',not policy) or p.get('partialSkippedByFilters',False)
             if self.state.get('flatten') or bid<=p['sl'] or (fixed_target and bid>=p['tp']) or (hold is not None and time.time()-p['entryTime']>=hold):
                 reason=('Cierre solicitado' if self.state.get('flatten') else 'Stop' if bid<=p['sl']
                         else 'Objetivo' if fixed_target and bid>=p['tp'] else 'Tiempo máximo')
@@ -484,11 +492,11 @@ class Desk:
             else:
                 p['best']=max(p['best'],bid)
                 fee,slip=self.costs(p)
-                if policy and not p.get('partialDone') and not p.get('partialSkippedByFilters') and not any(o['symbol']==p['symbol'] and o['side']=='buy' for o in self.maker.orders):
+                if policy.get('partialEnabled',True) and policy.get('partialAtR') and not p.get('partialDone') and not p.get('partialSkippedByFilters') and not any(o['symbol']==p['symbol'] and o['side']=='buy' for o in self.maker.orders):
                     original_qty=p.get('originalQty',p['qty'])
                     net_per_unit=bid*(1-slip)*(1-fee)-p['entry']*(1+fee)
                     if net_per_unit>=policy['partialAtR']*p['risk']/original_qty:
-                        qty=partial_quantity(p['qty'],q[1],dict(filters=p.get('marketFilters',[])))
+                        qty=partial_quantity(p['qty'],q[1],dict(filters=p.get('marketFilters',[])),fraction=policy.get('partialFraction',.5))
                         posted=(self.feed is None and self.task is not None and not p.get('makerPartialAttempted')
                                 and qty and self.maker.post(p,'sell',qty))
                         if not posted and not any(o['symbol']==p['symbol'] for o in self.maker.orders):
@@ -501,14 +509,14 @@ class Desk:
                     else:
                         p['makerPartialFallbackQty']=0
                         p['makerPartialRemainderBelowFilters']=True
-                trailing=p.get('partialDone') if policy and not p.get('partialSkippedByFilters') else bid>=p['entry']+p['initialDist']
+                trailing=p.get('partialDone') if policy.get('partialAtR') and not p.get('partialSkippedByFilters') else bid>=p['entry']+policy.get('trailStartR',1)*p['initialDist']
                 if trailing and policy.get('trailAfterR'):
                     net_per_unit=bid*(1-slip)*(1-fee)-p['entry']*(1+fee)
                     if net_per_unit>=policy['trailAfterR']*p['risk']/p.get('originalQty',p['qty']):
                         p['trailActivated']=True
                     trailing=p.get('trailActivated',False)
                 if trailing:
-                    multiple=policy['trailAtr'] if p.get('partialDone') else 1.5
+                    multiple=policy.get('trailAtr',1.5) if p.get('partialDone') or policy.get('fixedTarget') else 1.5
                     stop=max(p['sl'],p['entry']*(1+fee)/((1-slip)*(1-fee)),p['best']-multiple*p['atr'])
                     if stop<bid: p['sl']=stop
                 self.role('Risk','managing',f'Stop activo; riesgo inicial {p["risk"]:.2f} {self.currency}')
@@ -561,7 +569,7 @@ class Desk:
                 self.role('Exec','waiting',candidate['reason'])
             self.state['scanReviewed']+=1
         if len(self.state['positions'])>=MAX_OPEN_POSITIONS:
-            self.role('Exec','managing','Cupo completo: se gestionan las tres posiciones')
+            self.role('Exec','managing',f'Cupo completo: se gestionan las {MAX_OPEN_POSITIONS} posiciones')
             return
         if not self.state['enabled'] or self.state['dailyStopped']:
             return
@@ -716,9 +724,9 @@ class Desk:
         if analysis is None: return None,None
         open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-self.costs(p)[1])*(1-self.costs(p)[0])) for p in self.state['positions'])
         order=size_order(self.equity(),self.state['cash'],q[1],analysis['atr'],data['metadata'][symbol],
-                         max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage,partial=self.feed is None)
+                         max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr)
         fill=q[1]*(1+self.slippage)
-        sl_mult,tp_mult=(2,4) if self.feed is None else (1.5,3)
+        sl_mult,tp_mult=2,6
         geometry=planned_trade(fill,fill-sl_mult*analysis['atr'],fill+tp_mult*analysis['atr'],1,
                                fee_rate=self.fee,exit_slippage=self.slippage) if fill>sl_mult*analysis['atr'] else None
         candidate['economics']=geometry
@@ -728,7 +736,7 @@ class Desk:
         master=self.master_gate(symbol,analysis,rows)
         candidate['masterGate']=master
         price_ok=price_ok and master['allowed']
-        candidate['entryChecks']=dict(signal=price_ok,costs=bool(geometry and geometry['viable'] and geometry['netRewardRisk']>=MIN_NET_REWARD_RISK),
+        candidate['entryChecks']=dict(signal=price_ok,costs=bool(geometry and geometry['viable'] and geometry['netRewardRisk']>=self.min_net_rr),
                                      size=order is not None,enabled=self.state['enabled'] and not self.state['dailyStopped'])
         if not price_ok or not (await self.wire(symbol,data))['ok']:
             return None,analysis
@@ -888,7 +896,7 @@ class Desk:
         candidate['masterGate']=master
         price_ok=price_ok and master['allowed']
         self.role('Price','ready' if price_ok else 'waiting',
-                  f'Señal confirmada: {analysis.get("strategy") or "continuidad"}' if price_ok else 'Esperando recuperación o tendencia confirmada, RSI 35–72 y extensión moderada')
+                  f'Señal confirmada: {analysis.get("strategy") or "continuidad"}' if price_ok else 'Esperando recuperación o tendencia confirmada, RSI 35–78 y extensión moderada')
         existing=next((p for p in self.state['positions'] if p['symbol']==symbol),None)
         if existing:
             self.role('Size','managing',f'Asignación existente: {existing["notional"]:.2f} USDT; no se solicita otro lote')
@@ -901,22 +909,22 @@ class Desk:
             self.evaluated(candidate,'managing','Posición abierta: se mantiene su gestión de riesgo')
             return
         if len(self.state['positions'])>=MAX_OPEN_POSITIONS:
-            self.evaluated(candidate,'blocked','Máximo de tres posiciones simultáneas')
+            self.evaluated(candidate,'blocked',f'Máximo de {MAX_OPEN_POSITIONS} posiciones simultáneas')
             return
         if self.state['cooldowns'].get(symbol,0)>time.time():
             self.evaluated(candidate,'waiting','En espera tras el último cierre; se evita reentrar inmediatamente')
             return
         open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-self.costs(p)[1])*(1-self.costs(p)[0])) for p in self.state['positions'])
-        order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage,partial=self.feed is None)
+        order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr)
         if order: order['policyVersion']=self.policy_version
-        sl_mult,tp_mult=(2,4) if self.feed is None else (1.5,3)
+        sl_mult,tp_mult=2,6
         geometry=planned_trade(ask*(1+self.slippage),ask*(1+self.slippage)-sl_mult*analysis['atr'],
                                ask*(1+self.slippage)+tp_mult*analysis['atr'],1,fee_rate=self.fee,exit_slippage=self.slippage) if ask*(1+self.slippage)>sl_mult*analysis['atr'] else None
         candidate['economics']=geometry
-        candidate['entryChecks']=dict(signal=price_ok,costs=bool(geometry and geometry['viable'] and geometry['netRewardRisk']>=MIN_NET_REWARD_RISK),
+        candidate['entryChecks']=dict(signal=price_ok,costs=bool(geometry and geometry['viable'] and geometry['netRewardRisk']>=self.min_net_rr),
                                       size=order is not None,enabled=self.state['enabled'] and not self.state['dailyStopped'])
         size_reason='Lote mínimo o beneficio/riesgo neto insuficiente después de costes'
-        self.role('Size','ready' if order else 'blocked',f'Tamaño {order["notional"]:.2f} {self.currency}; máximo 1/6; riesgo {order["risk"]:.2f}' if order else size_reason)
+        self.role('Size','ready' if order else 'blocked',f'Tamaño {order["notional"]:.2f} {self.currency}; máximo {MAX_NOTIONAL_FRACTION:.0%}; riesgo {order["risk"]:.2f}' if order else size_reason)
         if not self.state['enabled'] or self.state['dailyStopped'] or not price_ok or not identity['ok'] or not order:
             self.evaluated(candidate,'waiting',f'Sin confirmación de entrada; RSI {analysis["rsi"]:.0f}, extensión {extension:.1f} ATR' if not price_ok else size_reason if not order else 'Entradas pausadas por control de riesgo')
             self.role('Exec','waiting','Esperando aprobación de Price, Wire, Size y Risk')
@@ -1084,13 +1092,14 @@ class Desk:
                     scanReviewed=self.state.get('scanReviewed',0),maxPositions=MAX_OPEN_POSITIONS,
                     scanIntervalSeconds=SCAN_INTERVAL_S,candleInterval=self.candle_interval,
                     chartInterval=(self.state.get('tape') or {}).get('candleInterval',self.candle_interval),
-                    policy=dict(version=self.policy_version,costVersion=ECONOMICS_VERSION,maxNotionalPct=MAX_NOTIONAL_FRACTION*100,minNetRewardRisk=MIN_NET_REWARD_RISK,
+                    policy=dict(version=self.policy_version,costVersion=ECONOMICS_VERSION,maxNotionalPct=MAX_NOTIONAL_FRACTION*100,minNetRewardRisk=self.min_net_rr,
                                 riskPct=RISK_FRACTION*100,totalRiskPct=TOTAL_RISK_FRACTION*100,minVolumeUSD=MIN_QUOTE_VOLUME,
                                 maxHoldSeconds=MAX_HOLD_S if self.feed is None else 6*3600,
-                                partialAtR=1.5 if self.feed is None else None,trailAtr=2.5 if self.feed is None else 1.5,
-                                stopAtr=2 if self.feed is None else 1.5,referenceTargetAtr=4 if self.feed is None else 3,
-                                trailAfterR=2 if self.feed is None else 1,residualStopR=-.5 if self.feed is None else None,
-                                minNetRewardRiskBasis='reference-4atr' if self.feed is None else 'reference-3atr',
+                                partialAtR=1.5 if self.feed is None else None,trailAtr=2.5,
+                                strategyProfile=aggressive.VERSION,riskProfile=aggressive.CAPACITY_VERSION,stopAtr=2,referenceTargetAtr=6,
+                                partialFraction=1/3 if self.feed is None else None,
+                                trailAfterR=2,residualStopR=-.5 if self.feed is None else None,
+                                minNetRewardRiskBasis='reference-6atr',
                                 selectorCoverage=self.state.get('selectorCoverage'),catalystGate='fresh-opposing-catalyst-v2',
                                 strategies=['trend-pullback','breakout','recovery'],validated=False),
                     monitoring=dict(riskIndependent=True,riskError=self.risk_error,

@@ -66,8 +66,8 @@ ADX_LOW, ADX_HIGH = 20.0, 30.0
 
 # segundos del marco de tendencia de cada bot (para el voto del marco superior)
 TREND_STEP = {
-    "scalper": 300,      # 5m
-    "swing": 86400,      # 1d
+    "scalper": 900,      # 15m
+    "swing": 14400,      # 4h
     "trend": 14400,      # 4h
     "meanrev": 86400,    # 1d
     "orb": 900,          # 15m
@@ -466,7 +466,8 @@ SCORE_FNS = {'scalper':scalper_scores,'swing':swing_scores,'trend':trend_scores,
 
 
 def score_series(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[float]:
-    return SCORE_FNS.get(bot_id,swing_scores)(c_work,c_trend)
+    from .aggressive import scores
+    return scores(bot_id,c_work,c_trend)
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +482,13 @@ def confirmations(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[
     informativo). Es lo que ve el usuario al preguntar POR QUÉ se abrió una
     operación, así que cubre todos los sistemas que componen la señal.
     """
+    from . import aggressive
+    if bot_id in aggressive.ACTIVE_SIGNALS:
+        if not c_work: return []
+        f=aggressive.factors(bot_id,c_work,c_trend)[-1]
+        return [dict(system='Régimen',detail='Peso 40%: tendencia y marco superior cerrado',vote=f['regime']),
+                dict(system='Disparador de precio',detail='Peso 40%: '+(f['setup'] or 'esperando ruptura o recuperación'),vote=f['trigger']),
+                dict(system='Flujo CMF',detail='Peso 20%: participación; sin volumen, neutro',vote=f['flow'])]
     if bot_id in ("scalper", "swing", "trend", "meanrev", "squeeze"):
         if not c_work:
             return []
@@ -502,7 +510,7 @@ def confirmations(bot_id: str, c_work: list[dict], c_trend: list[dict]) -> list[
         signal = flow_scores(c_work, c_trend)[-1] if c_work else 0.0
         return [
             {"system": "Chaikin Money Flow (20)", "detail": f"CMF {money:+.3f}" if money is not None else "Sin volumen suficiente", "vote": round(money or 0, 3)},
-            {"system": "Flujo y continuación", "detail": "EMA20/50, marco 1h cerrado, volumen relativo y ruptura/pullback", "vote": round(signal, 3)},
+            {"system": "Flujo y continuación", "detail": "EMA20/50, marco 4h cerrado, volumen relativo y ruptura/pullback", "vote": round(signal, 3)},
         ]
     closes = [c["close"] for c in c_work]
     if len(closes) < 60:

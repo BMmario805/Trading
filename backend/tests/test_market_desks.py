@@ -154,13 +154,13 @@ class ConfirmationTests(unittest.TestCase):
         rows[-2].update(low=103,close=104.2)
         rows[-1].update(open=104.15,close=104.4,high=104.7,low=104.0)
         with patch.object(desk,'ema',side_effect=[[104]*90,[103]*90]):
-            result=desk.tape(rows,now)
+            result=desk.baseline_tape(rows,now)
         self.assertEqual(result['strategy'],'trend-pullback')
         self.assertTrue(result['entryAllowed'])
 
     def test_risk_and_reward_are_net_of_fees(self):
         order=desk.size_order(100,100,100,2,data()['metadata']['SOLUSDT'])
-        self.assertLessEqual(order['risk'],.5)
+        self.assertLessEqual(order['risk'],100*desk.RISK_FRACTION)
         self.assertGreaterEqual(order['economics']['netRewardRisk'],1.2)
         self.assertIsNone(desk.size_order(100,100,100,.05,data()['metadata']['SOLUSDT']))
 

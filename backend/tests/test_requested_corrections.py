@@ -38,7 +38,7 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
     def test_new_positions_freeze_hourly_partial_policy_and_48h_horizon(self):
         p=self.engine.state['positions'][0]
         self.assertEqual((p['candleInterval'],p['maxHoldSeconds']),('1h',48*3600))
-        self.assertEqual(p['exitPolicy'],dict(partialAtR=1.5,trailAtr=2.5,trailAfterR=2.0,residualStopR=-.5))
+        self.assertEqual(p['exitPolicy'],dict(partialAtR=1.5,partialFraction=1/3,trailAtr=2.5,trailAfterR=2.0,residualStopR=-.5))
         self.assertEqual(self.engine.public()['policy']['version'],desk.POLICY_VERSION)
 
     def test_partial_then_final_exit_is_one_net_trade_with_all_cash_and_fees(self):
@@ -82,12 +82,12 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
 
     def test_minimum_notional_preserves_full_exit_instead_of_creating_dust(self):
         snapshot=self.quote(107)
-        snapshot['metadata']['SOLUSDT']['filters'][1]['minNotional']='90'
+        snapshot['metadata']['SOLUSDT']['filters'][1]['minNotional']=str(self.engine.state['positions'][0]['qty']*107*.5)
         self.engine.manage(snapshot)
         p=self.engine.state['positions'][0]
         self.assertTrue(p['partialSkippedByFilters'])
         self.assertFalse(p.get('partialDone',False))
-        self.engine.manage(self.quote(110))
+        self.engine.manage(self.quote(114))
         self.assertFalse(self.engine.state['positions'])
         self.assertEqual(self.engine.public()['trades'][0]['exitReason'],'Objetivo')
 
@@ -97,7 +97,7 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.engine.state['positions'][0]['partialDone'])
         p=self.engine.state['positions'][0]
         p.pop('exitPolicy')
-        self.engine.manage(self.quote(110))
+        self.engine.manage(self.quote(114))
         self.assertFalse(self.engine.state['positions'])
 
     def test_time_limit_above_reference_target_is_reported_as_time(self):
@@ -276,7 +276,7 @@ class GateIntegrationTests(EconomicDatabaseTests):
         self.assertEqual(bot.diagnostics['BTC']['reason'],'Veto contextual')
 
     def test_probation_limits_apply_to_all_seven_bots_and_slow_frames_are_explicit(self):
-        self.assertEqual((learning.PROBATION_SIZE,learning.MAX_PROBATION_POSITIONS),(.15,1))
+        self.assertEqual((learning.PROBATION_SIZE,learning.MAX_PROBATION_POSITIONS),(.25,2))
         self.assertEqual((bots.TREND.work_interval,bots.TREND.trend_interval),('1h','4h'))
         self.assertEqual((bots.SQUEEZE.work_interval,bots.SQUEEZE.trend_interval),('1h','4h'))
 

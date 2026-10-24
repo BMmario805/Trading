@@ -86,7 +86,7 @@ class DeskEfficiencyTests(unittest.IsolatedAsyncioTestCase):
         result=review.opportunity_diagnostics(self.engine)
         min_atr=result['minimumAtrPct']/100*100
         fill=100*(1+desk.SLIPPAGE)
-        plan=desk.planned_trade(fill,fill-2*min_atr,fill+4*min_atr,1,fee_rate=desk.FEE,exit_slippage=desk.SLIPPAGE)
+        plan=desk.planned_trade(fill,fill-2*min_atr,fill+6*min_atr,1,fee_rate=desk.FEE,exit_slippage=desk.SLIPPAGE)
         self.assertAlmostEqual(plan['netRewardRisk'],desk.MIN_NET_REWARD_RISK)
 
 

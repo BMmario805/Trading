@@ -35,9 +35,9 @@ class SizingTests(unittest.TestCase):
             for cash in (10,500,1000):
                 order=desk.size_order(1000,cash,100,a,data()['metadata']['SOLUSDT'])
                 if order:
-                    self.assertLessEqual(order['notional'],1000/3)
+                    self.assertLessEqual(order['notional'],1000*desk.MAX_NOTIONAL_FRACTION)
                     self.assertLessEqual(order['notional']+order['fee'],cash)
-                    self.assertLessEqual(order['risk'],10)
+                    self.assertLessEqual(order['risk'],1000*desk.RISK_FRACTION)
 
     def test_minimum_lot_is_never_forced(self):
         self.assertIsNone(desk.size_order(1,1,100,2,data()['metadata']['SOLUSDT']))
@@ -78,7 +78,7 @@ class SizingTests(unittest.TestCase):
         rows[-1].update(close=100)
         with patch.object(desk,'ema',side_effect=[[100]*80,[100.5]*80]), \
              patch.object(desk,'atr',return_value=2), patch.object(desk,'rsi',return_value=[78]*80):
-            analysis=desk.tape(rows,now)
+            analysis=desk.baseline_tape(rows,now)
         self.assertLess(analysis['ema20'],analysis['ema50'])
         self.assertFalse(analysis['trend'])
         self.assertFalse(analysis['entryAllowed'])
@@ -132,8 +132,8 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(restored.hold_equity(),initial)
         order=desk.size_order(initial,initial,100,2,data()['metadata']['SOLUSDT'])
         self.assertIsNotNone(order)
-        self.assertLessEqual(order['risk'],initial*.01)
-        self.assertLessEqual(order['notional'],initial/3)
+        self.assertLessEqual(order['risk'],initial*desk.RISK_FRACTION)
+        self.assertLessEqual(order['notional'],initial*desk.MAX_NOTIONAL_FRACTION)
         with patch.object(restored,'wire',AsyncMock(return_value=dict(ok=True,detail='Validado'))),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
             await restored.scan(data())
         self.assertAlmostEqual(restored.state['benchmark']['qty'],initial/(100*(1+desk.SLIPPAGE)*(1+desk.FEE)))
@@ -266,21 +266,22 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(position['evidence']['selection'],selection)
         self.assertEqual(self.engine.state['candidates'][0]['status'],'error')
 
-    async def test_three_distinct_positions_preserve_cash_risk_and_restart_without_duplicates(self):
-        snapshot=add_markets(data(),['BTC','ETH','XRP','PAXG'])
+    async def test_cash_limits_positions_and_restart_does_not_duplicate_them(self):
+        snapshot=add_markets(data(),['BTC','ETH','XRP','PAXG','ADA','LINK'])
         with patch.object(self.engine,'wire',AsyncMock(return_value=dict(ok=True,detail='ok'))),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
             await self.engine.scan(snapshot)
-            self.assertEqual(len(self.engine.state['positions']),3)
-            self.assertEqual(len({p['symbol'] for p in self.engine.state['positions']}),3)
+            count=len(self.engine.state['positions'])
+            self.assertEqual(count,3)  # El efectivo disponible limita este caso antes del cupo de seis.
+            self.assertEqual(len({p['symbol'] for p in self.engine.state['positions']}),count)
             self.assertGreaterEqual(self.engine.state['cash'],0)
             risk=sum(p['risk'] for p in self.engine.state['positions'])
-            self.assertLessEqual(risk,self.engine.equity()*.03)
+            self.assertLessEqual(risk,self.engine.equity()*desk.TOTAL_RISK_FRACTION)
             self.engine.save()
             restored=desk.Desk()
             await restored.scan(snapshot)
-            self.assertEqual(len(restored.state['positions']),3)
-            self.assertEqual(restored.state['roles']['Size']['status'],'managing')
-            self.assertEqual(len(restored.public()['trades']),3)
+            self.assertEqual(len(restored.state['positions']),count)
+            self.assertEqual(restored.state['cash'],self.engine.state['cash'])
+            self.assertEqual(len(restored.public()['trades']),count)
             before=restored.state['cash']
             expected=sum(p['qty']*99.99*(1-desk.SLIPPAGE)*(1-desk.FEE) for p in restored.state['positions'])
             await restored.control('close')

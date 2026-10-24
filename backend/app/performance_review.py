@@ -71,11 +71,12 @@ def opportunity_diagnostics(engine):
     drag=(1-(1-slip)*(1-fee)/((1+slip)*(1+fee)))*100
     if spread is not None:
         drag=(1-(1-spread/2)*(1-slip)*(1-fee)/((1+spread/2)*(1+slip)*(1+fee)))*100
-    # Frontera económica exacta para SL 1,5 ATR, TP 3 ATR y ratio neto 1,2.
+    # Frontera económica para SL 2 ATR, referencia 6 ATR y ratio neto de la mesa.
     exit_factor=(1-slip)*(1-fee)
     friction=(1+slip)*(1+fee-exit_factor)
-    sl_mult,tp_mult=(2,4) if engine.feed is None else (1.5,3)
-    min_atr=friction*(1+desk.MIN_NET_REWARD_RISK)/(exit_factor*(tp_mult-sl_mult*desk.MIN_NET_REWARD_RISK))*100
+    sl_mult,tp_mult=2,6
+    required=engine.min_net_rr
+    min_atr=friction*(1+required)/(exit_factor*(tp_mult-sl_mult*required))*100
     return dict(eligible=len(eligible),reviewed=len(recent),evaluated=len(evaluated),
         signalPassed=count('signal'),costPassed=count('costs'),sizePassed=count('size'),
         signalBlocked=len(evaluated)-count('signal'),costBlocked=len(evaluated)-count('costs'),
@@ -93,7 +94,7 @@ def snapshot():
         by_strategy={name:metrics([t for t in trades if t['strategy']==name]) for name in sorted({t['strategy'] for t in trades})}
         accounts.append(dict(id=key,source='desk',name='Mesa '+{'crypto':'Cripto','forex':'Forex','stocks':'Acciones'}[key],
             currency=engine.currency,initial=engine.initial,equity=engine.equity(),
-            performance=metrics(trades),currentPolicy=metrics([t for t in trades if t['policy']==desk.POLICY_VERSION]),
+            performance=metrics(trades),currentPolicy=metrics([t for t in trades if t['policy']==engine.policy_version]),
             byStrategy=by_strategy,opportunities=opportunity_diagnostics(engine),efficiency=dict(engine.efficiency)))
     if bots.BOTS:
         with bots._conn() as con:

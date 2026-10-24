@@ -9,8 +9,8 @@ def signal_exit_enabled(bot_id):
 
 
 def atr_spread_multiple(bot_id):
-    """El scalper exige spread ≤10% del ATR; el resto conserva su filtro."""
-    return 10 if bot_id=='scalper' else 3
+    """Scalper en 5m: spread ≤25% del ATR; costes completos siguen en el tamaño."""
+    return 4 if bot_id=='scalper' else 3
 
 
 def closed_candles(candles: list[dict], seconds: int, now: float) -> list[dict]:

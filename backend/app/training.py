@@ -39,9 +39,9 @@ log = logging.getLogger("training")
 # fijan: cada parámetro libre extra multiplica el riesgo de sobreajuste).
 # Rejilla pequeña y predefinida: se registra cuántas variantes se probaron.
 GRID_THRESHOLD = (0.30, 0.45, 0.60, 0.75)
-GRID_SL = (1.5, 2.0, 3.0)
-GRID_TP = (2.25, 3.0, 4.5)
-GRID_TRAIL = (1.2, 2.0)
+GRID_SL = (1.5, 2.0, 2.5)
+GRID_TP = (3.0, 5.0, 8.0)
+GRID_TRAIL = (1.8, 2.6)
 
 TRAIN_SPLIT = 0.45
 # Embargo entre entrenamiento y validación: se descartan velas pegadas al
@@ -52,7 +52,7 @@ MIN_TRAIN_TRADES = {
     "flow": 10, "scalper": 20, "swing": 8, "trend": 6, "meanrev": 8, "orb": 10, "squeeze": 8,
 }
 MIN_VALIDATION_TRADES = 8
-ENGINE_VERSION = 6
+ENGINE_VERSION = 7
 VALIDATION_PROTOCOL = 'fixed-origin-2of3-dsr-holdout20-net-v2'
 
 # Segundos por vela de cada intervalo de trabajo
@@ -247,6 +247,7 @@ def simulate(
     risk_multipliers: list[float] | None = None,
     min_atr_spread: float = 3,
     exit_on_signal: bool = True,
+    exit_policy: dict | None = None,
 ) -> dict:
     """Backtest de una configuración sobre candles[start:end]. Sin capitalizar
     (tamaño fijo por operación) para que las métricas sean comparables.
@@ -267,6 +268,10 @@ def simulate(
     fee_rate = model.get('feeRate', 0.0)
     slippage = model.get('slippageRate', 0.0)
     carry_rate = model.get('carryDailyRate', 0.0)
+    exit_rules=exit_policy or {}
+    trail_start=exit_rules.get('trailStartR',1.0)
+    tighten_at=exit_rules.get('tightenAtR',2.0)
+    tighten_multiple=exit_rules.get('tightenMultiple',.75)
     spread_pct = model.get('spreadPct', spread_pct)
     for value in (fee_rate, slippage, carry_rate, spread_pct):
         if not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value < 1:
@@ -337,9 +342,9 @@ def simulate(
                     close(exit_fill(tp))
                     continue
                 best = max(best, c["high"])
-                if best >= entry + sl_atr * atr0:   # breakeven + trailing
+                if best >= entry + trail_start * sl_atr * atr0:
                     # el trailing se estrecha tras 2R (protege la ganancia)
-                    tr = trail_atr * (0.75 if best >= entry + 2 * sl_atr * atr0 else 1.0)
+                    tr = trail_atr * (tighten_multiple if best >= entry + tighten_at * sl_atr * atr0 else 1.0)
                     sl = max(sl, break_even_price(c['close']), best - tr * atr0)
             else:
                 if c["high"] >= sl:
@@ -349,8 +354,8 @@ def simulate(
                     close(exit_fill(tp))
                     continue
                 best = min(best, c["low"])
-                if best <= entry - sl_atr * atr0:
-                    tr = trail_atr * (0.75 if best <= entry - 2 * sl_atr * atr0 else 1.0)
+                if best <= entry - trail_start * sl_atr * atr0:
+                    tr = trail_atr * (tighten_multiple if best <= entry - tighten_at * sl_atr * atr0 else 1.0)
                     sl = min(sl, break_even_price(c['close']), best + tr * atr0)
             # Drawdown también incluye flotante y el coste de liquidación.
             floating = net_outcome(entry, exit_fill(c['close']), qty, direction,
@@ -560,11 +565,13 @@ def optimize(
 
     def evaluate(cfg: tuple, lo: int, hi: int, costs: dict | None = None) -> dict:
         from .execution import atr_spread_multiple, signal_exit_enabled
+        from .aggressive import exit_policy
         th, sl, tp, tr = cfg
         return simulate(candles, scores, atrs, spread_pct, th, sl, tp, tr,
                         max_hold_bars, cooldown_bars, risk_amount, notional_cap,
                         lo, hi, extensions, overext_atr, costs or model, allow_short,
-                        min_atr_spread=atr_spread_multiple(bot_id), exit_on_signal=signal_exit_enabled(bot_id))
+                        min_atr_spread=atr_spread_multiple(bot_id), exit_on_signal=signal_exit_enabled(bot_id),
+                        exit_policy=exit_policy(bot_id))
 
     best_cfg: tuple | None = None
     best_score = float("-inf")

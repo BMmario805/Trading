@@ -3,8 +3,8 @@
 from decimal import Decimal, InvalidOperation, ROUND_DOWN
 
 
-def partial_quantity(qty, bid, info):
-    """Mitad redondeada hacia abajo; venta y remanente deben ser negociables."""
+def partial_quantity(qty, bid, info, *, fraction=.5):
+    """Fracción redondeada; venta y remanente deben ser negociables."""
     try:
         quantity, price = Decimal(str(qty)), Decimal(str(bid))
         filters = info.get('filters', [])
@@ -12,7 +12,9 @@ def partial_quantity(qty, bid, info):
         step = Decimal(str(lot.get('stepSize', '.00000001')))
         if not all(v.is_finite() and v > 0 for v in (quantity, price, step)):
             return 0.0
-        part = (quantity / 2 / step).to_integral_value(rounding=ROUND_DOWN) * step
+        ratio=Decimal(str(fraction))
+        if not ratio.is_finite() or not 0<ratio<1: return 0.0
+        part = (quantity * ratio / step).to_integral_value(rounding=ROUND_DOWN) * step
         minimum = Decimal(str(lot.get('minQty', 0)))
         maximum = Decimal(str(lot.get('maxQty', 0)))
         for size in (part, quantity - part):

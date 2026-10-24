@@ -23,7 +23,7 @@ from . import mt5_performance
 from . import mt5_market
 from . import learning
 from . import broker_replay
-from . import portfolio_risk, gemini_agent
+from . import portfolio_risk, gemini_agent, aggressive
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / '.runtime' / 'mt5-demo.json'
@@ -296,7 +296,7 @@ class DemoEngine:
                 save(key, data)
             try:
                 tick = self.gateway.tick(pos.symbol, now, self.clock_skew)
-                if now + self.clock_skew-pos.time >= cfg.max_hold_seconds:
+                if now + self.clock_skew-pos.time >= data.get('maxHoldSeconds',aggressive.LEGACY_MAX_HOLD[cfg.id]):
                     if not self.uncertain(pos.symbol):
                         request = self.gateway.close_request(pos, now)
                         result = self.submit(f'close:{pos.ticket}:{pos.volume}', pos.symbol, request)
@@ -308,9 +308,10 @@ class DemoEngine:
                 data['best'] = max(data['best'], price) if buy else min(data['best'], price)
                 save(key, data)
                 gain = (data['best']-pos.price_open)*(1 if buy else -1)
-                if data['risk'] <= 0 or gain < data['risk']:
+                rules=data.get('exitPolicy') or {}
+                if data['risk'] <= 0 or gain < rules.get('trailStartR',1)*data['risk']:
                     continue
-                trail = data['atr'] * data['trail'] * (.75 if gain >= 2*data['risk'] else 1)
+                trail = data['atr'] * data['trail'] * (rules.get('tightenMultiple',.75) if gain >= rules.get('tightenAtR',2)*data['risk'] else 1)
                 stop = max(pos.price_open, data['best']-trail, pos.sl) if buy else min(pos.price_open, data['best']+trail, pos.sl)
                 info = self.api.symbol_info(pos.symbol)
                 step = info.trade_tick_size or info.point
@@ -443,14 +444,8 @@ class DemoEngine:
             opened_time = getattr(p, 'time', None)
             loss = api.order_calc_profit(p.type,p.symbol,p.volume,p.price_open,p.sl) if p.sl > 0 else None
             risk_eur = max(0,-loss)*1.1 if (account.currency == 'EUR' and isinstance(loss,(int,float)) and math.isfinite(loss)) else None
-            info = api.symbol_info(p.symbol)
-            nominal_eur = None
-            contract_size = getattr(info,'trade_contract_size',None)
-            if account.currency == 'EUR' and isinstance(contract_size,(int,float)) and math.isfinite(contract_size):
-                if getattr(info,'currency_base',None) == 'EUR':
-                    nominal_eur = p.volume*contract_size
-                elif getattr(info,'currency_profit',None) == 'EUR':
-                    nominal_eur = p.volume*contract_size*p.price_open
+            nominal_eur=(self.gateway.notional_eur(p.symbol,p.volume,p.price_open,now,self.clock_skew)
+                         if account.currency=='EUR' else None)
             position_rows.append(dict(
                 ticket=p.ticket, symbol=p.symbol,
                 bot=next((b for b,m in MAGICS.items() if m==p.magic), 'manual/otro'),
@@ -555,14 +550,7 @@ class DemoEngine:
                     loss = api.order_calc_profit(request['type'],symbol,request['volume'],request['price'],request['sl'])
                     if loss is None or not math.isfinite(loss):
                         raise DemoOnlyError('Riesgo monetario global desconocido')
-                    info = api.symbol_info(symbol)
-                    contract_size = getattr(info,'trade_contract_size',None)
-                    nominal_eur = None
-                    if isinstance(contract_size,(int,float)) and math.isfinite(contract_size) and contract_size > 0:
-                        if getattr(info,'currency_base',None) == 'EUR':
-                            nominal_eur = request['volume']*contract_size
-                        elif getattr(info,'currency_profit',None) == 'EUR':
-                            nominal_eur = request['volume']*contract_size*request['price']
+                    nominal_eur=self.gateway.notional_eur(symbol,request['volume'],request['price'],now,self.clock_skew)
                     proposal = portfolio_risk.assess(symbol,'long' if direction > 0 else 'short',
                         max(0,-loss)*1.1,nominal_eur,source='mt5',bot_id=bot.id,reserve=True)
                     if not proposal['allowed']:
@@ -578,6 +566,7 @@ class DemoEngine:
                         if pos.symbol == symbol and pos.magic == MAGICS[bot.id]:
                             save(self.owner+f'position:{pos.ticket}', dict(risk=risk, atr=atr, best=pos.price_open,
                                                                       trail=p.get('trailAtr', bot.trail_atr),
+                                                                      maxHoldSeconds=bot.max_hold_seconds,exitPolicy=aggressive.exit_policy(bot.id),
                                                                       probation=probation))
                     self.diagnostics[key] = (f'Orden DEMO a prueba ejecutada ({learning.PROBATION_SIZE:.0%} del riesgo habitual)' if probation
                                              else 'Orden DEMO ejecutada en MT5')

@@ -25,6 +25,7 @@ class ExitPolicy:
     max_hold_seconds: int | None
     partial: bool = False
     trail_atr: float = 1.5
+    trail_start_r: float = 1.0
 
 
 POLICIES = (ExitPolicy('fixed-6h',6*3600),ExitPolicy('fixed-48h',48*3600),
@@ -33,7 +34,9 @@ POLICIES = (ExitPolicy('fixed-6h',6*3600),ExitPolicy('fixed-48h',48*3600),
 INTERVALS = {'15m':900,'1h':3600,'4h':14400}
 
 
-def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None):
+def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None,
+           order_options=None,partial_fraction=.5,trail_after_r=0,residual_stop_r=None,
+           fee_rate=None,slippage_rate=None,spread_pct=.0002):
     cash=peak=100.0
     max_dd=0.0
     position=None
@@ -43,7 +46,7 @@ def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None
     day=None
     stopped=False
     day_equity=100.0
-    fee,slip,spread=desk.FEE*cost_multiple,desk.SLIPPAGE*cost_multiple,.0002*cost_multiple
+    fee,slip,spread=(desk.FEE if fee_rate is None else fee_rate)*cost_multiple,(desk.SLIPPAGE if slippage_rate is None else slippage_rate)*cost_multiple,spread_pct*cost_multiple
     exit_factor=(1-slip)*(1-fee)
 
     def realize(bid,qty):
@@ -87,21 +90,22 @@ def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None
             elif position['partialPending']:
                 # Decisión al cierre anterior; ejecución al precio de apertura real,
                 # con sus gaps y costes. No se supone un fill intravela perfecto.
-                qty=partial_quantity(position['qty'],bid,info)
+                qty=partial_quantity(position['qty'],bid,info,fraction=partial_fraction)
                 position['partialPending']=False
                 position['partialTried']=True
                 if qty:
                     realize(bid,qty)
                     position['partialDone']=True
                     partials+=1
-                    equilibrium=position['entry']*(1+fee)/exit_factor
+                    equilibrium=(position['entry']+residual_stop_r*position['risk']/(position['notional']/position['entry'])
+                                 if residual_stop_r is not None else position['entry']*(1+fee)/exit_factor)
                     if equilibrium<bid: position['sl']=max(position['sl'],equilibrium)
                 else:
                     skipped+=1
         if not had_position and not stopped and now>=cooldown and a:
             ask=bar['open']*(1+spread/2)
             if desk.price_allowed(a,ask):
-                order=desk.size_order(cash,cash,ask,a['atr'],info,fee=fee,slippage=slip)
+                order=desk.size_order(cash,cash,ask,a['atr'],info,fee=fee,slippage=slip,**(order_options or {}))
                 if order:
                     cash-=order['notional']+order['fee']
                     position=dict(order,entryTime=now,atr=a['atr'],best=order['entry'],
@@ -121,7 +125,11 @@ def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None
                     risk_per_unit=position['risk']/(position['notional']/position['entry'])
                     if net_per_unit>=1.5*risk_per_unit: position['partialPending']=True
                 position['best']=max(position['best'],current)
-                trigger=position['partialDone'] if policy.partial else current>=position['entry']+position['initialDist']
+                trigger=position['partialDone'] if policy.partial else current>=position['entry']+policy.trail_start_r*position['initialDist']
+                if trigger and policy.partial and trail_after_r:
+                    if current*exit_factor-position['entry']*(1+fee)>=trail_after_r*position['risk']/(position['notional']/position['entry']):
+                        position['trailActivated']=True
+                    trigger=position.get('trailActivated',False)
                 if trigger:
                     stop=max(position['sl'],position['entry']*(1+fee)/exit_factor,position['best']-policy.trail_atr*position['atr'])
                     if stop<current: position['sl']=stop

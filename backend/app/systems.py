@@ -898,7 +898,7 @@ def _session_open_minute(ts: int) -> int:
     return utc.hour * 60 + utc.minute
 
 
-def opening_range_series(candles: list[dict]) -> tuple[list[float], dict | None]:
+def opening_range_series(candles: list[dict], *, range_minutes=ORB_RANGE_MINUTES) -> tuple[list[float], dict | None]:
     """Votos ORB por vela + el rango de la última sesión (para el gráfico).
 
     Para cada sesión (día UTC) se construye el rango con las velas de los
@@ -924,7 +924,7 @@ def opening_range_series(candles: list[dict]) -> tuple[list[float], dict | None]
         if minute < open_min:
             continue
         elapsed = minute - open_min
-        if elapsed < ORB_RANGE_MINUTES:
+        if elapsed < range_minutes:
             # la vela pertenece al rango de apertura
             or_hi = max(or_hi, c["high"]) if have_or else c["high"]
             or_lo = min(or_lo, c["low"]) if have_or else c["low"]

@@ -15,7 +15,7 @@ from .execution import fresh_signal, atr_spread_multiple
 from .mt5_gateway import lot_floor
 from .strategy import extension_series
 
-VERSION = 2
+VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -131,7 +131,7 @@ def entry_plan(contract, direction, price, atr, sl_atr, tp_atr, equity, risk_pct
 
 def simulate(candles, scores, atrs, contract, params, *, initial, risk_pct,
              max_open_risk_pct, max_hold_seconds, start=0, end=None,
-             extensions=None, overext_atr=float('inf'), max_daily_loss_pct=.02,min_atr_spread=3):
+             extensions=None, overext_atr=float('inf'), max_daily_loss_pct=.02,min_atr_spread=3,exit_policy=None):
     """OHLC approximation; no contrary-signal exit absent from MT5 management."""
     c = contract
     c.validate()
@@ -142,6 +142,7 @@ def simulate(candles, scores, atrs, contract, params, *, initial, risk_pct,
     pos, cooldown_until = None, 0
     current_day, day_initial, day_paused = None, initial, False
     threshold = params['entryThreshold']
+    rules=exit_policy or {}
 
     def close(price, stamp, reason):
         nonlocal pos, equity, peak, max_dd, cooldown_until
@@ -187,8 +188,8 @@ def simulate(candles, scores, atrs, contract, params, *, initial, risk_pct,
             price = bar['close']+ask_shift
             pos['best'] = max(pos['best'],price) if direction > 0 else min(pos['best'],price)
             gain = (pos['best']-pos['entry'])*direction
-            if gain >= pos['risk']:
-                trail = pos['atr']*params['trailAtr']*(.75 if gain >= 2*pos['risk'] else 1)
+            if gain >= rules.get('trailStartR',1)*pos['risk']:
+                trail = pos['atr']*params['trailAtr']*(rules.get('tightenMultiple',.75) if gain >= rules.get('tightenAtR',2)*pos['risk'] else 1)
                 stop = max(pos['entry'],pos['best']-trail,pos['stop']) if direction > 0 else min(pos['entry'],pos['best']+trail,pos['stop'])
                 stop = round((math.floor(stop/c.tick_size) if direction > 0 else math.ceil(stop/c.tick_size))*c.tick_size,c.digits)
                 minimum = max(c.stops_level,c.freeze_level)*c.point+2*c.point
@@ -233,13 +234,14 @@ def simulate(candles, scores, atrs, contract, params, *, initial, risk_pct,
 def optimize(cfg, candles, scores, atrs, contract, *, initial, risk_pct, max_open_risk_pct,
              max_daily_loss_pct, engine_version):
     """Small preregistered grid, chronological validation and untouched holdout."""
+    from .aggressive import exit_policy
     base = dict(entryThreshold=cfg.entry_threshold,slAtr=cfg.sl_atr,tpAtr=cfg.tp_atr,trailAtr=cfg.trail_atr)
     extensions = extension_series(candles)
     embargo = max(3, math.ceil(cfg.max_hold_seconds/max(1,candles[1]['time']-candles[0]['time'])))
     train_end, val_end = int(len(candles)*.6), int(len(candles)*.8)
     common = dict(initial=initial,risk_pct=risk_pct,max_open_risk_pct=max_open_risk_pct,
                   max_hold_seconds=cfg.max_hold_seconds,extensions=extensions,overext_atr=cfg.overext_atr,
-                  max_daily_loss_pct=max_daily_loss_pct,min_atr_spread=atr_spread_multiple(cfg.id))
+                  max_daily_loss_pct=max_daily_loss_pct,min_atr_spread=atr_spread_multiple(cfg.id),exit_policy=exit_policy(cfg.id))
     best, best_train = base, None
     for threshold,stop,target in product((cfg.entry_threshold*.8,cfg.entry_threshold,cfg.entry_threshold*1.2),
                                          (cfg.sl_atr,cfg.sl_atr*1.25),(cfg.tp_atr,cfg.tp_atr*1.25)):
