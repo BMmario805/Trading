@@ -333,8 +333,43 @@ Los clientes deben estar instalados y autenticados (`grok login` y
 frente a un npm global antiguo. Pueden fijarse rutas con `SWARM_GROK_BIN` y
 `SWARM_CODEX_BIN`. Los procesos no reciben las variables de claves de API,
 Codex exige una sesión ChatGPT y Grok se detiene si detecta configuración BYOK.
-Las evaluaciones de riesgo y flujo no pueden ejecutar herramientas; el pulso
+En `mesa-siete-v2`, flujo y riesgo de cada entrada se validan localmente en
+Python. El libro vuelve a comprobarse después del commander: disponibilidad,
+antigüedad máxima de 2 segundos y spread máximo de 8 bps en cripto. El pulso
 solo tiene búsqueda/lectura públicas. No publica razonamiento interno.
+
+El transporte de suscripción usa `PROMPT_PULSE_BATCH` y el contrato estricto
+`BatchPulseReport.items`, con hasta cinco símbolos y cobertura completa del
+lote solicitado. Cada lectura identifica el tipo de catalizador y admite
+`trapDirection="both"`, que veta ambos lados también en la compuerta contextual.
+El JSON con campos adicionales, tipos incorrectos o citas sin HTTPS se rechaza.
+Los informes almacenados con contratos anteriores se descartan y se renuevan.
+
+Codex se reserva para asignación de familias por régimen (caché de 4 horas) y
+post mortem de los últimos 40 cierres netos (12 horas o 10 cierres nuevos).
+La caché y sus intentos se guardan en `.runtime/swarm.sqlite`; comparten los
+límites de cuota existentes. Los vetos sugeridos por el post mortem son
+informativos. La asignación solo puede vetar familias o reducir exposición
+cuando el enjambre está en modo paper armado.
+
+`PROMPT_REGIME_STRATEGIST` devuelve el régimen, las familias permitidas, el
+tope de riesgo y la exigencia de maker; un veto de rupturas o una entrada
+Post-Only obligatoria se respeta también al caducar una orden. El auditor usa
+`PROMPT_FORENSIC_AUDITOR` y `ForensicAuditReport`, con R neta calculada desde
+el riesgo inicial registrado, hora UTC y contexto causal de entrada. Sus
+recomendaciones solo se conservan cuando cada segmento dispone de ocho
+cierres y expectativa inferior a −0,20 R. La API de aprendizaje las muestra
+en `forensicAudit` como sugerencias; el tope `sizeCap=0.50` para muestras de
+menos de 30 cierres se calcula localmente, fuera del JSON del modelo.
+
+La mesa cripto selecciona largos en el percentil 85 o superior de fuerza
+relativa frente a BTC, ajustada por ATR a 24 y 72 horas. Pullback y recuperación
+de 1h priorizan órdenes maker de 180 segundos. Las posiciones nuevas pueden
+superar 48 horas si su beneficio neto flotante supera 1R y el cierre de 4h
+sigue sobre EMA50; tras 2R usan Chandelier de 2,8 ATR con barras cerradas.
+El meta-modelo v5 añade interacciones y puede recibir una semilla OOS al 30%
+de su tasa habitual, solo tras tres folds positivos y validación final; esa
+semilla no cuenta como experiencia en vivo ni contiene cierres del holdout.
 
 La configuración local limita la observación a 8 ciclos/día, 2/h, con al menos
 15 minutos entre ciclos. La observación periódica rota un símbolo cada tres

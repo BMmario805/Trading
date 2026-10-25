@@ -28,6 +28,10 @@ class MetricsTests(unittest.TestCase):
 
 class DeskEfficiencyTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        from test_desk import ranked_fixture
+        rank_patch=patch.object(desk,'rank_relative_strength',side_effect=ranked_fixture)
+        rank_patch.start()
+        self.addCleanup(rank_patch.stop)
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.engine=desk.Desk(db_path=Path(self.tmp.name)/'desk.sqlite')

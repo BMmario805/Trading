@@ -53,6 +53,51 @@ class BookTests(unittest.TestCase):
         self.assertTrue(self.feed.ingest({'stream':'牛来usdt@bookTicker','data':row}))
 
 
+class TakerFlowTests(unittest.TestCase):
+    def setUp(self):
+        self.feed = book_stream.BookStream()
+        self.now = 1_700_000_000.0
+
+    def _load(self, rows):
+        self.feed.trades['BTCUSDT'] = rows
+
+    def test_buyer_maker_false_is_taker_buy_and_velocity_is_the_rate_ratio(self):
+        rows = [dict(at=self.now - 5, price=100.0, quantity=2.0, isBuyerMaker=False) for _ in range(6)]
+        rows += [dict(at=self.now - 5, price=50.0, quantity=1.0, isBuyerMaker=True) for _ in range(4)]
+        rows.append(dict(at=self.now - 301, price=1000.0, quantity=1000.0, isBuyerMaker=True))
+        self._load(rows)
+        flow = self.feed.taker_flow('BTCUSDT', window_seconds=300, now=self.now)
+        self.assertEqual(flow['buyVolume'], 1200.0)
+        self.assertEqual(flow['sellVolume'], 200.0)
+        self.assertAlmostEqual(flow['cvdDelta'], (1200.0 - 200.0) / 1400.0)
+        self.assertAlmostEqual(flow['tradeVelocity'], 10.0)
+        support = self.feed.taker_supports_bid('BTCUSDT', now=self.now)
+        self.assertTrue(support['allowed'])
+
+    def test_fewer_than_ten_trades_leave_cvd_unset_and_do_not_block_the_bid(self):
+        self._load([dict(at=self.now - 1, price=10.0, quantity=1.0, isBuyerMaker=False) for _ in range(9)])
+        flow = self.feed.taker_flow('BTCUSDT', now=self.now)
+        self.assertIsNone(flow['cvdDelta'])
+        self.assertEqual(flow['buyVolume'], 90.0)
+        self.assertEqual(flow['sellVolume'], 0.0)
+        self.assertAlmostEqual(flow['tradeVelocity'], (9 / 30.0) / (9 / 300.0))
+        self.assertTrue(self.feed.taker_supports_bid('BTCUSDT', now=self.now)['allowed'])
+
+    def test_heavy_taker_selling_fails_the_bid_floor(self):
+        rows = [dict(at=self.now - 2, price=100.0, quantity=1.0, isBuyerMaker=True) for _ in range(8)]
+        rows += [dict(at=self.now - 2, price=100.0, quantity=1.0, isBuyerMaker=False) for _ in range(2)]
+        self._load(rows)
+        flow = self.feed.taker_flow('BTCUSDT', now=self.now)
+        self.assertAlmostEqual(flow['cvdDelta'], -0.6)
+        self.assertFalse(self.feed.taker_supports_bid('BTCUSDT', now=self.now)['allowed'])
+        balanced = [dict(at=self.now - 2, price=100.0, quantity=1.0, isBuyerMaker=True) for _ in range(5)]
+        balanced += [dict(at=self.now - 2, price=100.0, quantity=0.85, isBuyerMaker=False) for _ in range(5)]
+        self._load(balanced)
+        # (4.25 - 5) / 9.25 = -0.081, por encima del suelo -0.15.
+        self.assertGreaterEqual(self.feed.taker_flow('BTCUSDT', now=self.now)['cvdDelta'], -0.15)
+        self.assertTrue(self.feed.taker_supports_bid('BTCUSDT', now=self.now)['allowed'])
+
+
 class ExecutionBooksTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.feed=book_stream.BookStream()

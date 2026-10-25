@@ -1,10 +1,11 @@
+import asyncio
 import json
 import tempfile
 import unittest
 from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock,patch
 
 from app import bots, learning, training, portfolio_risk
 
@@ -38,6 +39,99 @@ class EconomicDatabaseTests(unittest.TestCase):
 
 
 class LearningReceiptTests(EconomicDatabaseTests):
+    def test_v5_interactions_are_bounded_directional_and_causal(self):
+        confirmations=[dict(system='Régimen',vote=.8),dict(system='Disparador de precio',vote=.5),
+                       dict(system='Flujo CMF',vote=-.4)]
+        context=dict(extension_atr=3,spread_to_atr=.2,funding=.01,oi_delta=3)
+        feats=learning.meta_features('trend','cripto','long',12,confirmations,context)
+        self.assertEqual(learning.META_FEATURE_VERSION,5)
+        self.assertAlmostEqual(feats['ix:regime_x_trigger'],.4)
+        self.assertAlmostEqual(feats['ix:trigger_x_flow'],-.2)
+        self.assertAlmostEqual(feats['ix:ext_x_spread'],.2)
+        self.assertEqual(feats['ix:oi_delta_x_dir'],2)
+        short=learning.meta_features('trend','cripto','short',12,confirmations,context)
+        self.assertEqual(short['ix:regime_x_trigger'],feats['ix:regime_x_trigger'])
+        self.assertEqual(short['ix:funding_x_dir'],-.01)
+        self.assertNotIn('ix:funding_x_dir',learning.meta_features('trend','cripto','long',12,[],{}))
+        self.assertTrue(all(-2<=v<=2 for k,v in feats.items() if k.startswith('ix:')))
+
+    def test_v4_migrates_weights_samples_and_receipts_without_relearning(self):
+        self.trade(pnl=3)
+        learning.meta_learn_new_trades('scalper')
+        before=dict(learning._load_model('scalper'));before['featureVersion']=4
+        with learning._conn() as con:
+            con.execute('UPDATE bot_model SET model=? WHERE bot=?',(json.dumps(before),'scalper'))
+        learning._models.clear()
+        self.assertEqual(learning.meta_learn_new_trades('scalper'),0)
+        after=learning._load_model('scalper')
+        self.assertEqual(after['w'],before['w'])
+        self.assertEqual(after['n'],before['n'])
+        self.assertEqual(after['featureVersion'],5)
+
+    def test_oos_warm_start_is_attenuated_persistent_idempotent_and_does_not_mature_live_gate(self):
+        batch=[({'bias':1.0},1.0)]
+        self.assertEqual(learning.warm_start_from_oos('scalper',batch),1)
+        model=learning._load_model('scalper')
+        self.assertAlmostEqual(model['w']['bias'],.30*learning.META_LR*.5)
+        self.assertEqual(model['n'],0)
+        self.assertEqual(model['oosSamples'],1)
+        self.assertIsNone(learning.meta_gate('scalper',{'bias':1})[1])
+        learning._models.clear()
+        self.assertEqual(learning.warm_start_from_oos('scalper',batch),0)
+        self.trade(pnl=3)
+        self.assertEqual(learning.meta_learn_new_trades('scalper'),1)
+        self.assertEqual(learning._load_model('scalper')['oosSamples'],1)
+
+    def test_mature_live_model_cannot_be_changed_by_oos_and_failed_batch_rolls_back(self):
+        model=learning._new_model();model.update(n=learning.META_MIN_SAMPLES,w={'bias':.2})
+        with learning._conn() as con:
+            con.execute('INSERT INTO bot_model VALUES (?,?,?)',('scalper',json.dumps(model),0))
+        self.assertEqual(learning.warm_start_from_oos('scalper',[({'bias':1},-1)]),0)
+        self.assertEqual(learning._load_model('scalper')['w'],{'bias':.2})
+        real=learning._meta_sgd_step
+        def fail(model,feats,*args):
+            if feats.get('fail'):raise RuntimeError('interrumpido')
+            real(model,feats,*args)
+        batch=[({'bias':1},1),({'fail':1},-1)]
+        with patch.object(learning,'_meta_sgd_step',side_effect=fail),self.assertRaises(RuntimeError):
+            learning.warm_start_from_oos('trend',batch)
+        with learning._conn() as con:
+            self.assertIsNone(con.execute("SELECT model FROM bot_model WHERE bot='trend'").fetchone())
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM bot_oos_processed WHERE bot='trend'").fetchone()[0],0)
+
+    def test_reset_removes_oos_receipts_and_allows_a_fresh_seed(self):
+        batch=[({'bias':1},1)]
+        learning.warm_start_from_oos('scalper',batch)
+        learning.reset('scalper')
+        self.assertEqual(learning.warm_start_from_oos('scalper',batch),1)
+
+    def test_training_orchestration_seeds_only_applied_results_with_causal_features(self):
+        from types import SimpleNamespace
+        bot=SimpleNamespace(cfg=bots.TREND,spread_pct=lambda sym:.0005)
+        sym=bots.SYMBOLS_BY_ID['BTC']
+        now=600*3600
+        rows=[dict(time=i*3600,open=100+i*.1,close=100+i*.1,high=101+i*.1,low=99+i*.1,volume=100) for i in range(600)]
+        exported=[({'bias':1},1)]
+        applied=[True]
+        def optimize(*args,**kwargs):
+            build=kwargs['meta_builder']
+            before=build(90,'long')
+            for row in rows[500:]:
+                row.update(open=10000,close=10000,high=10001,low=9999)
+            self.assertEqual(build(90,'long'),before)
+            return dict(ok=True,params={},applied=applied[0],oosTrades=exported)
+        with patch.object(training,'fetch_history',AsyncMock(return_value=rows)), \
+             patch.object(training.time,'time',return_value=now),patch.object(training,'optimize',side_effect=optimize), \
+             patch.object(training,'score_series',return_value=[.8]*600),patch.object(training,'atr_series',return_value=[2]*600), \
+             patch.object(learning,'warm_start_from_oos',wraps=learning.warm_start_from_oos) as warm:
+            result=asyncio.run(training._train_symbol(bot,sym))
+            self.assertEqual(result['warmStartSamples'],1)
+            self.assertNotIn('oosTrades',result)
+            warm.assert_called_once_with('trend',exported)
+            applied[0]=False
+            asyncio.run(training._train_symbol(bot,sym))
+            self.assertEqual(warm.call_count,1)
+
     def test_later_opened_trade_can_close_first_without_losing_earlier_trade(self):
         first = self.trade(status='open')
         self.trade(exit_time=1100, pnl=5)
@@ -124,6 +218,51 @@ class LearningReceiptTests(EconomicDatabaseTests):
         self.assertEqual(policy['sizeMult']['BTC'], 1)
         learning._policies['scalper']['sizeMult']['BTC'] = 1.5  # antigua política en memoria
         self.assertEqual(learning.size_multiplier('scalper', 'BTC'), (1.0, None))
+
+
+class OosExportTests(unittest.TestCase):
+    def test_optimizer_exports_only_three_positive_validation_folds_after_holdout_passes(self):
+        rows=[dict(time=i*3600,open=100,high=102,low=98,close=100,volume=100) for i in range(2000)]
+        protocol=training.temporal_protocol(2000,10)
+        fold_pnls=[3,3,3]
+        holdout_pnl=[3]
+        ranges=[]
+        def replay(*args,**kwargs):
+            lo,hi=args[12:14];ranges.append((lo,hi))
+            pnl=fold_pnls[protocol['folds'].index((lo,hi))] if (lo,hi) in protocol['folds'] else holdout_pnl[0] if (lo,hi)==protocol['holdout'] else 3
+            return dict(pnl=pnl,trades=12,maxDrawdown=1,profitFactor=2,tradePnls=[pnl/12]*12,
+                        periodPnls=[1,-.1]*100,oosTrades=[({'foldStart':lo},1)] if kwargs.get('meta_builder') else [])
+        with patch.object(training,'simulate',side_effect=replay), \
+             patch.object(training,'GRID_THRESHOLD',(.4,)),patch.object(training,'GRID_SL',(2,)), \
+             patch.object(training,'GRID_TP',(4,)),patch.object(training,'GRID_TRAIL',(1.2,)), \
+             patch.object(training,'deflated_sharpe',return_value=dict(passed=True)):
+            args=('trend',rows,[.8]*2000,[2]*2000,.001,10,2,1,100)
+            result=training.optimize(*args,meta_builder=lambda *a:dict(bias=1))
+            self.assertTrue(result['applied'])
+            self.assertEqual([f['foldStart'] for f,r in result['oosTrades']],[lo for lo,hi in protocol['folds']])
+            fold_pnls[2]=-1
+            result=training.optimize(*args,meta_builder=lambda *a:dict(bias=1))
+            self.assertTrue(result['applied'])  # conserva el protocolo 2-de-3
+            self.assertEqual(result['oosTrades'],[])  # warm-start exige los tres
+            fold_pnls[:]=[-1,-1,-1];ranges.clear()
+            result=training.optimize(*args,meta_builder=lambda *a:dict(bias=1))
+            self.assertFalse(result['applied'])
+            self.assertNotIn(protocol['holdout'],ranges)
+            fold_pnls[:]=[3,3,3];holdout_pnl[0]=-1
+            self.assertEqual(training.optimize(*args,meta_builder=lambda *a:dict(bias=1))['oosTrades'],[])
+
+    def test_simulator_keeps_signal_features_and_realized_net_r_together(self):
+        rows=[dict(time=i*3600,open=100,high=101,low=99,close=100,volume=100) for i in range(5)]
+        rows[-1].update(close=101)
+        calls=[]
+        def meta(index,direction):
+            calls.append((index,direction));return {'signalIndex':index}
+        result=training.simulate(rows,[0,.8,.8,.8,.8],[2]*5,0,.4,2,4,1.2,20,2,1,100,
+                                 0,5,cost_model=dict(feeRate=.001,slippageRate=.0002),meta_builder=meta)
+        self.assertEqual(calls,[(1,'long')])
+        self.assertEqual(len(result['oosTrades']),1)
+        self.assertEqual(result['oosTrades'][0][0],{'signalIndex':1})
+        self.assertAlmostEqual(result['oosTrades'][0][1],result['tradePnls'][0])  # riesgo inicial = 1
 
 
 class LabCostTests(EconomicDatabaseTests):

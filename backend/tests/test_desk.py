@@ -29,7 +29,46 @@ def add_markets(snapshot,bases):
     return snapshot
 
 
+def ranked_fixture(candidates, *_args):
+    """El selector se prueba aislado de RS; los cálculos reales tienen pruebas propias."""
+    for candidate in candidates:
+        candidate.update(rsScore=1.0,rsPercentile=100.0,rsEligible=True)
+    return candidates
+
+
 class SizingTests(unittest.TestCase):
+    def test_rs_top_fifteen_percent_uses_closed_aligned_24h_and_72h_bars(self):
+        now=1000*3600
+        def bars(rate):
+            return [dict(time=now-(73-i)*3600,open=100*(1+rate)**i,close=100*(1+rate)**i,
+                         high=101*(1+rate)**i,low=99*(1+rate)**i,volume=100) for i in range(73)]
+        btc=bars(.0001)
+        candidates=[dict(symbol=f'C{i}',eligible=True) for i in range(20)]
+        histories={c['symbol']:bars(.0001*(i+1)) for i,c in enumerate(candidates)}
+        desk.rank_relative_strength(candidates,histories,btc,now)
+        self.assertEqual([c['symbol'] for c in candidates if c['rsEligible']],['C17','C18','C19'])
+        self.assertAlmostEqual(candidates[0]['rsScore'],0)
+        last=candidates[-1]
+        av=desk.atr(histories['C19']);price=histories['C19'][-1]['close']
+        expected=((price/histories['C19'][-25]['close']-btc[-1]['close']/btc[-25]['close'])*100)/(av/price*100)
+        self.assertAlmostEqual(last['rsScore24h'],expected)
+        old=last['rsScore']
+        histories['C19'].append(dict(time=now,open=1,close=100000,high=100000,low=1,volume=100))
+        desk.rank_relative_strength(candidates,histories,btc,now)
+        self.assertEqual(last['rsScore'],old)
+        histories['C19']=[dict(r,time=r['time']-3600) for r in histories['C19'][:-1]]
+        desk.rank_relative_strength(candidates,histories,btc,now)
+        self.assertFalse(last['rsEligible'])
+
+    def test_flat_rs_and_missing_72h_history_cannot_promote_laggards(self):
+        now=1000*3600
+        rows=[dict(time=now-(73-i)*3600,open=100,close=100,high=101,low=99,volume=100) for i in range(73)]
+        candidates=[dict(symbol='A',eligible=True),dict(symbol='B',eligible=True)]
+        desk.rank_relative_strength(candidates,{'A':rows,'B':rows},rows,now)
+        self.assertTrue(all(not c['rsEligible'] for c in candidates))
+        desk.rank_relative_strength(candidates,{'A':rows[-24:]},rows,now)
+        self.assertIsNone(candidates[0]['rsScore'])
+
     def test_size_caps_exposure_cash_and_initial_risk(self):
         for a in (.05,2,20):
             for cash in (10,500,1000):
@@ -84,8 +123,79 @@ class SizingTests(unittest.TestCase):
         self.assertFalse(analysis['entryAllowed'])
 
 
+class ChandelierAndRegimeTests(unittest.TestCase):
+    def setUp(self):
+        folder=tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.engine=desk.Desk(db_path=Path(folder.name)/'desk.sqlite')
+        self.now=400*14400
+        patcher=patch.object(desk.time,'time',return_value=self.now)
+        patcher.start();self.addCleanup(patcher.stop)
+        order=desk.size_order(1000,1000,100,2,data()['metadata']['SOLUSDT'])
+        self.position=dict(order,symbol='SOLUSDT',entryKey='test',entryTime=self.now-49*3600,
+            lastBid=100,best=100,initialDist=4,atr=2,quoteAt=0,status='open',marketFilters=data()['metadata']['SOLUSDT']['filters'])
+        self.position['exitPolicy']['partialEnabled']=False
+        self.engine.state['positions']=[self.position]
+        self.engine.state['cash']-=order['notional']+order['fee']
+        self.engine.focus_position()
+        self.rows=[dict(time=self.now-(70-i)*14400,open=100+i*.2,close=100+i*.2,
+            high=101+i*.2,low=99+i*.2,volume=100) for i in range(70)]
+        self.engine.candle_cache[('SOLUSDT','4h')]=(self.now,self.rows)
+
+    def quote(self,bid):
+        snapshot=data();snapshot['at']=self.now
+        snapshot['books']['SOLUSDT'].update(bidPrice=str(bid),askPrice=str(bid+.01))
+        return snapshot
+
+    def test_profitable_trend_extends_48h_and_chandelier_ignores_open_4h_bar(self):
+        self.rows.append(dict(time=self.now,open=100,close=10000,high=10000,low=100,volume=100))
+        context=self.engine.closed_exit_context(self.position)
+        self.engine.manage(self.quote(115))
+        self.assertEqual(len(self.engine.state['positions']),1)
+        self.assertTrue(self.position['holdExtended'])
+        self.assertTrue(self.position['trailActivated'])
+        self.assertAlmostEqual(self.position['sl'],context['bestHigh']-2.8*context['atr'])
+        stop=self.position['sl']
+        self.position['best']=99999
+        self.engine.manage(self.quote(116))
+        self.assertEqual(self.position['sl'],stop)
+        self.engine.manage(self.quote(stop-.1))
+        self.assertFalse(self.engine.state['positions'])
+
+    def test_48h_still_closes_without_profit_or_closed_trend_evidence(self):
+        self.engine.candle_cache.clear()
+        self.engine.manage(self.quote(115))
+        self.assertFalse(self.engine.state['positions'])
+
+    def test_btc_choppy_regime_blocks_breakout_including_btc_and_requires_sweep(self):
+        self.engine.master_regime=dict(choppiness=59,adx=17,stressed=False)
+        for symbol in ('BTCUSDT','SOLUSDT'):
+            self.assertFalse(self.engine.master_gate(symbol,dict(strategy='breakout'),[])['allowed'])
+            self.assertTrue(self.engine.master_gate(symbol,dict(strategy='trend-pullback'),[])['allowed'])
+            self.assertFalse(self.engine.master_gate(symbol,dict(strategy='recovery'),[])['allowed'])
+            self.assertTrue(self.engine.master_gate(symbol,dict(strategy='recovery',liquiditySweep=True),[])['allowed'])
+
+    def test_hourly_pullback_and_recovery_post_at_best_bid_for_180_seconds(self):
+        from app import desk_maker
+        book=dict(bidPrice='100',askPrice='100.01',bidQty='10',askQty='10',receivedAt=self.now)
+        self.engine.state['positions']=[]
+        self.position['evidence']={}
+        for strategy in ('trend-pullback','recovery'):
+            self.position['strategy']=strategy
+            with patch.object(desk_maker.BOOKS,'fresh',return_value={'SOLUSDT':book}), \
+                 patch.object(desk_maker.BOOKS,'watch_trades'):
+                self.assertTrue(self.engine.maker.post(self.position,'buy',self.position['qty']))
+            order=self.engine.maker.orders[0]['order']
+            self.assertEqual(order['price'],100)
+            self.assertEqual(order['expires_at']-order['placed_at'],180)
+            self.engine.maker.cancel('SOLUSDT')
+
+
 class DeskTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        rank_patch=patch.object(desk,'rank_relative_strength',side_effect=ranked_fixture)
+        rank_patch.start()
+        self.addCleanup(rank_patch.stop)
         self.tmp=tempfile.TemporaryDirectory()
         self.db=patch.object(desk,'DB_PATH',Path(self.tmp.name)/'desk.sqlite')
         self.db.start()
@@ -101,6 +211,23 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
     async def entry(self,identity=True):
         with patch.object(self.engine,'wire',AsyncMock(return_value=dict(ok=identity,detail='Referencia probada',url='https://solana.com/'))),patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),patch.object(desk,'tape',return_value=self.analysis):
             await self.engine.scan(data())
+
+    async def test_regime_maker_requirement_blocks_taker_fallback_after_expiry(self):
+        self.engine.task=object()
+        analysis=dict(self.analysis,strategy='trend-pullback',entryAllowed=True)
+        self.engine.state['makerFallback']={f'SOLUSDT:{analysis["bar"]}':time.time()-1}
+        snapshot=dict(data(),scope='execution-books')
+        allocation=dict(allowed=True,maxExposureMultiplier=.5,requireMakerEntry=True,allowBreakouts=False)
+        with patch.object(desk.ai_swarm,'allocation_gate',return_value=allocation), \
+             patch.object(self.engine,'wire',AsyncMock(return_value=dict(ok=True,detail='Referencia probada'))), \
+             patch.object(self.engine,'market_books',AsyncMock(return_value=snapshot)), \
+             patch.object(self.engine,'candidate_candles',AsyncMock(return_value=[])), \
+             patch.object(desk,'tape',return_value=analysis),patch.object(self.engine.maker,'post',return_value=False) as post:
+            await self.engine.scan(snapshot)
+        post.assert_called_once()
+        self.assertFalse(self.engine.state['positions'])
+        self.assertEqual(self.engine.state['candidates'][0]['status'],'blocked')
+        self.assertIn('maker',self.engine.state['candidates'][0]['reason'])
 
     def funding_data(self):
         snapshot=add_markets(data(),['EUR'])

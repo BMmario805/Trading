@@ -248,6 +248,7 @@ def simulate(
     min_atr_spread: float = 3,
     exit_on_signal: bool = True,
     exit_policy: dict | None = None,
+    meta_builder=None,
 ) -> dict:
     """Backtest de una configuración sobre candles[start:end]. Sin capitalizar
     (tamaño fijo por operación) para que las métricas sean comparables.
@@ -261,6 +262,8 @@ def simulate(
     equity_peak = equity = 0.0
     max_dd = 0.0
     trade_pnls: list[float] = []
+    oos_trades = []
+    entry_features, entry_risk = None, 0.0
     total_fees = total_carry = turnover = 0.0
     period_pnls = []
     previous_mark = 0.0
@@ -308,6 +311,8 @@ def simulate(
         total_carry += carry
         turnover += (entry + price) * qty
         trade_pnls.append(p)
+        if entry_features is not None and entry_risk>0:
+            oos_trades.append((entry_features,p/entry_risk))
         pnl += p
         if p > 0:
             wins += 1
@@ -420,6 +425,8 @@ def simulate(
         qty = min(risk_amount * multiplier / max(unit_risk, 1e-12), notional_cap / entry)
         entry_fee = entry * qty * fee_rate
         entry_time = candles[i + 1]['time']
+        entry_risk = qty*unit_risk
+        entry_features = meta_builder(i,'long' if direction>0 else 'short') if meta_builder else None
         best = entry
         bars_held = 0
 
@@ -442,6 +449,7 @@ def simulate(
         "turnover": round(turnover, 4),
         "tradePnls": trade_pnls,
         "periodPnls": period_pnls,
+        "oosTrades": oos_trades,
         "costModel": model or {'mode': 'legacy-spread-only'},
     }
 
@@ -494,7 +502,7 @@ def expectancy_uncertainty(pnls: list[float], samples: int = 512, seed: int = 41
 
 
 def compact_metrics(metrics: dict) -> dict:
-    return {k: v for k, v in metrics.items() if k not in ('tradePnls', 'periodPnls', 'costModel')}
+    return {k: v for k, v in metrics.items() if k not in ('tradePnls', 'periodPnls', 'costModel', 'oosTrades')}
 
 
 def deflated_sharpe(period_pnls, trial_sharpes):
@@ -552,6 +560,7 @@ def optimize(
     overext_atr: float = float("inf"),
     cost_model: dict | None = None,
     allow_short: bool = True,
+    meta_builder=None,
 ) -> dict:
     extensions = extension_series(candles)
     protocol = temporal_protocol(len(candles), max_hold_bars)
@@ -563,7 +572,7 @@ def optimize(
         return dict(ok=False, applied=False, engineVersion=ENGINE_VERSION,
                     reason='Histórico insuficiente para tres bloques y holdout con embargo', protocol=protocol)
 
-    def evaluate(cfg: tuple, lo: int, hi: int, costs: dict | None = None) -> dict:
+    def evaluate(cfg: tuple, lo: int, hi: int, costs: dict | None = None, collect=False) -> dict:
         from .execution import atr_spread_multiple, signal_exit_enabled
         from .aggressive import exit_policy
         th, sl, tp, tr = cfg
@@ -571,7 +580,7 @@ def optimize(
                         max_hold_bars, cooldown_bars, risk_amount, notional_cap,
                         lo, hi, extensions, overext_atr, costs or model, allow_short,
                         min_atr_spread=atr_spread_multiple(bot_id), exit_on_signal=signal_exit_enabled(bot_id),
-                        exit_policy=exit_policy(bot_id))
+                        exit_policy=exit_policy(bot_id),meta_builder=meta_builder if collect else None)
 
     best_cfg: tuple | None = None
     best_score = float("-inf")
@@ -604,7 +613,7 @@ def optimize(
                     reason='ninguna configuración rentable neta en el tramo de selección')
 
     th, sl, tp, tr = best_cfg
-    segments = [evaluate(best_cfg, lo, hi) for lo, hi in protocol['folds']]
+    segments = [evaluate(best_cfg, lo, hi, collect=True) for lo, hi in protocol['folds']]
     stress_segments = [evaluate(best_cfg, lo, hi, stressed_costs(model,1.5)) for lo, hi in protocol['folds']]
     # Los vecinos se comprueban solo antes del holdout, sin elegir el mejor vecino.
     neighbor_configs = [(th * .9, sl, tp, tr), (min(.95, th * 1.1), sl, tp, tr),
@@ -614,23 +623,25 @@ def optimize(
                  for c in neighbor_configs]
     uncertainty = expectancy_uncertainty([p for m in segments for p in m['tradePnls']])
     dsr = deflated_sharpe(best_train.get('periodPnls',[]), trial_sharpes)
-    # Única consulta del tramo final una vez congelados configuración y pruebas.
-    val = evaluate(best_cfg, *protocol['holdout'])
-    stress = evaluate(best_cfg, *protocol['holdout'], stressed_costs(model))
-    accepted = (val['pnl'] > 0 and val['trades'] >= MIN_VALIDATION_TRADES
-                and sum(m['trades'] for m in segments) >= 20
+    development_passed = (sum(m['trades'] for m in segments) >= 20
                 and sum(m['pnl'] > 0 for m in segments) >= 2
                 and sum(m['pnl'] for m in segments) > 0
                 and sum(m['pnl'] for m in stress_segments) > 0
-                and stress['pnl'] > 0 and stress['trades'] >= MIN_VALIDATION_TRADES
                 and sum(n['pnl'] > 0 for n in neighbors) >= 2
                 and dsr['passed'])
+    # No consultar el holdout si falla el desarrollo. Nunca exportar sus cierres.
+    val = evaluate(best_cfg, *protocol['holdout']) if development_passed else dict(pnl=0,trades=0,skipped=True)
+    stress = evaluate(best_cfg, *protocol['holdout'], stressed_costs(model)) if development_passed else dict(pnl=0,trades=0,skipped=True)
+    accepted = (development_passed and val['pnl']>0 and val['trades']>=MIN_VALIDATION_TRADES
+                and stress['pnl']>0 and stress['trades']>=MIN_VALIDATION_TRADES)
     return {
         "ok": True,
         "params": {"entryThreshold": th, "slAtr": sl, "tpAtr": tp, "trailAtr": tr},
         "train": compact_metrics(best_train),
         "validation": compact_metrics(val),
         "applied": accepted,
+        "oosTrades": [trade for segment in segments for trade in segment.get('oosTrades',[])]
+                     if accepted and all(m['pnl']>0 for m in segments) else [],
         "segments": [compact_metrics(m) for m in segments],
         "stress": compact_metrics(stress),
         "stressSegments": [compact_metrics(m) for m in stress_segments],
@@ -677,14 +688,26 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
     spread = bot.spread_pct(sym)
 
     def _run() -> dict:
+        from . import learning
+        from .strategy import confirmations
         scores = score_series(cfg.id, c_work, c_trend)
         atrs = atr_series(c_work, cfg.atr_period)
+        extensions = extension_series(c_work)
+        def build_meta(index,direction):
+            # Solo prefijos disponibles al cierre que originó la entrada.
+            prefix = c_work[:index+1]
+            stamp = prefix[-1]['time']+work_seconds
+            higher = closed_candles(c_trend,trend_step,stamp)
+            context = learning.entry_context(prefix[-1]['close'],atrs[index],extensions[index],spread)
+            return learning.meta_features(cfg.id,sym.category,direction,int(stamp%86400//3600),
+                confirmations(cfg.id,prefix,higher),context)
         return optimize(
             cfg.id, c_work, scores, atrs, spread, max_hold_bars, cooldown_bars,
             risk_amount=cfg.initial_balance * cfg.risk_pct,
             notional_cap=cfg.initial_balance * cfg.max_leverage,
             overext_atr=cfg.overext_atr,
             cost_model=cost_profile('lab', sym.category),
+            meta_builder=build_meta,
         )
 
     result = await asyncio.to_thread(_run)
@@ -700,6 +723,10 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
     if not result.get("ok"):
         result.setdefault("params", {})
         result["applied"] = False
+    oos_trades = result.pop('oosTrades', [])
+    if result.get('applied') and oos_trades:
+        from . import learning
+        result['warmStartSamples'] = learning.warm_start_from_oos(cfg.id, oos_trades)
     with _conn() as con:
         con.execute(
                 "INSERT OR REPLACE INTO bot_params VALUES (?, ?, ?, ?, ?, ?)",

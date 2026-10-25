@@ -156,7 +156,8 @@ def desk_signal(rows,now,seconds,market='crypto'):
     pullback=trend and touched and bullish and closes[-1]>=e9[-1] and closes[-2]<=e9[-2]+.35*av
     breakout=trend and bullish and closes[-1]>max(r['high'] for r in bars[-11:-1]) and rv>=1.2
     wick=min(c['open'],c['close'])-c['low']
-    recovery=(bullish and wick>=.35*(c['high']-c['low']) and closes[-1]>=e20[-1]
+    liquidity_sweep=c['low']<min(r['low'] for r in bars[-5:-1]) and c['close']>min(r['low'] for r in bars[-5:-1])
+    recovery=(bullish and liquidity_sweep and wick>=.35*(c['high']-c['low']) and closes[-1]>=e20[-1]
               and e20[-1]>=e20[-3] and min(r['low'] for r in bars[-4:-1])<=e20[-1])
     setup='breakout' if breakout else 'trend-pullback' if pullback else 'recovery' if recovery else None
     # Aumentar exposición solo con una tendencia confirmada en el marco mayor.
@@ -175,4 +176,4 @@ def desk_signal(rows,now,seconds,market='crypto'):
     setup=setup if regime else None
     return dict(bar=c['time'],close=c['close'],ema20=e20[-1],ema50=e50[-1],atr=av,rsi=rs,
         trend=trend or recovery,pullback=pullback,momentum=breakout,entryAllowed=setup is not None,
-        strategy=setup,relativeVolume=rv,adx=adx,higherRegimeConfirmed=bool(regime),rows=bars[-90:],profile=VERSION)
+        strategy=setup,liquiditySweep=liquidity_sweep,relativeVolume=rv,adx=adx,higherRegimeConfirmed=bool(regime),rows=bars[-90:],profile=VERSION)

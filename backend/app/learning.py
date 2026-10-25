@@ -46,6 +46,7 @@ import asyncio
 import json
 import logging
 import math
+import hashlib
 import sqlite3
 import time
 
@@ -86,7 +87,7 @@ META_LR = 0.05            # tasa de aprendizaje SGD
 META_L2 = 0.001           # regularización L2 (evita pesos desbocados)
 # Cambiar las features exige reaprender: quitar un peso no elimina su
 # influencia anterior sobre el sesgo y los demás coeficientes.
-META_FEATURE_VERSION = 4  # v3 + contexto continuo causal; migración aditiva compatible.
+META_FEATURE_VERSION = 5  # Interacciones causales; migración aditiva desde v3/v4.
 META_FORGETTING = .98
 NON_CAUSAL_CONFIRMATIONS = frozenset({
     "Opinión pública", "Señal combinada", "Contexto macro oficial",
@@ -147,6 +148,7 @@ def _conn() -> sqlite3.Connection:
             PRIMARY KEY (bot, trade_id)
         )"""
     )
+    con.execute('CREATE TABLE IF NOT EXISTS bot_oos_processed (bot TEXT, digest TEXT, PRIMARY KEY(bot,digest))')
     return con
 
 
@@ -238,13 +240,24 @@ def _sigmoid(z: float) -> float:
     return 1.0 / (1.0 + math.exp(-z))
 
 
-def entry_context(price, atr_value, extension, spread_pct):
+def entry_context(price, atr_value, extension, spread_pct, derivatives=None):
     """Solo valores conocidos al entrar; no reconstruir desde velas posteriores."""
     values={}
     if price and atr_value and price>0 and atr_value>0:
         values.update(atr_pct=atr_value/price*100, spread_to_atr=price*spread_pct/atr_value)
     if isinstance(extension,(int,float)) and math.isfinite(extension):
         values['extension_atr']=extension
+    if isinstance(derivatives, dict):
+        regime = derivatives.get('regime') if isinstance(derivatives.get('regime'), dict) else {}
+        adjustment = regime.get('flowAdjustment', derivatives.get('flowAdjustment'))
+        if type(adjustment) in (int, float) and math.isfinite(adjustment):
+            values['flowAdjustment'] = max(-0.25, min(0.25, float(adjustment)))
+        funding = derivatives.get('fundingRate', derivatives.get('funding'))
+        if type(funding) in (int, float) and math.isfinite(funding):
+            values['funding'] = float(funding)
+        oi_delta = derivatives.get('oiChange1hPct', derivatives.get('oi_delta'))
+        if type(oi_delta) in (int, float) and math.isfinite(oi_delta):
+            values['oi_delta'] = float(oi_delta)
     return values
 
 
@@ -276,18 +289,30 @@ def meta_features(
         if system in NON_CAUSAL_CONFIRMATIONS:
             continue
         v = c.get("vote") or 0.0
-        if not v:
-            continue
         feats[f"conf:{system}"] = max(-1.0, min(1.0, v * sign))
     for name, divisor in (('atr_pct',5),('extension_atr',3),('spread_to_atr',1)):
         value=(context or {}).get(name)
         if isinstance(value,(int,float)) and math.isfinite(value):
             feats[name]=max(-2.0,min(2.0,value/divisor))
+    for name, left, right in (
+        ('regime_x_trigger', 'conf:Régimen', 'conf:Disparador de precio'),
+        ('trigger_x_flow', 'conf:Disparador de precio', 'conf:Flujo CMF'),
+        ('ext_x_spread', 'extension_atr', 'spread_to_atr')):
+        if left in feats and right in feats:
+            feats['ix:'+name] = max(-2.0, min(2.0, feats[left]*feats[right]))
+    for name in ('funding', 'oi_delta'):
+        value = (context or {}).get(name)
+        if type(value) in (int, float) and math.isfinite(value):
+            feats['ix:'+name+'_x_dir'] = max(-2.0, min(2.0, value*sign))
+    # flowAdjustment ya está orientado a la dirección de la entrada.
+    adjustment = (context or {}).get('flowAdjustment')
+    if type(adjustment) in (int, float) and math.isfinite(adjustment):
+        feats['flowAdjustment'] = max(-1.0, min(1.0, float(adjustment) / 0.25))
     return feats
 
 
 def _compatible_model(model):
-    return (model.get('featureVersion') in (3,META_FEATURE_VERSION)
+    return (model.get('featureVersion') in (3,4,META_FEATURE_VERSION)
             and model.get('processingVersion') in (1,META_PROCESSING_VERSION))
 
 
@@ -392,7 +417,7 @@ def _trade_features(bot_id: str, row: tuple) -> dict[str, float] | None:
                 and costs.get('version')==ECONOMICS_VERSION and economy.get('version')==ECONOMICS_VERSION
                 and all(isinstance(costs.get(k),(int,float)) and math.isfinite(costs[k]) and 0<=costs[k]<1
                         for k in ('feeRate','slippageRate','spreadPct','carryDailyRate')))
-    if version not in (3,META_FEATURE_VERSION) and not legacy_net and not (version is None and snap.get('engineVersion') in (5,6,training.ENGINE_VERSION)):
+    if version not in (3,4,META_FEATURE_VERSION) and not legacy_net and not (version is None and snap.get('engineVersion') in (5,6,training.ENGINE_VERSION)):
         return None
     confs = snap.get("confirmations") or []
     if not isinstance(confs,list) or any(not isinstance(c,dict) or not isinstance(c.get('system'),str)
@@ -402,6 +427,32 @@ def _trade_features(bot_id: str, row: tuple) -> dict[str, float] | None:
     category = sym.category if sym else "?"
     hour = int(entry_time % 86400 // 3600)
     return meta_features(bot_id, category, direction, hour, confs, snap.get('entryContext'))
+
+
+def warm_start_from_oos(bot_id: str, oos_trades) -> int:
+    """Semilla atenuada, idempotente y atómica; n cuenta solo cierres en vivo."""
+    batch = list(oos_trades)
+    digest = hashlib.sha256(json.dumps(batch, sort_keys=True, allow_nan=False).encode()).hexdigest()
+    with _conn() as con:
+        con.execute('BEGIN IMMEDIATE')
+        saved = con.execute('SELECT model FROM bot_model WHERE bot=?', (bot_id,)).fetchone()
+        model = json.loads(saved[0]) if saved else _new_model()
+        model = _migrate_model(model) if _compatible_model(model) else _new_model()
+        if model['n'] >= META_MIN_SAMPLES or con.execute('SELECT 1 FROM bot_oos_processed WHERE bot=? AND digest=?', (bot_id,digest)).fetchone():
+            return 0
+        learned = 0
+        for feats, r_mult in batch:
+            if (not isinstance(feats, dict) or not feats or type(r_mult) not in (int,float)
+                or not math.isfinite(r_mult) or any(type(v) not in (int,float) or not math.isfinite(v) for v in feats.values())):
+                continue
+            _meta_sgd_step(model, feats, r_mult>0, .30*min(3.0,max(.25,abs(r_mult))))
+            learned += 1
+        model['oosSamples'] = model.get('oosSamples',0)+learned
+        model['updatedAt'] = int(time.time())
+        con.execute('INSERT OR REPLACE INTO bot_model VALUES (?,?,?)', (bot_id,json.dumps(model),model['updatedAt']))
+        con.execute('INSERT INTO bot_oos_processed VALUES (?,?)', (bot_id,digest))
+    _models[bot_id] = model
+    return learned
 
 
 def meta_learn_new_trades(bot_id: str) -> int:
@@ -640,6 +691,7 @@ def reset(bot_id: str) -> None:
         con.execute("DELETE FROM bot_learning WHERE bot = ?", (bot_id,))
         con.execute("DELETE FROM bot_model WHERE bot = ?", (bot_id,))
         con.execute("DELETE FROM bot_model_processed WHERE bot = ?", (bot_id,))
+        con.execute("DELETE FROM bot_oos_processed WHERE bot = ?", (bot_id,))
 
 
 # ---------------------------------------------------------------------------
@@ -745,7 +797,8 @@ def summary(bot_id: str) -> dict:
 def insights(bot_id: str) -> dict:
     """Análisis completo para el endpoint /api/bots/{id}/learning."""
     policy = _policies.get(bot_id) or load(bot_id)
-    return {**summary(bot_id), "stats": policy.get("stats", {})}
+    from .ai_swarm import forensic_review
+    return {**summary(bot_id), "stats": policy.get("stats", {}), "forensicAudit": forensic_review()}
 
 
 # ---------------------------------------------------------------------------

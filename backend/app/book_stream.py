@@ -47,6 +47,52 @@ class BookStream:
         self.watch(self.trade_wanted)
         if before!=set(self.trade_wanted): self.changed.set()
 
+    def taker_flow(self, symbol, window_seconds=300, now=None):
+        """CVD y velocidad del flujo agresor sobre los trades ya observados.
+
+        isBuyerMaker False es compra taker; True es venta taker. cvdDelta es
+        (compra - venta) / (compra + venta) en [-1, 1] si hay al menos 10
+        trades en la ventana; si no, None. tradeVelocity es el ritmo de los
+        últimos 30 s dividido por el ritmo medio de la ventana.
+        """
+        now = time.time() if now is None else now
+        try:
+            window_seconds = float(window_seconds)
+        except (TypeError, ValueError):
+            window_seconds = 300.0
+        if not math.isfinite(window_seconds) or window_seconds <= 0:
+            window_seconds = 300.0
+        buy = sell = 0.0
+        selected = []
+        for event in list(self.trades.get(symbol) or ()):
+            at = event.get('at')
+            price, qty = event.get('price'), event.get('quantity')
+            if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in (at, price, qty)):
+                continue
+            if price <= 0 or qty <= 0 or not 0 <= now - at <= window_seconds:
+                continue
+            selected.append(event)
+            notional = qty * price
+            if event.get('isBuyerMaker') is False:
+                buy += notional
+            elif event.get('isBuyerMaker') is True:
+                sell += notional
+        total = buy + sell
+        cvd = None
+        if len(selected) >= 10 and total > 0:
+            cvd = max(-1.0, min(1.0, (buy - sell) / total))
+        recent = sum(1 for event in selected if now - event['at'] <= 30)
+        baseline = len(selected) / window_seconds
+        velocity = None if baseline <= 0 else (recent / 30.0) / baseline
+        return dict(buyVolume=buy, sellVolume=sell, cvdDelta=cvd, tradeVelocity=velocity,
+                    trades=len(selected), windowSeconds=window_seconds)
+
+    def taker_supports_bid(self, symbol, floor=-0.15, window_seconds=300, now=None):
+        """True si no hay evidencia de venta taker masiva contra una compra limitada."""
+        flow = self.taker_flow(symbol, window_seconds, now)
+        cvd = flow.get('cvdDelta')
+        return dict(flow, allowed=cvd is None or cvd >= floor)
+
     def observed_trades(self,symbol,placed_at,last_id,generation):
         if not self.connected or generation!=self.generation: return None
         rows=list(self.trades.get(symbol,[]))

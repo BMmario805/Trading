@@ -15,9 +15,9 @@ from . import gemini_agent, market_data, opportunities, portfolio_risk, aggressi
 from .config import Symbol
 from .database import Connection
 from .execution import closed_candles
-from .indicators import atr, ema, rsi, adx_series
+from .indicators import atr, ema, rsi, adx_series, choppiness_series
 from .flow import chaikin_money_flow
-from .strategy import resample
+from .strategy import modulate_flow, resample
 from .economics import planned_trade,ECONOMICS_VERSION
 from .book_stream import BOOKS
 from .spot_orders import partial_quantity
@@ -64,7 +64,7 @@ CANDLE_SECONDS = 3600
 MAX_HOLD_S = 48*3600
 MAX_NOTIONAL_FRACTION = aggressive.DESK_CAPACITY['maxNotionalFraction']
 MIN_NET_REWARD_RISK = 1.5
-POLICY_VERSION = 'desk-aggressive-1h-v7'
+POLICY_VERSION = 'desk-rs-chandelier-1h-v8'
 CASH_POLICY_VERSION = 'desk-cash-aggressive-v2'
 MIN_QUOTE_VOLUME = 2_000_000
 RISK_FRACTION = aggressive.DESK_CAPACITY['riskFraction']
@@ -93,7 +93,7 @@ def connect(path=None):
     return con
 
 
-def universe(data):
+def universe(data, candle_rows=None, btc_rows=None):
     candidates=[]
     for symbol,meta in data['metadata'].items():
         base=meta.get('baseAsset','')
@@ -122,7 +122,43 @@ def universe(data):
                                change24h=round(change,2),volumeUSD=round(quality.get('quoteVolume24h',0)),
                                spreadBp=round(quality.get('spreadPct',100)*100,2),
                                reason=reason,qualityReason=reason,status='pending' if eligible else 'filtered'))
-    return sorted(candidates,key=lambda c:(-c['volumeUSD'],c['symbol']))
+    candidates=sorted(candidates,key=lambda c:(-c['volumeUSD'],c['symbol']))
+    if candle_rows is not None:
+        rank_relative_strength(candidates,candle_rows,btc_rows or [],time.time())
+    return candidates
+
+
+def rank_relative_strength(candidates, candle_rows, btc_rows, now):
+    """RS 24h/72h en retornos porcentuales / ATR porcentual, con cierres alineados."""
+    btc={r['time']:r for r in closed_candles(btc_rows,3600,now)}
+    scored=[]
+    for candidate in candidates:
+        candidate.update(rsScore=None,rsPercentile=None,rsEligible=False)
+        if not candidate['eligible']: continue
+        bars=closed_candles(candle_rows.get(candidate['symbol']) or [],3600,now)
+        if len(bars)<73 or now-bars[-1]['time']>3*3600: continue
+        stamp=bars[-1]['time']
+        if not btc or stamp!=max(btc): continue
+        own={r['time']:r for r in bars}
+        if any(t not in own or t not in btc for t in (stamp,stamp-86400,stamp-72*3600)): continue
+        price=bars[-1]['close']
+        av=atr(bars)
+        if not av or not math.isfinite(av) or av<=0 or price<=0: continue
+        scores=[]
+        for hours in (24,72):
+            past=stamp-hours*3600
+            if min(own[past]['close'],btc[past]['close'],btc[stamp]['close'])<=0: break
+            excess=(price/own[past]['close']-btc[stamp]['close']/btc[past]['close'])*100
+            scores.append(excess/(av/price*100))
+        if len(scores)!=2 or not all(math.isfinite(s) for s in scores): continue
+        candidate.update(rsScore24h=scores[0],rsScore72h=scores[1],rsScore=sum(scores)/2)
+        scored.append(candidate)
+    for candidate in scored:
+        # Percentil con empates conservadores; un universo plano no se promociona entero.
+        rank=sum(other['rsScore']<candidate['rsScore'] for other in scored)
+        percentile=100*rank/(len(scored)-1) if len(scored)>1 else 100.0
+        candidate.update(rsPercentile=percentile,rsEligible=percentile>=85)
+    return candidates
 
 
 def baseline_tape(rows, now, candle_seconds=CANDLE_SECONDS):
@@ -185,7 +221,8 @@ def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage
                 maxHoldSeconds=MAX_HOLD_S if partial else 6*3600,
                 candleInterval=CANDLE_INTERVAL if partial else '15m',
                 riskProfile=aggressive.CAPACITY_VERSION,
-                exitPolicy=dict(partialAtR=1.5,partialFraction=1/3,trailAtr=2.5,trailAfterR=2.0,residualStopR=-.5) if partial else
+                exitPolicy=dict(partialAtR=1.5,partialFraction=1/3,trailAtr=2.8,trailAfterR=2.0,residualStopR=-.5,
+                                chandelier4h=True,extendProfitableTrend=True) if partial else
                     dict(partialEnabled=False,fixedTarget=True,trailStartR=2.0,trailAtr=2.5),
                 targetIsReference=partial)
 
@@ -271,7 +308,7 @@ class Desk:
         """
         now=time.time()
         interval=interval or self.candle_interval
-        seconds={'15m':900,'1h':3600,'4h':14400}[interval]
+        seconds={'15m':900,'1h':3600,'4h':14400,'1d':86400}[interval]
         expected=int(now//seconds)*seconds-seconds
         key=(sym.source_symbol,interval)
         cached=self.candle_cache.get(key)
@@ -468,6 +505,22 @@ class Desk:
         telemetry.changed(self.desk_id)
         return True
 
+    def closed_exit_context(self, position):
+        now=time.time()
+        cached=self.candle_cache.get((position['symbol'],'4h'))
+        rows=closed_candles(cached[1],14400,now) if cached else []
+        if not rows:
+            cached=self.candle_cache.get((position['symbol'],'1h'))
+            hourly=closed_candles(cached[1],3600,now) if cached else []
+            counts=Counter(c['time']//14400*14400 for c in hourly)
+            rows=closed_candles([c for c in resample(hourly,14400) if counts[c['time']]==4],14400,now)
+        if len(rows)<50 or now-rows[-1]['time']>3*14400: return None
+        av=atr(rows)
+        if not av or not math.isfinite(av) or av<=0: return None
+        highs=[r['high'] for r in rows if r['time']>=position['entryTime']]
+        return dict(bar=rows[-1]['time'],close=rows[-1]['close'],ema50=ema([r['close'] for r in rows],50)[-1],
+                    atr=av,bestHigh=max(highs) if highs else None)
+
     def manage(self,data):
         self.maker.reconcile(data)
         if not self.state['positions']:
@@ -490,8 +543,14 @@ class Desk:
                 continue
             hold=p.get('maxHoldSeconds',45*60)
             policy=p.get('exitPolicy') or {}
+            context=self.closed_exit_context(p) if policy.get('chandelier4h') or policy.get('extendProfitableTrend') else None
+            fee,slip=self.costs(p)
+            floating=p['qty']*bid*(1-slip)*(1-fee)-p['notional']-p['fee']
+            extend=bool(policy.get('extendProfitableTrend') and context and floating>p['risk']
+                        and context['close']>context['ema50'])
+            p['holdExtended']=extend
             fixed_target=policy.get('fixedTarget',not policy) or p.get('partialSkippedByFilters',False)
-            if self.state.get('flatten') or bid<=p['sl'] or (fixed_target and bid>=p['tp']) or (hold is not None and time.time()-p['entryTime']>=hold):
+            if self.state.get('flatten') or bid<=p['sl'] or (fixed_target and bid>=p['tp']) or (hold is not None and time.time()-p['entryTime']>=hold and not extend):
                 reason=('Cierre solicitado' if self.state.get('flatten') else 'Stop' if bid<=p['sl']
                         else 'Objetivo' if fixed_target and bid>=p['tp'] else 'Tiempo máximo')
                 self.close_position(bid,reason,p['symbol'])
@@ -516,12 +575,24 @@ class Desk:
                         p['makerPartialFallbackQty']=0
                         p['makerPartialRemainderBelowFilters']=True
                 trailing=p.get('partialDone') if policy.get('partialAtR') and not p.get('partialSkippedByFilters') else bid>=p['entry']+policy.get('trailStartR',1)*p['initialDist']
-                if trailing and policy.get('trailAfterR'):
+                if trailing and policy.get('trailAfterR') and not policy.get('chandelier4h'):
                     net_per_unit=bid*(1-slip)*(1-fee)-p['entry']*(1+fee)
                     if net_per_unit>=policy['trailAfterR']*p['risk']/p.get('originalQty',p['qty']):
                         p['trailActivated']=True
                     trailing=p.get('trailActivated',False)
-                if trailing:
+                if policy.get('chandelier4h') and context:
+                    original_qty=p.get('originalQty',p['qty'])
+                    closed_net_per_unit=context['close']*(1-slip)*(1-fee)-p['entry']*(1+fee)
+                    if closed_net_per_unit>=2.0*p['risk']/original_qty: p['trailActivated']=True
+                    if context['bestHigh'] is not None:
+                        p['bestHigh4h']=max(p.get('bestHigh4h',p['entry']),context['bestHigh'])
+                    if p.get('trailActivated') and p.get('bestHigh4h') is not None:
+                        p['sl']=max(p['sl'],p['bestHigh4h']-2.8*context['atr'])
+                        p['chandelierBar']=context['bar']
+                        if bid<=p['sl']:
+                            self.close_position(bid,'Chandelier 4h',p['symbol'])
+                            continue
+                if trailing and not policy.get('chandelier4h'):
                     multiple=policy.get('trailAtr',1.5) if p.get('partialDone') or policy.get('fixedTarget') else 1.5
                     stop=max(p['sl'],p['entry']*(1+fee)/((1-slip)*(1-fee)),p['best']-multiple*p['atr'])
                     if stop<bid: p['sl']=stop
@@ -549,6 +620,12 @@ class Desk:
         candidates=self.market_universe(data)
         if self.feed is None:
             BOOKS.watch([c['symbol'] for c in candidates if c['eligible']]+[p['symbol'] for p in self.state['positions']])
+            # El refresco de futuros corre mientras bajan las velas. Un fallo no entra en run_risk.
+            if isinstance(self.task, asyncio.Task):
+                from .derivatives_flow import schedule
+                leaders=sorted((c for c in candidates if c.get('eligible')), key=lambda c: c.get('volumeUSD') or 0, reverse=True)[:5]
+                for leader in leaders:
+                    schedule(leader['symbol'])
         previous={c['symbol']:c for c in self.state['candidates']}
         for candidate in candidates:
             old=previous.get(candidate['symbol'],{})
@@ -605,8 +682,9 @@ class Desk:
                         return candidate['symbol'],rows
                     except Exception:
                         return candidate['symbol'],None
-            for offset in range(0,len(batch),SCAN_BATCH_SIZE):
-                prefetched.update(await asyncio.gather(*(download(c) for c in batch[offset:offset+SCAN_BATCH_SIZE])))
+            download_pool=[c for c in candidates if c['eligible']]
+            for offset in range(0,len(download_pool),SCAN_BATCH_SIZE):
+                prefetched.update(await asyncio.gather(*(download(c) for c in download_pool[offset:offset+SCAN_BATCH_SIZE])))
             if self.feed is None and self.task is not None:
                 # Un libro reciente compartido por el lote; el monitor de riesgo
                 # sigue teniendo su tarea independiente y su tiempo máximo.
@@ -619,6 +697,11 @@ class Desk:
         if agent or self.task is not None:
             if self.feed is None:
                 await self.refresh_master_regime(prefetched)
+                rank_relative_strength(candidates,prefetched,self.btc_rows,time.time())
+                for candidate in candidates:
+                    if candidate['eligible'] and candidate['symbol'] not in opened and not candidate.get('rsEligible'):
+                        self.evaluated(candidate,'filtered','Fuera del Top 15% de fuerza relativa o sin cierres 24h/72h alineados')
+                batch=[c for c in batch if c.get('rsEligible')]
             shortlist=[]
             for candidate in batch:
                 try:
@@ -722,6 +805,7 @@ class Desk:
     async def selector_setup(self,candidate,data,prefetched):
         """Solo métricas públicas de setups viables; no entrega saldo ni posiciones al modelo."""
         symbol=candidate['symbol']
+        if self.feed is None and candidate.get('rsEligible') is False: return None,None
         q=self.quote(symbol,data)
         if not q or self.state['cooldowns'].get(symbol,0)>time.time(): return None,None
         rows=prefetched.get(symbol)
@@ -737,7 +821,7 @@ class Desk:
                                fee_rate=self.fee,exit_slippage=self.slippage) if fill>sl_mult*analysis['atr'] else None
         candidate['economics']=geometry
         candidate['signal']=dict(strategy=analysis.get('strategy'),rsi=round(analysis['rsi'],2),
-                                 atrPct=round(analysis['atr']/q[1]*100,3),trend=analysis['trend'])
+                                 atrPct=round(analysis['atr']/q[1]*100,3),trend=analysis['trend'],relativeVolume=analysis.get('relativeVolume'))
         price_ok=price_allowed(analysis,q[1])
         master=self.master_gate(symbol,analysis,rows)
         candidate['masterGate']=master
@@ -756,6 +840,7 @@ class Desk:
             if con.execute('SELECT 1 FROM trades WHERE entry_key=?',(f'{symbol}:{analysis["bar"]}',)).fetchone():
                 return None,analysis
         context={k:candidate[k] for k in ('symbol','eligible','change24h','volumeUSD','spreadBp')}
+        context.update({k:candidate.get(k) for k in ('rsScore','rsScore24h','rsScore72h','rsPercentile')})
         context.update(strategy=analysis.get('strategy') or 'confirmed-setup',candleInterval=self.candle_interval,
                        signalBar=analysis['bar'],rsi=round(analysis['rsi'],2),
                        atrPct=round(analysis['atr']/q[1]*100,4),extensionAtr=round((q[1]-analysis['ema20'])/analysis['atr'],3),
@@ -786,14 +871,16 @@ class Desk:
             sym=Symbol('BTC','Bitcoin','cripto','binance','BTCUSDT')
             self.btc_rows=prefetched.get('BTCUSDT') or await self.candidate_candles(sym,'1h')
             rows=await self.candidate_candles(sym,'4h')
+            await self.candidate_candles(sym,'1d')
             metrics=self.htf_metrics(rows)
             bars=closed_candles(self.btc_rows or [],3600,time.time())
             if not metrics or len(bars)<25: return
             daily=bars[-1]['close']/bars[-25]['close']-1 if bars[-1]['time']-bars[-25]['time']==86400 else None
             higher=closed_candles(rows,14400,time.time())
             adx=adx_series(higher)[-1]
+            chop=choppiness_series(higher)[-1]
             if daily is None or adx is None: return
-            self.master_regime=dict(**metrics,return24h=round(daily,6),adx=round(adx,3),
+            self.master_regime=dict(**metrics,return24h=round(daily,6),adx=round(adx,3),choppiness=chop,
                 stressed=daily<=-.03 or (metrics['distancePct']<0 and adx>25))
         except (ValueError,KeyError,TypeError,IndexError):
             return
@@ -810,6 +897,18 @@ class Desk:
 
     def master_gate(self,symbol,analysis,rows):
         result=dict(allowed=True,policy='btc-4h-relative-strength-v1',reason='Régimen apto o entrada sin ruptura')
+        if self.feed is None:
+            family={'breakout':'squeeze','trend-pullback':'trend','recovery':'meanrev'}.get(analysis.get('strategy'),'trend')
+            allocation=ai_swarm.allocation_gate(family,symbol=symbol,setup=analysis.get('strategy'))
+            result.update(allocation)
+            if not allocation['allowed']:
+                return dict(result,reason='Familia bloqueada por la asignación de régimen vigente')
+        if self.feed is None and self.master_regime:
+            chop=self.master_regime.get('choppiness')
+            ranging=chop is not None and chop>=58 and self.master_regime.get('adx',100)<18
+            if ranging and (analysis.get('strategy') not in ('trend-pullback','recovery')
+                            or (analysis.get('strategy')=='recovery' and analysis.get('liquiditySweep') is not True)):
+                return dict(result,allowed=False,reason='BTC lateral: solo pullback o recuperación tras barrido de liquidez')
         if self.feed is not None or symbol=='BTCUSDT' or analysis.get('strategy')!='breakout': return result
         relative=self.relative_btc(rows)
         if (self.master_regime is None and self.task is not None) or (self.master_regime and self.master_regime['stressed'] and (relative is None or relative<=0)):
@@ -865,6 +964,9 @@ class Desk:
             self.state['benchmark']=dict(symbol=symbol,qty=self.initial/(ask*(1+self.slippage)*(1+self.fee)),lastBid=bid,startedAt=time.time())
         sym=self.market_symbol(symbol,data)
         existing=next((p for p in self.state['positions'] if p['symbol']==symbol),None)
+        if not existing and self.feed is None and (candidate.get('rsEligible') is False or (self.task is not None and candidate.get('rsEligible') is not True)):
+            self.evaluated(candidate,'blocked','Entrada larga fuera del percentil 85 de fuerza relativa 24h/72h')
+            return
         if not existing and gemini_agent.AGENT and self.task is not None:
             await gemini_agent.AGENT.pretrade(sym)
         interval=existing.get('candleInterval','15m') if existing else self.candle_interval
@@ -894,7 +996,7 @@ class Desk:
         self.chart=analysis['rows']
         self.state['tape']={**{k:v for k,v in analysis.items() if k!='rows'},'candleInterval':interval}
         candidate['signal']=dict(strategy=analysis.get('strategy'),rsi=round(analysis['rsi'],2),
-                                 atrPct=round(analysis['atr']/ask*100,3),trend=analysis['trend'])
+                                 atrPct=round(analysis['atr']/ask*100,3),trend=analysis['trend'],relativeVolume=analysis.get('relativeVolume'))
         self.role('Tape','ready' if analysis['trend'] else 'waiting',f'EMA20/50; RSI {analysis["rsi"]:.0f}; ATR {analysis["atr"]:.5g}')
         extension=(ask-analysis['ema20'])/analysis['atr']
         price_ok=price_allowed(analysis,ask)
@@ -905,6 +1007,8 @@ class Desk:
                   f'Señal confirmada: {analysis.get("strategy") or "continuidad"}' if price_ok else 'Esperando recuperación o tendencia confirmada, RSI 35–78 y extensión moderada')
         existing=next((p for p in self.state['positions'] if p['symbol']==symbol),None)
         if existing:
+            if self.feed is None and existing.get('candleInterval')=='1h':
+                await self.candidate_candles(sym,'4h')
             self.role('Size','managing',f'Asignación existente: {existing["notional"]:.2f} USDT; no se solicita otro lote')
             if not analysis['trend'] and analysis['close']<analysis['ema50'] - 2.0 * analysis['atr']:
                 self.close_position(bid,'Tape detecta pérdida de estructura',symbol)
@@ -921,7 +1025,9 @@ class Desk:
             self.evaluated(candidate,'waiting','En espera tras el último cierre; se evita reentrar inmediatamente')
             return
         open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-self.costs(p)[1])*(1-self.costs(p)[0])) for p in self.state['positions'])
-        order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr)
+        order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,
+                         min(max(0,self.equity()*TOTAL_RISK_FRACTION*master.get('maxExposureMultiplier',1.0)-open_risk),self.equity()*RISK_FRACTION*master.get('maxExposureMultiplier',1.0)),
+                         fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr)
         if order: order['policyVersion']=self.policy_version
         sl_mult,tp_mult=2,6
         geometry=planned_trade(ask*(1+self.slippage),ask*(1+self.slippage)-sl_mult*analysis['atr'],
@@ -957,11 +1063,18 @@ class Desk:
             return
         rate=(self.state.get('funding') or {}).get('netQuotePerEuro')
         economics=gpt_quant_agent.proposal_context(self,order)
+        if self.feed is None:
+            economics.update(strategy=analysis.get('strategy'),symbol=base,
+                strategyFamily={'breakout':'squeeze','trend-pullback':'trend','recovery':'meanrev'}.get(analysis.get('strategy'),'trend'))
         audit=gpt_quant_agent.local_verdict(economics,economics['requestedRiskFraction'],
                                            learning_allowed=economics.get('learningAllowed',True))
         candidate['quantAudit']=audit
         hub.broadcast_event(dict(type='agent_thought',desk=self.desk_id,symbol=base,
             agent='Motor-Quant-Local',role='Size',phase='local_audit',detail=audit['rationale'],verdict=audit))
+        if not audit['approved']:
+            self.evaluated(candidate,'blocked',audit['rationale'])
+            self.role('Risk','blocked',audit['rationale'])
+            return
         ai_swarm.request_entry_audit(base,'long',economics,
             order['risk']/rate if rate else None,order['notional']/rate if rate else None)
         clearance=ai_swarm.execution_clearance(base,'long')
@@ -993,6 +1106,15 @@ class Desk:
         if self.feed and not rate:
             self.evaluated(candidate,'blocked','Conversión EUR/USD reciente pendiente para el riesgo agregado')
             return
+        derivatives=None
+        if self.feed is None and isinstance(self.task, asyncio.Task):
+            try:
+                from .opportunities import derivatives as read_derivatives
+                derivatives=await asyncio.wait_for(read_derivatives(symbol,'long'),3)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                derivatives=None
         reservation=None
         if rate:
             decision=portfolio_risk.assess(symbol,'long',order['risk']/rate,order['notional']/rate,
@@ -1008,8 +1130,27 @@ class Desk:
                       marketFilters=meta.get('filters',[]),
                       evidence=dict(tape=self.state['tape'],wire=identity,selection=self.state['selection'],catalystGate=gate))
         position['quantAudit']=audit
-        maker_route=clearance['binding'] and clearance.get('profile')=='maker'
-        if (self.feed is None and self.task is not None and (maker_route or (not clearance['binding'] and analysis.get('strategy')=='trend-pullback'))
+        position['strategy']=analysis.get('strategy')
+        regime=(derivatives or {}).get('regime') or {}
+        adjustment=regime.get('flowAdjustment') or 0.0
+        cmf=(chaikin_money_flow(analysis['rows']) or [None])[-1]
+        position['entryContext']=dict(extension_atr=extension,spread_to_atr=(ask-bid)/analysis['atr'],
+            cmf20=cmf,flowAdjustment=adjustment if isinstance(adjustment,(int,float)) and math.isfinite(adjustment) else 0.0,
+            rsScore=candidate.get('rsScore'),rsPercentile=candidate.get('rsPercentile'))
+        if isinstance(derivatives, dict):
+            if isinstance(derivatives.get('fundingRate'), (int, float)):
+                position['entryContext']['funding']=derivatives['fundingRate']
+            if isinstance(derivatives.get('oiChange1hPct'), (int, float)):
+                position['entryContext']['oi_delta']=derivatives['oiChange1hPct']
+        position['confirmations']=[dict(system='Régimen',vote=float(bool(analysis.get('higherRegimeConfirmed')))),
+            dict(system='Disparador de precio',vote=float(bool(analysis.get('entryAllowed')))),
+            dict(system='Flujo CMF',vote=modulate_flow(cmf or 0.0, position['entryContext']['flowAdjustment']))]
+        maker_route=(clearance['binding'] and clearance.get('profile')=='maker') or master.get('requireMakerEntry',False)
+        if maker_route and (self.feed is not None or self.task is None):
+            portfolio_risk.release(reservation)
+            self.evaluated(candidate,'blocked','La asignación requiere una entrada Post-Only con cola observada')
+            return
+        if (self.feed is None and self.task is not None and (maker_route or analysis.get('strategy') in ('trend-pullback','recovery'))
                 and (maker_route or key not in self.state.get('makerFallback',{}))):
             try:
                 posted=self.maker.post(position,'buy',position['qty'])
@@ -1020,9 +1161,12 @@ class Desk:
                 portfolio_risk.release(reservation)
                 self.evaluated(candidate,'pending','Orden limitada simulada pendiente; espera operaciones agresoras observadas')
                 return
-            if maker_route:
+            if maker_route or self.maker.last_reject=='cvd':
                 portfolio_risk.release(reservation)
-                self.evaluated(candidate,'blocked','El perfil maker requiere una cola válida; no se sustituye por mercado')
+                reason=('Flujo taker vendiendo contra la compra limitada (CVD < -0.15)' if self.maker.last_reject=='cvd'
+                        else 'El perfil maker requiere una cola válida; no se sustituye por mercado')
+                self.evaluated(candidate,'blocked',reason)
+                self.role('Exec','blocked',reason)
                 return
         self.state['cash']-=order['notional']+order['fee']
         self.state['positions'].append(position)
@@ -1142,10 +1286,13 @@ class Desk:
                     policy=dict(version=self.policy_version,costVersion=ECONOMICS_VERSION,maxNotionalPct=MAX_NOTIONAL_FRACTION*100,minNetRewardRisk=self.min_net_rr,
                                 riskPct=RISK_FRACTION*100,totalRiskPct=TOTAL_RISK_FRACTION*100,minVolumeUSD=MIN_QUOTE_VOLUME,
                                 maxHoldSeconds=MAX_HOLD_S if self.feed is None else 6*3600,
-                                partialAtR=1.5 if self.feed is None else None,trailAtr=2.5,
+                                partialAtR=1.5 if self.feed is None else None,trailAtr=2.8 if self.feed is None else 2.5,
                                 strategyProfile=aggressive.VERSION,riskProfile=aggressive.CAPACITY_VERSION,stopAtr=2,referenceTargetAtr=6,
                                 partialFraction=1/3 if self.feed is None else None,
                                 trailAfterR=2,residualStopR=-.5 if self.feed is None else None,
+                                chandelierInterval='4h' if self.feed is None else None,
+                                longRsMinPercentile=85 if self.feed is None else None,
+                                profitableTrendMayExtendHold=self.feed is None,
                                 minNetRewardRiskBasis='reference-6atr',
                                 selectorCoverage=self.state.get('selectorCoverage'),catalystGate='fresh-opposing-catalyst-v2',
                                 strategies=['trend-pullback','breakout','recovery'],validated=False),

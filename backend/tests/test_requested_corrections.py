@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from app import bots, desk, gemini_agent, learning, mt5_performance, performance_review, strategy
 from app.maker_simulation import PostOnlyOrder
 from app.spot_orders import partial_quantity
-from test_desk import data, add_markets
+from test_desk import data, add_markets, ranked_fixture
 from test_learning_economics import EconomicDatabaseTests
 from test_mt5_performance import deal
 
@@ -38,7 +38,7 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
     def test_new_positions_freeze_hourly_partial_policy_and_48h_horizon(self):
         p=self.engine.state['positions'][0]
         self.assertEqual((p['candleInterval'],p['maxHoldSeconds']),('1h',48*3600))
-        self.assertEqual(p['exitPolicy'],dict(partialAtR=1.5,partialFraction=1/3,trailAtr=2.5,trailAfterR=2.0,residualStopR=-.5))
+        self.assertEqual(p['exitPolicy'],dict(partialAtR=1.5,partialFraction=1/3,trailAtr=2.8,trailAfterR=2.0,residualStopR=-.5,chandelier4h=True,extendProfitableTrend=True))
         self.assertEqual(self.engine.public()['policy']['version'],desk.POLICY_VERSION)
 
     def test_partial_then_final_exit_is_one_net_trade_with_all_cash_and_fees(self):
@@ -69,7 +69,8 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
         restored.manage(self.quote(109))
         self.assertAlmostEqual(restored.state['cash'],cash)
         self.assertEqual(len(restored.state['positions'][0]['partialExits']),1)
-        self.assertGreater(restored.state['positions'][0]['sl'],100)
+        # Sin una nueva barra 4h cerrada se conserva el stop residual persistido.
+        self.assertAlmostEqual(restored.state['positions'][0]['sl'],self.engine.state['positions'][0]['sl'])
 
     def test_partial_is_not_triggered_by_gross_profit_only_or_stale_quote(self):
         p=self.engine.state['positions'][0]
@@ -169,6 +170,7 @@ class FullUniverseSelectorTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.stack=ExitStack()
         self.addCleanup(self.stack.close)
+        self.stack.enter_context(patch.object(desk,'rank_relative_strength',side_effect=ranked_fixture))
         folder=self.stack.enter_context(tempfile.TemporaryDirectory())
         self.engine=desk.Desk(db_path=Path(folder)/'desk.sqlite')
         self.snapshot=add_markets(data(),[f'COIN{i:02}' for i in range(80)])

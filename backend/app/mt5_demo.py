@@ -587,7 +587,8 @@ class DemoEngine:
                             save(self.owner+f'position:{pos.ticket}', dict(risk=risk, atr=atr, best=pos.price_open,
                                                                       trail=p.get('trailAtr', bot.trail_atr),
                                                                       maxHoldSeconds=bot.max_hold_seconds,exitPolicy=aggressive.exit_policy(bot.id),
-                                                                      probation=probation))
+                                                                      probation=probation,
+                                                                      probationFloorApplied=bool((self.gateway.last_entry_diagnostics or {}).get('probationFloorApplied'))))
                     self.diagnostics[key] = (f'Orden DEMO a prueba ejecutada ({learning.PROBATION_SIZE:.0%} del riesgo habitual)' if probation
                                              else 'Orden DEMO ejecutada en MT5')
                 else:

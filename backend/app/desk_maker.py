@@ -17,6 +17,7 @@ from .hub import hub
 from . import telemetry
 
 TTL = 60
+HOURLY_TTL = 180
 
 
 def valid_lot(quantity,price,filters):
@@ -39,6 +40,7 @@ def valid_lot(quantity,price,filters):
 class DeskMaker:
     def __init__(self,desk):
         self.desk=desk
+        self.last_reject=None
 
     @property
     def orders(self):
@@ -52,12 +54,15 @@ class DeskMaker:
             book=books.get(row['symbol'])
             bid=float(book['bidQty']) if book else None
             ask=float(book['askQty']) if book else None
+            tape=BOOKS.taker_supports_bid(row['symbol'])
             pending.append(dict(symbol=row['symbol'],entryKey=row['entryKey'],side=row['side'],
                 quantity=order['quantity'],filled=order['filled'],expiresAt=order['expires_at'],
                 placedAt=order['placed_at'],remainingSeconds=max(0,order['expires_at']-time.time()),
                 pressure=(bid-ask)/(bid+ask) if book and bid+ask>0 else None,
-                bookFresh=bool(book),pressureBasis='best-bid-ask',status=order['status']))
-        return dict(mode='paper-observed-queue',ttlSeconds=TTL,pending=pending,
+                bookFresh=bool(book),pressureBasis='best-bid-ask',status=order['status'],
+                buyVolume=tape['buyVolume'],sellVolume=tape['sellVolume'],cvdDelta=tape['cvdDelta'],
+                tradeVelocity=tape['tradeVelocity'],takerSupportsBid=tape['allowed']))
+        return dict(mode='paper-observed-queue',ttlSeconds=TTL,hourlyPullbackRecoveryTtlSeconds=HOURLY_TTL,pending=pending,
             reservedCash=sum(o['reservedCash'] for o in self.orders),
             history=self.desk.state.get('makerHistory',[]),executionVerified=False,feeDiscountAssumed=False)
 
@@ -84,16 +89,26 @@ class DeskMaker:
 
     def post(self,position,side,quantity):
         engine=self.desk
+        self.last_reject=None
         symbol=position['symbol']
         if any(o['symbol']==symbol for o in self.orders): return False
+        if side=='buy':
+            tape=BOOKS.taker_supports_bid(symbol)
+            # Sin 10 trades no hay evidencia; con CVD < -0.15 el agresor vende contra el bid.
+            if tape['cvdDelta'] is not None and not tape['allowed']:
+                self.last_reject='cvd'
+                return False
         books=BOOKS.fresh([symbol])
         book=books.get(symbol)
         if not book: return False
         price=float(book['bidPrice' if side=='buy' else 'askPrice'])
         if not valid_lot(quantity,price,position.get('marketFilters',[])): return False
         BOOKS.watch_trades([symbol])
+        strategy = position.get('strategy') or position.get('evidence',{}).get('tape',{}).get('strategy')
+        ttl = HOURLY_TTL if (side=='buy' and position.get('candleInterval')=='1h'
+                            and strategy in ('trend-pullback','recovery')) else TTL
         order=PostOnlyOrder.place(symbol,side,quantity,dict(book,at=book['receivedAt']),
-                                  now=time.time(),ttl=TTL,fee_rate=engine.costs(position)[0])
+                                  now=time.time(),ttl=ttl,fee_rate=engine.costs(position)[0])
         lot=next(f for f in position['marketFilters'] if f['filterType']=='LOT_SIZE')
         order.quantity_step=float(lot['stepSize'])
         row=dict(symbol=symbol,entryKey=position['entryKey'],side=side,order=asdict(order),
@@ -101,7 +116,7 @@ class DeskMaker:
                  reservedRisk=position['risk'] if side=='buy' else 0,
                  reservedCash=position['notional']+position['fee'] if side=='buy' else 0)
         self.commit(lambda:self.orders.append(row))
-        engine.role('Exec','pending','Orden limitada SIMULADA: cola observada, hasta 60 s; sin fill supuesto')
+        engine.role('Exec','pending',f'Orden limitada SIMULADA: cola observada, hasta {ttl} s; sin fill supuesto')
         return True
 
     def cancel(self,symbol):

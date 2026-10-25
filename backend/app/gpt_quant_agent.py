@@ -26,6 +26,9 @@ def structured_format(report_model):
     def clean(node):
         if isinstance(node, dict):
             node.pop('default', None)
+            if node.get('type') == 'object' and 'properties' in node:
+                node['additionalProperties'] = False
+                node['required'] = list(node['properties'])
             # Compatible también con modelos de razonamiento sin constraints.
             for key in ('minimum', 'maximum', 'minLength', 'maxLength'):
                 node.pop(key, None)
@@ -51,19 +54,28 @@ def _number(value):
 def local_verdict(economics, requested_risk_fraction, *, portfolio=None, learning_allowed=True):
     """Repite vetos con números locales; Kelly no se infiere de la convicción."""
     from .ai_swarm import economics_block
+    economics = economics if isinstance(economics,dict) else {}
     requested = _number(requested_risk_fraction)
     blocked, reason, cap = economics_block(economics)
     if requested is None or not 0 < requested <= 1:
         blocked, reason = True, 'Fracción de riesgo desconocida'
     if not learning_allowed:
         blocked, reason = True, 'Veto del aprendizaje vigente'
-    if portfolio is not None and portfolio.get('allowed') is not True:
-        blocked, reason = True, portfolio.get('reason', 'Cartera sin autorización')
+    family = economics.get('strategyFamily')
+    if family:
+        from .ai_swarm import allocation_gate
+        allocation = allocation_gate(family,symbol=economics.get('symbol'),setup=economics.get('strategy'))
+        cap = min(cap, allocation['maxExposureMultiplier'])
+        if not allocation['allowed']:
+            blocked, reason = True, 'Familia bloqueada por el régimen vigente'
+    portfolio = portfolio if portfolio is not None else economics.get('portfolio')
+    if portfolio is not None and (not isinstance(portfolio,dict) or portfolio.get('allowed') is not True):
+        blocked, reason = True, portfolio.get('reason', 'Cartera sin autorización') if isinstance(portfolio,dict) else 'Cartera inválida'
     if any(economics.get(key) is True for key in ('drawdownBlocked', 'dailyStopped', 'runtimeBlocked')):
         blocked, reason = True, 'Control de drawdown, pérdida diaria o proceso activo'
     kelly = 0.0
     sample = _number(economics.get('sampleSize'))
-    plan = economics.get('planned') or {}
+    plan = economics.get('planned') if isinstance(economics.get('planned'),dict) else {}
     rr = _number(plan.get('netRewardRisk'))
     win = _number(economics.get('winRate'))
     # Se usa el payoff REAL de cierres netos, nunca el objetivo teórico del plan.
@@ -86,9 +98,10 @@ def local_verdict(economics, requested_risk_fraction, *, portfolio=None, learnin
 
 
 def audit_report(report, economics, symbol):
-    """Anexa el veredicto de cinco campos sin romper mesa-siete-v1."""
-    requested = economics.get('requestedRiskFraction', .005)
+    """Anexa el veredicto local de cinco campos del protocolo mesa-siete-v2."""
+    requested = _number(economics.get('requestedRiskFraction', .005))
     verdict = local_verdict(economics, requested)
+    requested = requested or 0.0
     model_size = _number(report.get('sizeMultiplier')) or 0
     if report.get('approved') is not True or report.get('veto') is True or report.get('drawdownBlocked') is True:
         verdict.update(approved=False, adjusted_risk_fraction=0.0, rationale=report.get('reason', 'Veto del modelo'))

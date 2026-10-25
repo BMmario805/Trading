@@ -5,9 +5,10 @@ import math
 import json
 import time
 
-from . import market_data
+from . import derivatives_flow, market_data
 from .config import Symbol
 from .book_stream import BOOKS
+from .derivatives_flow import derivatives_regime, read_symbol
 
 _cache: dict[str, tuple[float, object]] = {}
 _lock = asyncio.Lock()
@@ -106,6 +107,16 @@ def assess(sym: Symbol, data: dict, *, min_quote_volume=MIN_QUOTE_VOLUME) -> dic
     if volume < min_quote_volume:
         return dict(out, reason='Volumen negociado insuficiente')
     return dict(out, eligible=True, reason='Spread y volumen aceptables')
+
+
+async def derivatives(symbol, direction='long'):
+    """Funding, interés abierto y ratio de cuentas principales. Nunca lanza."""
+    try:
+        return await read_symbol(symbol, direction=direction)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        return derivatives_flow.peek(symbol, direction)
 
 
 async def market_quality(sym: Symbol) -> dict:

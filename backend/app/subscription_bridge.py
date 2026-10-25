@@ -5,6 +5,8 @@ sesión caduca o alcanza su cupo. Los procesos reciben paquetes de datos y solo
 sus respuestas finales estructuradas se publican en la cocina.
 """
 import asyncio
+import contextvars
+import heapq
 import json
 import os
 from pathlib import Path
@@ -14,6 +16,7 @@ import tempfile
 import threading
 import time
 import tomllib
+import weakref
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / '.runtime' / 'subscription-bridge'
@@ -200,10 +203,96 @@ def _run(spec,payload,schema,timeout,cancelled):
             process.communicate()
 
 
-async def complete(spec,payload,schema,timeout):
+# 0 = auditoría de entrada en vivo; 1 = sondeo periódico. El defecto es el sondeo.
+_PRIORITY = contextvars.ContextVar('subscription_priority', default=1)
+_GATES = {}
+
+
+def current_priority():
+    return _PRIORITY.get()
+
+
+def push_priority(priority):
+    """Fija la prioridad de las llamadas complete() de esta tarea."""
+    return _PRIORITY.set(0 if priority == 0 else 1)
+
+
+def reset_priority(token):
+    _PRIORITY.reset(token)
+
+
+class PriorityGate:
+    """Un solo cliente de suscripción a la vez. La entrada (0) adelanta al sondeo (1)."""
+
+    def __init__(self):
+        self._held = False
+        self._waiters = []
+        self._seq = 0
+
+    async def acquire(self, priority):
+        if not self._held:
+            self._held = True
+            return
+        future = asyncio.get_running_loop().create_future()
+        self._seq += 1
+        heapq.heappush(self._waiters, (0 if priority == 0 else 1, self._seq, future))
+        try:
+            await future
+        except asyncio.CancelledError:
+            if future.done() and not future.cancelled():
+                # El turno ya fue entregado, pero la tarea se canceló antes de
+                # reanudarse. Cederlo evita dejar la cola retenida para siempre.
+                self.release()
+            else:
+                self._waiters = [item for item in self._waiters if item[2] is not future]
+                heapq.heapify(self._waiters)
+            raise
+
+    def release(self):
+        while self._waiters:
+            _priority, _seq, future = heapq.heappop(self._waiters)
+            if future.done():
+                continue
+            future.set_result(None)
+            return
+        self._held = False
+
+
+def priority_gate():
+    loop = asyncio.get_running_loop()
+    slot = _GATES.get(id(loop))
+    if slot is None or slot[0]() is None or slot[0]().is_closed():
+        slot = (weakref.ref(loop), PriorityGate())
+        _GATES[id(loop)] = slot
+        stale = [key for key, (ref, _gate) in _GATES.items() if ref() is None or ref().is_closed()]
+        for key in stale:
+            _GATES.pop(key, None)
+    return slot[1]
+
+
+async def complete(spec,payload,schema,timeout,priority=None):
+    """Ejecuta el cliente. priority 0 adelanta a los sondeos ya encolados."""
+    rank = _PRIORITY.get() if priority is None else (0 if priority == 0 else 1)
+    gate = priority_gate()
+    await gate.acquire(rank)
     cancelled=threading.Event()
+    worker=asyncio.create_task(asyncio.to_thread(_run,spec,payload,schema,timeout,cancelled))
+    release_now=True
+    def release_after_exit(done):
+        try:
+            if not done.cancelled():
+                done.exception()  # La cancelación ya se devolvió al llamador.
+        finally:
+            gate.release()
     try:
-        return await asyncio.to_thread(_run,spec,payload,schema,timeout,cancelled)
+        return await asyncio.shield(worker)
     except asyncio.CancelledError:
         cancelled.set()
+        # _run aún debe terminar su proceso y recoger su salida. Ningún otro
+        # cliente puede arrancar durante esa limpieza, incluso si tarda.
+        release_now=False
+        worker.add_done_callback(release_after_exit)
         raise
+    finally:
+        if release_now:
+            gate.release()

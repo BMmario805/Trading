@@ -80,6 +80,44 @@ def _clip(v: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, v))
 
 
+def modulate_flow(flow, adjustment):
+    """Suma el ajuste de derivados al bloque flow y lo recorta a [-1, 1].
+
+    `adjustment` es el término de mercado, ya en [-0.25, +0.25]. Positivo
+    aumenta el flujo (apoya un largo); negativo lo reduce.
+    """
+    base = float(flow) if isinstance(flow, (int, float)) and math.isfinite(flow) else 0.0
+    adj = float(adjustment) if isinstance(adjustment, (int, float)) and math.isfinite(adjustment) else 0.0
+    return _clip(base + _clip(adj, -0.25, 0.25))
+
+
+def apply_flow_overlay(score, confirmations, flow_adjustment, direction):
+    """Repondera el bloque flow (20 %) con el ajuste orientado a la dirección.
+
+    `flow_adjustment` viene de derivatives_regime: positivo apoya `direction`.
+    El voto de Flujo CMF sigue con signo de mercado, así que el ajuste se gira
+    antes de sumarse. Sin esa confirmación la puntuación no cambia.
+    """
+    sign = 1.0 if direction == 'long' else -1.0 if direction == 'short' else 0.0
+    raw = float(flow_adjustment) if isinstance(flow_adjustment, (int, float)) and math.isfinite(flow_adjustment) else 0.0
+    market = _clip(raw * sign, -0.25, 0.25)
+    updated = []
+    delta = 0.0
+    for row in confirmations or []:
+        if isinstance(row, dict) and row.get('system') == 'Flujo CMF':
+            old = row.get('vote') or 0.0
+            vote = modulate_flow(old, market)
+            delta += 0.2 * (vote - (old if isinstance(old, (int, float)) and math.isfinite(old) else 0.0))
+            detail = row.get('detail') or ''
+            if market:
+                detail = f'{detail}; derivados {market:+.2f}'.strip('; ')
+            updated.append(dict(row, vote=vote, detail=detail))
+        else:
+            updated.append(row)
+    base = float(score) if isinstance(score, (int, float)) and math.isfinite(score) else 0.0
+    return _clip(base + delta), updated
+
+
 def volatility_risk_series(candles: list[dict], short: int = 24, long: int = 120) -> list[float]:
     """Reduce riesgo cuando sube la volatilidad reciente; nunca añade palanca.
 

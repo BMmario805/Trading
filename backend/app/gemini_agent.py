@@ -473,7 +473,7 @@ def _apply_swarm_fakeout(result, symbol, direction, now):
         return
     if not isinstance(pulse, dict) or pulse.get('fakeout') is not True:
         return
-    if pulse.get('trapDirection') not in (direction, 'none', None):
+    if pulse.get('trapDirection') not in (direction, 'both', 'none', None):
         return
     sign = 1 if direction == 'long' else -1
     citations = pulse.get('citations') if isinstance(pulse.get('citations'), list) else []

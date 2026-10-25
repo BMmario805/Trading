@@ -131,11 +131,30 @@ class GatewayTests(unittest.TestCase):
         self.assertLessEqual(probation['volume'], full['volume']*.25)
         self.api.order_send.assert_not_called()
 
-    def test_probation_cannot_force_minimum_lot_above_its_reduced_budget(self):
+    def test_probation_floor_uses_minimum_lot_when_full_budget_and_demo_limits_allow_it(self):
         self.account.equity = 5000
         self.entry()
+        request,_=self.gateway.prepare_entry('XAUUSD', 1, 2, 2, 3, 1234, 'test', 1000, risk_mult=.25)
+        self.assertEqual(request['volume'],self.api.symbol_info.return_value.volume_min)
+        self.assertTrue(self.gateway.last_entry_diagnostics['probationFloorApplied'])
+        self.api.order_send.assert_not_called()
+
+    def test_probation_floor_rejects_more_than_one_percent_and_non_probation_cuts(self):
+        for equity,mult in ((100,.25),(5000,.20),(5000,.1)):
+            with self.subTest(equity=equity,mult=mult):
+                self.account.equity=equity
+                with self.assertRaises(DemoOnlyError):
+                    self.gateway.prepare_entry('XAUUSD',1,2,2,3,1234,'test',1000,risk_mult=mult)
+
+    def test_probation_floor_cannot_override_full_budget_portfolio_or_margin(self):
+        self.account.equity=5000
+        for field,value in (('risk_pct',.0001),('max_open_risk_pct',.0005)):
+            with self.subTest(field=field),patch.dict(self.config,{field:value}),self.assertRaises(DemoOnlyError):
+                self.gateway.prepare_entry('XAUUSD',1,2,2,3,1234,'test',1000,risk_mult=.25)
+        self.api.order_calc_margin.return_value=2000
+        self.account.margin_free=5000
         with self.assertRaises(DemoOnlyError):
-            self.gateway.prepare_entry('XAUUSD', 1, 2, 2, 3, 1234, 'test', 1000, risk_mult=.25)
+            self.gateway.prepare_entry('XAUUSD',1,2,2,3,1234,'test',1000,risk_mult=.25)
 
     def test_invalid_risk_multiplier_cannot_increase_exposure(self):
         for mult in (0, -1, 1.01, float('nan'), float('inf')):

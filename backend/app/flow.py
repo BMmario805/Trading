@@ -1,5 +1,10 @@
-"""Continuación con Chaikin Money Flow: OHLCV causal, sin noticias retrospectivas."""
+"""Continuación con Chaikin Money Flow: OHLCV causal, sin noticias retrospectivas.
 
+El régimen de derivados públicos vive en derivatives_flow y se reexporta aquí
+para que el bloque de flujo y el escáner compartan la misma función pura.
+"""
+
+from .derivatives_flow import derivatives_regime, peek, read_symbol, schedule
 from .indicators import ema
 
 

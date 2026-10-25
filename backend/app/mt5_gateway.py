@@ -130,6 +130,15 @@ class DemoGateway:
         self.last_entry_diagnostics = details
         # Reserva del 10% para fricción; los gaps todavía pueden exceder el stop.
         volume = lot_floor(min(info.volume_max, max(0, budget) / risk_per_lot), info.volume_step)
+        if (volume < info.volume_min and risk_mult == .25
+                and equity*self.config['risk_pct']*risk_mult < minimum_risk
+                and minimum_risk <= equity*self.config['risk_pct']
+                and minimum_risk <= equity*.01
+                and open_risk+minimum_risk <= equity*self.config['max_open_risk_pct']
+                and info.volume_min <= info.volume_max
+                and lot_floor(info.volume_min,info.volume_step) == info.volume_min):
+            volume = info.volume_min
+            details.update(probationFloorApplied=True, effectiveRiskBudget=minimum_risk)
         if volume < info.volume_min:
             currency = details['currency'] or 'divisa de cuenta'
             raise DemoOnlyError(

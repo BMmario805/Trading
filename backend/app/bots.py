@@ -26,7 +26,7 @@ from .database import Connection
 from .execution import closed_candles, fresh_signal, valid_tick, atr_spread_multiple
 from .training import ENGINE_VERSION
 from .indicators import atr
-from .strategy import confirmations as strategy_confirmations
+from .strategy import apply_flow_overlay, confirmations as strategy_confirmations
 from .strategy import extension_atr, score_series
 from .economics import cost_profile, execution_fill, net_outcome, planned_trade
 
@@ -804,6 +804,16 @@ class TradingBot:
                 self.diagnostics[symbol_id]["reason"] = "Velas antiguas / mercado cerrado"
                 continue
             score = signal["score"]
+            raw_derivatives = signal.get('derivatives')
+            if isinstance(raw_derivatives, dict) and raw_derivatives.get('available') and score:
+                from .derivatives_flow import derivatives_regime
+                side = 'long' if score > 0 else 'short'
+                regime = derivatives_regime(raw_derivatives.get('fundingRate'), raw_derivatives.get('oiChange1hPct'),
+                                            raw_derivatives.get('priceChange1hPct'), side)
+                score, signal['confirmations'] = apply_flow_overlay(
+                    score, signal['confirmations'], regime['flowAdjustment'], side)
+                signal['score'] = score
+                signal['derivatives'] = dict(raw_derivatives, regime=regime)
             atr_val, price = signal["atr"], signal["price"]
             threshold, sl_m, tp_m, trail_m = self._exec_params(sym)
             if pre_mode == "probation":
@@ -868,7 +878,7 @@ class TradingBot:
             feats = learning.meta_features(
                 self.cfg.id, sym.category, direction, hour_utc,
                 signal["confirmations"],
-                learning.entry_context(price, atr_val, signal.get('extension'), self.spread_pct(sym)),
+                learning.entry_context(price, atr_val, signal.get('extension'), self.spread_pct(sym), signal.get('derivatives')),
             )
             meta_ok, p_win, meta_note = learning.meta_gate(self.cfg.id, feats)
             if not meta_ok:
@@ -982,6 +992,16 @@ class TradingBot:
         for source in (senti or {}).get("sources", []):
             if source.get("source", "").startswith("Federal Reserve"):
                 confs.append({"system": "Contexto macro oficial", "detail": source["detail"], "vote": 0.0})
+        derivatives = None
+        if sym.source == 'binance':
+            # La vigilancia de stops es otra tarea: este await no la retiene.
+            try:
+                from .derivatives_flow import read_symbol
+                derivatives = await asyncio.wait_for(read_symbol(sym.source_symbol), 3)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                derivatives = None
         threshold = self._exec_params(sym)[0]
         confs.append({
             "system": "Señal combinada",
@@ -1011,6 +1031,7 @@ class TradingBot:
             "stale": stale,
             "candles": c_work,
             "extension": extension_atr(c_work),
+            "derivatives": derivatives,
         }
 
     # -------------------- ejecución simulada --------------------
@@ -1117,7 +1138,7 @@ class TradingBot:
             "exitPolicy": aggressive.exit_policy(self.cfg.id),
             "maxHoldSeconds": self.cfg.max_hold_seconds,
             "metaFeatureVersion": learning.META_FEATURE_VERSION,
-            "entryContext": learning.entry_context(price, atr_val, signal.get('extension'), costs['spreadPct']),
+            "entryContext": learning.entry_context(price, atr_val, signal.get('extension'), costs['spreadPct'], signal.get('derivatives')),
             "interval": self.cfg.work_interval,
             "score": round(score, 3),
             "confirmations": signal["confirmations"],

@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 from app import ai_swarm, subscription_bridge as bridge
-from test_ai_swarm import economics, pulse, flow, risk, commander
+from test_ai_swarm import economics, pulse, flow, risk, commander, batch_pulse
 
 
 READY=dict(configured=True,grokReady=True,chatgptReady=True,requiresApiKeys=False)
@@ -107,13 +107,13 @@ class SubscriptionSwarmTests(unittest.IsolatedAsyncioTestCase):
         self.readiness.stop()
         self.folder.cleanup()
 
-    async def test_four_agents_work_without_api_keys_or_http_fallback(self):
+    async def test_context_agents_use_cli_and_flow_risk_stay_local_without_api_or_http_fallback(self):
         order=[]
         async def complete(spec,payload,schema,timeout):
             order.append(spec.agent_id)
             self.assertFalse(schema['additionalProperties'])
             await asyncio.sleep(.001)
-            report={'grok-x-pulse':pulse(),'grok-flow-scalper':flow(),'chatgpt-quant-risk':risk(),'grok-desk-commander':commander()}[spec.agent_id]
+            report={'grok-x-pulse':batch_pulse(),'grok-flow-scalper':flow(),'chatgpt-quant-risk':risk(),'grok-desk-commander':commander()}[spec.agent_id]
             return json.dumps(report),{'input_tokens':5000,'output_tokens':100}
         book=dict(available=True,imbalance=.7,spreadBps=1,ageSeconds=.1)
         self.swarm.market_pack=AsyncMock(return_value=({},book))
@@ -125,7 +125,7 @@ class SubscriptionSwarmTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(decision['authorized'])
         self.assertEqual(decision['billing'],'subscription')
         self.assertEqual(order[-1],'grok-desk-commander')
-        self.assertEqual(len(order),4)
+        self.assertEqual(order,['grok-x-pulse','grok-desk-commander'])
         http.assert_not_awaited()
         self.assertEqual(self.swarm.limits()['estimatedCostMonthUSD'],0)
 
@@ -154,3 +154,137 @@ class SubscriptionSwarmTests(unittest.IsolatedAsyncioTestCase):
         for key in ('expectancyNet','profitFactor','winRate','breakEvenWinRate'):
             self.assertIsNone(checked[key])
         self.assertFalse(checked['approved'])
+
+
+class PriorityGateTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancellation_at_handoff_passes_the_turn_to_the_next_waiter(self):
+        gate=bridge.PriorityGate()
+        await gate.acquire(1)
+        entry=asyncio.create_task(gate.acquire(0))
+        scan=asyncio.create_task(gate.acquire(1))
+        await asyncio.sleep(0)
+        gate.release()
+        entry.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await entry
+        await asyncio.wait_for(scan,1)
+        gate.release()
+        await asyncio.wait_for(gate.acquire(0),1)
+        gate.release()
+
+    async def test_cancelling_a_queued_waiter_preserves_the_current_owner(self):
+        gate=bridge.PriorityGate()
+        await gate.acquire(1)
+        queued=asyncio.create_task(gate.acquire(0))
+        await asyncio.sleep(0)
+        queued.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await queued
+        self.assertTrue(gate._held)
+        self.assertFalse(gate._waiters)
+        gate.release()
+        await asyncio.wait_for(gate.acquire(0),1)
+        gate.release()
+
+    async def test_cancelled_worker_keeps_the_gate_until_its_process_cleanup_finishes(self):
+        started=threading.Event()
+        cancel_seen=threading.Event()
+        finish=threading.Event()
+        exited=threading.Event()
+        order=[]
+        def run(spec,payload,schema,timeout,cancelled):
+            order.append(payload)
+            if payload=='first':
+                started.set()
+                cancelled.wait(5)
+                cancel_seen.set()
+                finish.wait(5)
+                exited.set()
+                raise bridge.SubscriptionError('unavailable','Cancelación comprobada')
+            self.assertTrue(exited.is_set())
+            return payload,{}
+        with patch.object(bridge,'_run',side_effect=run):
+            first=asyncio.create_task(bridge.complete(object(),'first',{},5))
+            second=None
+            try:
+                self.assertTrue(await asyncio.to_thread(started.wait,5))
+                first.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await first
+                self.assertTrue(await asyncio.to_thread(cancel_seen.wait,5))
+                second=asyncio.create_task(bridge.complete(object(),'second',{},5))
+                await asyncio.sleep(0)
+                self.assertEqual(len(bridge.priority_gate()._waiters),1)
+                self.assertEqual(order,['first'])
+                finish.set()
+                self.assertEqual(await asyncio.wait_for(second,5),('second',{}))
+                self.assertEqual(order,['first','second'])
+            finally:
+                finish.set()
+                if second is not None:
+                    await asyncio.gather(second,return_exceptions=True)
+
+    async def test_complete_reads_the_task_priority_and_serves_entry_first(self):
+        seen = []
+        gate = bridge.priority_gate()
+        real_acquire = gate.acquire
+
+        async def spy(priority):
+            seen.append(priority)
+            await real_acquire(priority)
+
+        gate.acquire = spy
+
+        def run(spec, payload, schema, timeout, cancelled):
+            return payload, {}
+
+        with patch.object(bridge, '_run', side_effect=run):
+            token = bridge.push_priority(0)
+            try:
+                await bridge.complete(object(), 'entry-context', {}, 1)
+            finally:
+                bridge.reset_priority(token)
+            await bridge.complete(object(), 'explicit-scan', {}, 1, priority=1)
+        self.assertEqual(seen, [0, 1])
+        self.assertEqual(bridge.current_priority(), 1)
+
+    async def test_a_queued_entry_runs_before_a_queued_scan(self):
+        order = []
+        hold_started = threading.Event()
+        release = threading.Event()
+
+        def run(spec, payload, schema, timeout, cancelled):
+            order.append(payload)
+            if payload == 'hold':
+                hold_started.set()
+                release.wait(5)
+            return payload, {}
+
+        async def call(priority, payload):
+            token = bridge.push_priority(priority)
+            try:
+                return await bridge.complete(object(), payload, {}, 5)
+            finally:
+                bridge.reset_priority(token)
+
+        with patch.object(bridge, '_run', side_effect=run):
+            hold = asyncio.create_task(call(1, 'hold'))
+            try:
+                self.assertTrue(await asyncio.to_thread(hold_started.wait, 5))
+                gate = bridge.priority_gate()
+                scan = asyncio.create_task(call(1, 'scan'))
+                for _ in range(50):
+                    if gate._waiters:
+                        break
+                    await asyncio.sleep(0.01)
+                entry = asyncio.create_task(call(0, 'entry'))
+                for _ in range(50):
+                    if len(gate._waiters) >= 2:
+                        break
+                    await asyncio.sleep(0.01)
+                self.assertEqual(sorted(item[0] for item in gate._waiters), [0, 1])
+                release.set()
+                await asyncio.wait_for(asyncio.gather(hold, scan, entry), 5)
+            finally:
+                release.set()
+        self.assertEqual(order, ['hold', 'entry', 'scan'])
