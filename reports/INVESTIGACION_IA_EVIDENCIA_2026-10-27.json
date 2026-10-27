@@ -1,0 +1,1300 @@
+{
+  "capturedAtUTC": "2026-10-27T19:27:38.630364+00:00",
+  "scope": "Read-only per database; separate snapshot times; paper/demo, not broker-verified profits; model-net cohorts require explicit net-costs-v1, legacy gross/unknown costs excluded from financial metrics",
+  "desks": [
+    {
+      "book": "desk.sqlite",
+      "currency": "USDT",
+      "netCostCohorts": {
+        "desk-net-v1": {
+          "closes": 14,
+          "netPnl": -2.5292335863299904,
+          "profitFactor": 0.5716863303163293,
+          "winRate": 0.2857142857142857
+        },
+        "desk-confirmed-v2": {
+          "closes": 8,
+          "netPnl": -0.14509801061398783,
+          "profitFactor": 0.7683342647224675,
+          "winRate": 0.375
+        },
+        "desk-partial-1h-v3": {
+          "closes": 2,
+          "netPnl": -1.7300977958999963,
+          "profitFactor": 0.0,
+          "winRate": 0.0
+        },
+        "desk-partial-1h-v4": {
+          "closes": 2,
+          "netPnl": -5.0566316895299925,
+          "profitFactor": 0.0,
+          "winRate": 0.0
+        },
+        "desk-aggressive-1h-v6": {
+          "closes": 1,
+          "netPnl": -1.9642117623600006,
+          "profitFactor": 0.0,
+          "winRate": 0.0
+        },
+        "desk-aggressive-1h-v7": {
+          "closes": 10,
+          "netPnl": -7.835061726342557,
+          "profitFactor": 0.0,
+          "winRate": 0.0
+        },
+        "desk-rs-chandelier-1h-v8": {
+          "closes": 4,
+          "netPnl": -2.364786135127985,
+          "profitFactor": 0.156437027252995,
+          "winRate": 0.5
+        }
+      },
+      "excludedLegacyCloses": 17,
+      "persistedCash": 50.090931186860374,
+      "openPositions": 2,
+      "epochs": {
+        "desk-confirmed-v2": {
+          "at": 1792350132.805526,
+          "equity": 104.57325869603491
+        },
+        "desk-partial-1h-v3": {
+          "at": 1792570031.7719529,
+          "equity": 104.76860173359091
+        },
+        "desk-partial-1h-v4": {
+          "at": 1792570665.9919348,
+          "equity": 104.41584941349093
+        },
+        "desk-partial-1h-v5": {
+          "at": 1792586480.666424,
+          "equity": 104.12373439000893
+        },
+        "desk-aggressive-1h-v6": {
+          "at": 1792598760.8246965,
+          "equity": 104.49942309723693
+        },
+        "desk-aggressive-1h-v7": {
+          "at": 1792601601.732404,
+          "equity": 104.41711371610953
+        },
+        "desk-rs-chandelier-1h-v8": {
+          "at": 1792927497.2333546,
+          "equity": 87.84215771128837
+        },
+        "desk-rs-chandelier-1h-v9": {
+          "at": 1793038847.0959368,
+          "equity": 84.83521296357438
+        }
+      },
+      "observedPolicyVersions": [
+        "desk-aggressive-1h-v6",
+        "desk-aggressive-1h-v7",
+        "desk-confirmed-v2",
+        "desk-net-v1",
+        "desk-partial-1h-v3",
+        "desk-partial-1h-v4",
+        "desk-rs-chandelier-1h-v8",
+        "desk-rs-chandelier-1h-v9",
+        "unspecified"
+      ],
+      "latestClose": 1793125046.876291,
+      "recordedClosedCount": 58
+    },
+    {
+      "book": "desk-forex.sqlite",
+      "currency": "USD",
+      "netCostCohorts": {
+        "desk-confirmed-v2": {
+          "closes": 7,
+          "netPnl": -0.005357826982050482,
+          "profitFactor": 0.9121054227668741,
+          "winRate": 0.42857142857142855
+        },
+        "desk-cash-context-v3": {
+          "closes": 6,
+          "netPnl": -0.06020694591633611,
+          "profitFactor": 0.07604635445988246,
+          "winRate": 0.16666666666666666
+        }
+      },
+      "excludedLegacyCloses": 0,
+      "persistedCash": 99.93443522710164,
+      "openPositions": 0,
+      "epochs": {
+        "desk-confirmed-v2": {
+          "at": 1792350132.8149939,
+          "equity": 100.0
+        },
+        "desk-cash-context-v3": {
+          "at": 1792570031.7847395,
+          "equity": 99.98752640370134
+        },
+        "desk-cash-aggressive-v1": {
+          "at": 1792598760.8332977,
+          "equity": 99.93443522710164
+        },
+        "desk-cash-aggressive-v2": {
+          "at": 1792601601.7415512,
+          "equity": 99.93443522710164
+        },
+        "desk-cash-guarded-v3": {
+          "at": 1793038847.1124463,
+          "equity": 99.93443522710164
+        }
+      },
+      "observedPolicyVersions": [
+        "desk-cash-context-v3",
+        "desk-confirmed-v2"
+      ],
+      "latestClose": 1792597782.9718695,
+      "recordedClosedCount": 13
+    },
+    {
+      "book": "desk-stocks.sqlite",
+      "currency": "USD",
+      "netCostCohorts": {
+        "desk-confirmed-v2": {
+          "closes": 1,
+          "netPnl": -0.007089475317393892,
+          "profitFactor": 0.0,
+          "winRate": 0.0
+        },
+        "desk-cash-context-v3": {
+          "closes": 5,
+          "netPnl": -0.22100852432695695,
+          "profitFactor": 0.595591874757126,
+          "winRate": 0.2
+        }
+      },
+      "excludedLegacyCloses": 0,
+      "persistedCash": 99.77190200035562,
+      "openPositions": 0,
+      "epochs": {
+        "desk-confirmed-v2": {
+          "at": 1792350132.8216476,
+          "equity": 100.0
+        },
+        "desk-cash-context-v3": {
+          "at": 1792570031.7939649,
+          "equity": 99.95170849248231
+        },
+        "desk-cash-aggressive-v1": {
+          "at": 1792598760.8392856,
+          "equity": 100.10320189744343
+        },
+        "desk-cash-aggressive-v2": {
+          "at": 1792601601.748216,
+          "equity": 100.13151100601613
+        },
+        "desk-cash-guarded-v3": {
+          "at": 1793038847.1189067,
+          "equity": 100.19485984984027
+        }
+      },
+      "observedPolicyVersions": [
+        "desk-cash-context-v3",
+        "desk-confirmed-v2"
+      ],
+      "latestClose": 1793038853.5819025,
+      "recordedClosedCount": 6
+    }
+  ],
+  "laboratory": {
+    "cohorts": [
+      {
+        "bot": "meanrev",
+        "engine": 4,
+        "profile": null,
+        "closes": 2,
+        "netPnl": 0.27133517360493187,
+        "profitFactor": null,
+        "winRate": 1.0
+      },
+      {
+        "bot": "squeeze",
+        "engine": 4,
+        "profile": null,
+        "closes": 16,
+        "netPnl": -18.64513870471227,
+        "profitFactor": 0.03572551242140671,
+        "winRate": 0.125
+      },
+      {
+        "bot": "trend",
+        "engine": 4,
+        "profile": null,
+        "closes": 11,
+        "netPnl": -4.385925738827944,
+        "profitFactor": 0.17204934345019565,
+        "winRate": 0.18181818181818182
+      },
+      {
+        "bot": "flow",
+        "engine": 4,
+        "profile": null,
+        "closes": 8,
+        "netPnl": -0.5246861813903035,
+        "profitFactor": 0.5307659818958029,
+        "winRate": 0.75
+      },
+      {
+        "bot": "swing",
+        "engine": 4,
+        "profile": null,
+        "closes": 11,
+        "netPnl": -2.324025444481326,
+        "profitFactor": 0.4775886870935752,
+        "winRate": 0.36363636363636365
+      },
+      {
+        "bot": "scalper",
+        "engine": 4,
+        "profile": null,
+        "closes": 7,
+        "netPnl": -11.169018384691416,
+        "profitFactor": 0.0,
+        "winRate": 0.0
+      },
+      {
+        "bot": "squeeze",
+        "engine": 5,
+        "profile": null,
+        "closes": 1,
+        "netPnl": -0.0817162928698086,
+        "profitFactor": 0.0,
+        "winRate": 0.0
+      },
+      {
+        "bot": "orb",
+        "engine": 6,
+        "profile": null,
+        "closes": 7,
+        "netPnl": -0.2984200363809655,
+        "profitFactor": 0.39747287836611656,
+        "winRate": 0.42857142857142855
+      },
+      {
+        "bot": "squeeze",
+        "engine": 6,
+        "profile": null,
+        "closes": 1,
+        "netPnl": 0.07155816607484183,
+        "profitFactor": null,
+        "winRate": 1.0
+      },
+      {
+        "bot": "flow",
+        "engine": 6,
+        "profile": null,
+        "closes": 1,
+        "netPnl": -0.2850398661132299,
+        "profitFactor": 0.0,
+        "winRate": 0.0
+      },
+      {
+        "bot": "squeeze",
+        "engine": 7,
+        "profile": null,
+        "closes": 2,
+        "netPnl": -1.7644307218645872,
+        "profitFactor": 0.0,
+        "winRate": 0.0
+      },
+      {
+        "bot": "flow",
+        "engine": 7,
+        "profile": null,
+        "closes": 1,
+        "netPnl": -0.4586866227617278,
+        "profitFactor": 0.0,
+        "winRate": 0.0
+      },
+      {
+        "bot": "scalper",
+        "engine": 7,
+        "profile": null,
+        "closes": 3,
+        "netPnl": -2.525924739435915,
+        "profitFactor": 0.0,
+        "winRate": 0.0
+      },
+      {
+        "bot": "swing",
+        "engine": 7,
+        "profile": "aggressive-capacity-v4",
+        "closes": 3,
+        "netPnl": -8.048362586315456,
+        "profitFactor": 0.0,
+        "winRate": 0.0
+      },
+      {
+        "bot": "scalper",
+        "engine": 7,
+        "profile": "aggressive-capacity-v4",
+        "closes": 3,
+        "netPnl": -4.360292232501182,
+        "profitFactor": 0.0,
+        "winRate": 0.0
+      },
+      {
+        "bot": "squeeze",
+        "engine": 7,
+        "profile": "aggressive-capacity-v4",
+        "closes": 4,
+        "netPnl": -0.463462621037368,
+        "profitFactor": 0.041263798055544976,
+        "winRate": 0.25
+      },
+      {
+        "bot": "trend",
+        "engine": 7,
+        "profile": "aggressive-capacity-v4",
+        "closes": 5,
+        "netPnl": -0.8250881706058785,
+        "profitFactor": 0.2529697065263589,
+        "winRate": 0.6
+      },
+      {
+        "bot": "flow",
+        "engine": 7,
+        "profile": "aggressive-capacity-v4",
+        "closes": 6,
+        "netPnl": 0.007541803465594415,
+        "profitFactor": 1.0155373958019507,
+        "winRate": 0.6666666666666666
+      },
+      {
+        "bot": "scalper",
+        "engine": 8,
+        "profile": "aggressive-capacity-v4",
+        "closes": 4,
+        "netPnl": -1.1003793839928577,
+        "profitFactor": 0.07233345068233807,
+        "winRate": 0.25
+      }
+    ],
+    "models": [
+      {
+        "bot": "meanrev",
+        "samples": 2,
+        "featureVersion": 5,
+        "regularizationVersion": null,
+        "calibrated": false
+      },
+      {
+        "bot": "orb",
+        "samples": 7,
+        "featureVersion": 5,
+        "regularizationVersion": null,
+        "calibrated": false
+      },
+      {
+        "bot": "flow",
+        "samples": 16,
+        "featureVersion": 5,
+        "regularizationVersion": null,
+        "calibrated": false
+      },
+      {
+        "bot": "scalper",
+        "samples": 17,
+        "featureVersion": 5,
+        "regularizationVersion": null,
+        "calibrated": false
+      },
+      {
+        "bot": "squeeze",
+        "samples": 24,
+        "featureVersion": 5,
+        "regularizationVersion": null,
+        "calibrated": false
+      },
+      {
+        "bot": "trend",
+        "samples": 16,
+        "featureVersion": 5,
+        "regularizationVersion": null,
+        "calibrated": false
+      },
+      {
+        "bot": "swing",
+        "samples": 14,
+        "featureVersion": 5,
+        "regularizationVersion": null,
+        "calibrated": false
+      }
+    ],
+    "validations": {
+      "total": 132,
+      "applied": 0,
+      "engines": {
+        "8": 132
+      }
+    }
+  },
+  "audit": {
+    "audit_candidates": 7,
+    "audit_decisions": 12,
+    "audit_outcomes": 0,
+    "arms": [
+      {
+        "arm": "rules_local",
+        "count": 7
+      },
+      {
+        "arm": "rules_plus_ai",
+        "count": 5
+      }
+    ]
+  },
+  "registry": {
+    "plans": [
+      {
+        "plan_id": "A1",
+        "experiments": 1
+      },
+      {
+        "plan_id": "A2",
+        "experiments": 1
+      },
+      {
+        "plan_id": "A3",
+        "experiments": 1
+      },
+      {
+        "plan_id": "A4",
+        "experiments": 1
+      },
+      {
+        "plan_id": "A5",
+        "experiments": 1
+      },
+      {
+        "plan_id": "A6",
+        "experiments": 1
+      },
+      {
+        "plan_id": "A7",
+        "experiments": 1
+      },
+      {
+        "plan_id": "mt5-training:scalper:EURUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "mt5-training:scalper:GBPUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "mt5-training:scalper:USDJPY",
+        "experiments": 2
+      },
+      {
+        "plan_id": "mt5-training:scalper:XAUUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "mt5-training:swing:XAUUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "point-in-time:flow",
+        "experiments": 5
+      },
+      {
+        "plan_id": "point-in-time:meanrev",
+        "experiments": 5
+      },
+      {
+        "plan_id": "point-in-time:orb",
+        "experiments": 5
+      },
+      {
+        "plan_id": "point-in-time:scalper",
+        "experiments": 5
+      },
+      {
+        "plan_id": "point-in-time:squeeze",
+        "experiments": 5
+      },
+      {
+        "plan_id": "point-in-time:swing",
+        "experiments": 5
+      },
+      {
+        "plan_id": "point-in-time:trend",
+        "experiments": 5
+      },
+      {
+        "plan_id": "training:flow:AAPL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:ADA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:AVAX",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:BCH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:BNB",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:BTC",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:DOT",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:ETH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:EURUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:GBPUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:LINK",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:LTC",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:MSFT",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:NEAR",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:NVDA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:SOL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:SUI",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:TRX",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:flow:TSLA",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:flow:USDJPY",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:flow:XAUUSD",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:flow:XRP",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:meanrev:AAPL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:AMZN",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:BTC",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:ETH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:GOOGL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:META",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:MSFT",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:NVDA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:QQQ",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:SOL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:SPY",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:meanrev:TSLA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:AAPL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:AMZN",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:ES",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:META",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:MSFT",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:NQ",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:NVDA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:QQQ",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:SPY",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:orb:TSLA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:ADA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:AVAX",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:BNB",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:BTC",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:DOGE",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:ETH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:EURUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:GBPUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:LINK",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:LTC",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:PAXG",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:SOL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:USDJPY",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:XAUUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:scalper:XRP",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:ADA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:AVAX",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:BCH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:BNB",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:BTC",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:DOGE",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:DOT",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:ETH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:EURUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:GBPUSD",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:LINK",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:LTC",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:squeeze:NEAR",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:squeeze:PAXG",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:squeeze:SOL",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:squeeze:SUI",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:squeeze:TRX",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:squeeze:USDJPY",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:squeeze:XAUUSD",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:squeeze:XRP",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:AAPL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:ADA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:AMZN",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:AVAX",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:BCH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:BNB",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:BTC",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:CL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:DOT",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:ETH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:swing:EURUSD",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:GBPUSD",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:GOOGL",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:LINK",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:LTC",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:META",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:MSFT",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:NEAR",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:NVDA",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:PAXG",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:QQQ",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:SOL",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:SPY",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:SUI",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:TRX",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:TSLA",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:USDJPY",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:XAUUSD",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:swing:XRP",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:ADA",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:trend:AVAX",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:trend:BCH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:trend:BNB",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:trend:BTC",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:trend:CL",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:trend:DOGE",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:trend:DOT",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:trend:ETH",
+        "experiments": 2
+      },
+      {
+        "plan_id": "training:trend:EURUSD",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:LINK",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:LTC",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:NEAR",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:NVDA",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:PAXG",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:QQQ",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:SOL",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:SPY",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:SUI",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:TRX",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:TSLA",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:USDJPY",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:XAUUSD",
+        "experiments": 1
+      },
+      {
+        "plan_id": "training:trend:XRP",
+        "experiments": 1
+      }
+    ],
+    "events": [
+      {
+        "kind": "dataset_snapshot",
+        "count": 113
+      },
+      {
+        "kind": "decision",
+        "count": 2304
+      },
+      {
+        "kind": "evaluation",
+        "count": 14
+      },
+      {
+        "kind": "holdout_claim",
+        "count": 18
+      },
+      {
+        "kind": "paired_evaluation",
+        "count": 3
+      },
+      {
+        "kind": "preregistered",
+        "count": 270
+      },
+      {
+        "kind": "promotion_decision",
+        "count": 14
+      },
+      {
+        "kind": "selection_trials",
+        "count": 88
+      },
+      {
+        "kind": "training_result",
+        "count": 218
+      }
+    ]
+  },
+  "runtime": {
+    "health": {
+      "status": "ok",
+      "mode": "paper",
+      "desks": 3,
+      "bots": 7
+    },
+    "desk": {
+      "policy": {
+        "version": "desk-rs-chandelier-1h-v9",
+        "costVersion": "net-costs-v1",
+        "maxNotionalPct": 35.0,
+        "minNetRewardRisk": 1.5,
+        "riskPct": 1.5,
+        "totalRiskPct": 6.0,
+        "minVolumeUSD": 2000000,
+        "maxHoldSeconds": 172800,
+        "partialAtR": 1.5,
+        "trailAtr": 2.8,
+        "strategyProfile": "aggressive-adaptive-v3",
+        "riskProfile": "aggressive-capacity-v4",
+        "stopAtr": 2,
+        "referenceTargetAtr": 6,
+        "partialFraction": 0.3333333333333333,
+        "trailAfterR": 2,
+        "residualStopR": -0.5,
+        "chandelierInterval": "4h",
+        "longRsMinPercentile": 85,
+        "profitableTrendMayExtendHold": true,
+        "minNetRewardRiskBasis": "reference-6atr",
+        "selectorCoverage": {
+          "eligible": 73,
+          "evaluated": 11,
+          "ready": 0,
+          "submitted": 0
+        },
+        "catalystGate": "fresh-opposing-catalyst-v2",
+        "strategies": [
+          "trend-pullback",
+          "breakout",
+          "recovery"
+        ],
+        "validated": false
+      },
+      "mode": "paper",
+      "experiment": {
+        "version": "desk-rs-chandelier-1h-v9",
+        "at": 1793038847.0959368,
+        "equity": 84.83521296357438,
+        "closed": 0,
+        "wins": 0,
+        "pnl": 0,
+        "opened": 2
+      }
+    },
+    "agents/swarm": {
+      "mode": "shadow",
+      "armed": false,
+      "enabled": true,
+      "transport": "subscription",
+      "configured": true,
+      "protocol": {
+        "name": "mesa-siete-v2",
+        "weights": {
+          "pulse": 0.35,
+          "flow": 0.4,
+          "risk": 0.25
+        },
+        "enterScore": 0.42,
+        "aggressiveScore": 0.62,
+        "makerScore": 0.5,
+        "convictionCap": 1.25,
+        "formula": "S = 0.35*d*bias*min(m,1.25) + 0.40*d*imbalance*confidence + 0.25*(2*asymmetry-1)",
+        "commanderMayRefuse": true,
+        "commanderMayNotForce": true,
+        "sizeOnlyShrinks": true,
+        "bookMaxAgeSeconds": 2.0,
+        "subscriptionLocalAgents": [
+          "grok-flow-scalper",
+          "chatgpt-quant-risk"
+        ],
+        "regimeAllocationCacheSeconds": 14400,
+        "postMortemCacheSeconds": 43200,
+        "postMortemNewClosures": 10,
+        "execution": "La autorización no llama a order_send. spot_orders y mt5_gateway conservan cantidad, demo y stops.",
+        "agents": [
+          "grok-desk-commander",
+          "grok-x-pulse",
+          "grok-flow-scalper",
+          "chatgpt-quant-risk"
+        ]
+      }
+    }
+  },
+  "isolatedReproductions": {
+    "candidateLink": {
+      "temporaryIsolatedBook": true,
+      "candidateRecorded": true,
+      "entryAuditCalled": true,
+      "entryAuditHasCandidateId": false,
+      "positionOpened": true
+    },
+    "twoTradeBootstrap": {
+      "sample": [
+        -1.0,
+        3.0
+      ],
+      "mean": 1.0,
+      "lower95": 1.0,
+      "upper95": 1.0
+    },
+    "identicalFeaturesAfter100L1Updates": {
+      "technical_a": 0.4060060810379578,
+      "technical_duplicate_b": 0.4060060810379578
+    }
+  },
+  "reviewValidation": {
+    "backend": {
+      "passed": 638,
+      "subtests": 158,
+      "skipped": 5,
+      "failed": 0,
+      "seconds": 61.81,
+      "warning": "Starlette/httpx deprecation",
+      "skipReason": "Windows symbolic-link privilege"
+    },
+    "frontend": {
+      "buildPassed": true,
+      "lintPassed": true,
+      "reactWarnings": 3,
+      "largeChunkWarning": true
+    },
+    "protectedFilesUnchanged": true,
+    "serviceRestarted": false
+  },
+  "sourceReview": {
+    "head": "0a30ecefd5160f6d6d121366dad4f8b634afb2de",
+    "basis": "Existing uncommitted working tree reviewed; application sources not modified in this research turn",
+    "reviewedSourceHashes": {
+      "backend/app/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "backend/app/aggressive.py": "71ee6d44624644da768a08b7cc4512d50e7d8ffc12081e0deef9168b14aa3c41",
+      "backend/app/ai_swarm.py": "bc419d811c8428c7ddefe6046f9eb220485d12bfe0d3f9fd183818058b31cbaf",
+      "backend/app/book_stream.py": "e0a2bd3e8ff30f97aabd7779b576f786694d33d3069708d5d9cf287c6f7f383c",
+      "backend/app/bots.py": "0eecbd47ab9b5e27ac9da1a38f4a23dc4658c212ed606274597cefff61541925",
+      "backend/app/broker_replay.py": "e6ca3636e81e9110f53541eb6773dad1ef9a867dbc549577fd98185ef1974180",
+      "backend/app/cash_markets.py": "b19b49c862bb6da5a306473a0e72638528eb8ff8df427a7e8d55d65410f21dbb",
+      "backend/app/cloud_runtime.py": "f3b72449c48566c1a22607007fcd56a1949466e84e5274f43be9d7b0515de486",
+      "backend/app/config.py": "1eb20575b540b6ba33d6aebf530430c1797696d38992d84324d307f8b749d236",
+      "backend/app/data_archive.py": "346e4e2a2205458f5f864a67d2943dfdbc50e028e628de7e051d90759b1e2a7e",
+      "backend/app/database.py": "e9064fed7ff9042b78b38898aed51937951dc5d3e11fdaba817d37bb50be56cb",
+      "backend/app/decision_audit.py": "2393413175a69301b1279792043e1d3b1834ce0ac740a143957c065814eb66ab",
+      "backend/app/derivatives_flow.py": "85f1abe0c92536a29041a23e5b06ce4f31fba3465a5c667b5595c9fb50aba1bc",
+      "backend/app/desk.py": "c45e4ac91dde4f0e7e49e5311f113c2d878bf9331c4563ed16aff4a4bfdec314",
+      "backend/app/desk_maker.py": "863d9b8bd231728338fcf80307c7d044e10dacd447f45bb2fdd8b2a3ea5904ae",
+      "backend/app/desk_replay.py": "1659fd242b36b9338f5a6def2a6cde49c74e2b70df870fbed70cb276246a2322",
+      "backend/app/desk_strategy_review.py": "f71dd94345e8fa717aff9b61ede0cbbedd7b7d864937c4085130feb57373d2c5",
+      "backend/app/economics.py": "2009b3549960f32314ef3c2a15c23a4a035791d0cee0d50eb76174929ad35f0b",
+      "backend/app/execution.py": "881d5ceb49ae92ae73d05c7260ed05ea35ef9e4f758893cf9b5aa7a37666dafb",
+      "backend/app/exit_experiments.py": "f599661fb714c0d64c3f5b650cce2466fb7fbc0398605493c9a51652597fb4dd",
+      "backend/app/experiments.py": "98175982b863b1aa2c17a75b6a066ff0fe2a6bf65de1deb680cf5585d478a5fd",
+      "backend/app/extreme_review.py": "27d87fd8f13d0925c7024a975c1afdddea01b921f8265364f1539fc1d4baf273",
+      "backend/app/flow.py": "714aa12276ebc72b2fddcd7017dcf55a12ef83e1abe60a3d9a7d3c1ec90885a6",
+      "backend/app/fx_rates.py": "67e15313c954d53e901050b098c56b8064473062ea137dca607000fdb911504c",
+      "backend/app/gemini_agent.py": "d5ddd10b476526e910e39f5066f120866caed79cb713c43d27ac9f1a6ce01cbc",
+      "backend/app/gpt_quant_agent.py": "97645d1639d75e9d58ee064744f266f0636a5717960488d4d439f5dcbe640495",
+      "backend/app/history.py": "c7e3e56a60b78baa712cca5ffd544dcce8fd271932131a3d54781f44a313c82f",
+      "backend/app/hub.py": "6fbd8f2d054dd5329a23bdd48cb01cf691d9d4834fb126316f673c7e19278775",
+      "backend/app/indicators.py": "8c9aa6fdcc2e409c0e572fff679fdc830c1b14369833906ba9c594a60e6d5fc3",
+      "backend/app/learning.py": "c5ef8c23905e7171ef69ffd44efc44c607a1bb64149589593af7658b9bf91a18",
+      "backend/app/main.py": "93888d9bf45e78f80bc48486427133d8634052658111d54a7d0ad86ce847138b",
+      "backend/app/maker_simulation.py": "c54f7b0f8cc1b8752156bb5e80317a3e3ede5aba549fd7acbf7c7af78f3c0fd9",
+      "backend/app/market_data.py": "d902f06f35cd2ac9e8a5651af728f0c143c2fd06748d64f61095c063d9f38b27",
+      "backend/app/mt5_demo.py": "e1c78c446825d6f18289587b359dd0ecf6b1415c016f84ceade2dd252e39d7ab",
+      "backend/app/mt5_gateway.py": "03304a16986cc3d16476836daad863297d71c1011ebcc903b4ea03d08007ae72",
+      "backend/app/mt5_market.py": "323a9716d7b25aea93c8f1238e6fb33b97a35ad7d88b68c58ce14025c81087b3",
+      "backend/app/mt5_performance.py": "2522198c9a9909eec61e48e7125c1d82a4604e3f16685b100ca370344b0e5aff",
+      "backend/app/mt5_policy.py": "bb44b9d26296b2a8e3de3359286d98fb53c45bac9003b684ba278e2c80dbdbef",
+      "backend/app/mt5_risk.py": "f9b7e391df1463292f7ab557b5c5717f92d1bc7beac52dc96183e893cb960654",
+      "backend/app/news.py": "06c3d0298f17d4c436f922c2544f1346ca0d6def4f6277b64ba1053f689f1352",
+      "backend/app/open_positions.py": "fa9b00f7316a1f85f44b88879557d473314f76dd8e3fd6b40d2e679739e6999d",
+      "backend/app/opportunities.py": "73d5b842f52c88fbbecfaaaa3c3278158ee0f541a98279e8a80077fb1d2126f3",
+      "backend/app/performance_review.py": "3900de3949b34bf318b5e385895b728bf1614d1c07fea2da0675a0194da95ecc",
+      "backend/app/portfolio_risk.py": "85d25a2709dfde1ff46581a81662dfa19ec402af1da089f683ddaedbea595cdf",
+      "backend/app/public_sources.py": "65303273e2c8ba468e6350c46399a8a824451a1df1c32437e1ccc92f10744dcb",
+      "backend/app/research.py": "9d5ee04f528175c23a15aee78bcc6e1bb34e1dbb066e82788a118b8d1395252b",
+      "backend/app/research_jobs.py": "7dd57a5875b9cbd252c8cf3f7fd118a67d4c42d5410acd933049fab8a32f5313",
+      "backend/app/research_plans.py": "634f721c9aa24e18f1ce61a1bb13bf5d02aa5507b85cb23e1856c2e1dd5ed791",
+      "backend/app/research_strategies.py": "1c55e5f41cb382c67de1966ffba78d0e4529eeb025776d13f1567b97e633bdc4",
+      "backend/app/reset_accounts.py": "5788373dbc1f4039d3bcaa6a08993f6cef5d2ed85286cc595796265edb4a05ff",
+      "backend/app/runtime_guard.py": "787b8f4ea49cd31ed436aec2f4bbd9ac6d096d730cfd52675fd4c3a50970d0e6",
+      "backend/app/sentiment.py": "edf89c3d36d016a30decba7cc33b49fdc7eca1c41279bb63c48339df26ddd66f",
+      "backend/app/specialist_team.py": "0290b6eb7078dcdcdb9b1dba6f4a040518ef5c34b1d48a35f5062543d80fdc7d",
+      "backend/app/spot_orders.py": "125128cf14c00677c95d10390c924a3cff194506e447b31384135f67c657023a",
+      "backend/app/strategy.py": "dd068ebc6cd8a01c10a2d79270ed976f83955f9dde0e92ae1213a650d80275f7",
+      "backend/app/strategy_review.py": "67125e29143723319a8d491a184e2028027365c3feb2f01e2c7f2425df113af8",
+      "backend/app/subscription_bridge.py": "1a403f7bf833a6727e7c236ebf375e76729cf940031e9cc5d4a935825aaaeefc",
+      "backend/app/systems.py": "6de6fa62975c1fe5a21536e14a33f32e6f3bf8439e694b83dbeb7f76d23b3123",
+      "backend/app/team_workflow.py": "2e4d11d0b0562ae4342820de71f242e31afd571fa89d70c67fd0df554b0ce828",
+      "backend/app/telemetry.py": "4d293621ffc8b523a53dfa50861fef31441127530c3cc7389fdbaba2ab519904",
+      "backend/app/tradingview.py": "834be3da3942dddf6a3b31e777c089f65658e4b488233c0a7df0e067d11835a1",
+      "backend/app/training.py": "f106308005a632476917919828b805f2e8536c331b4735a1e619cd642906fc54",
+      "backend/app/validation.py": "0210e5d394e5128f5292dbc4ed53e793afb7df9b0e69d69d5c904d851ee702db"
+    }
+  }
+}

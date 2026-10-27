@@ -81,11 +81,21 @@ def _connect(write=False, db_path=None):
 def record_candidate(source, symbol, direction, *, strategy_version, cost_version,
                      risk_policy, economics, risk_eur=None, notional_eur=None,
                      snapshot_at=None, correlation_id=None, candidate_key=None, db_path=None,
-                     cost_model=None):
+                     cost_model=None, decisions=None, inputs=None, paired_receipts=None):
     """Return an immutable candidate ID; optional stable key deduplicates retries."""
     now=time.time()
+    receipts = None
+    if decisions is not None:
+        if set(decisions) != set(ARMS):
+            raise ValueError('An atomic candidate requires all four arms')
+        receipts = {arm: _decision_payload(None, arm, decision_at=now, **decisions[arm])
+                    for arm in ARMS}
+    inputs = inputs or {}
+    if any(_number(v.get('availableAt')) is None or v['availableAt'] > now
+           for v in inputs.values() if isinstance(v, dict) and v.get('available') is True):
+        raise ValueError('Inputs must be available before the decision')
     snapshot_at=now if snapshot_at is None else _number(snapshot_at)
-    if (direction not in ('long','short') or snapshot_at is None or abs(now-snapshot_at)>86400
+    if (direction not in ('long','short') or snapshot_at is None or not 0<=now-snapshot_at<=86400
             or not all(isinstance(v,str) and 0<len(v)<=128 for v in
                        (source,symbol,strategy_version,cost_version,risk_policy))):
         raise ValueError('Invalid candidate contract')
@@ -111,10 +121,11 @@ def record_candidate(source, symbol, direction, *, strategy_version, cost_versio
                                           and _number(cost_model.get('feeRate')) is not None
                                           and _number(cost_model.get('slippageRate')) is not None),
                  executionSubmitted=False)
+    payload.update(inputs=inputs, pairedReceipts=paired_receipts or [], candidateKey=candidate_key)
     # A caller key names one opportunity, not a rolling market or symbol.
     digest=_hash(dict(cohort=cohort,key=candidate_key,symbol=symbol,direction=direction,
-                      snapshotAt=None if candidate_key else snapshot_at,economics=safe,
-                      riskEUR=payload['riskEUR'],notionalEUR=payload['notionalEUR']))
+                      snapshotAt=None if candidate_key else snapshot_at,economics=None if candidate_key else safe,
+                      riskEUR=None if candidate_key else payload['riskEUR'],notionalEUR=None if candidate_key else payload['notionalEUR']))
     candidate_id='candidate-'+uuid.uuid4().hex
     with _connect(write=True, db_path=db_path) as con:
         con.execute('BEGIN IMMEDIATE')
@@ -125,27 +136,41 @@ def record_candidate(source, symbol, direction, *, strategy_version, cost_versio
             return None
         con.execute('INSERT INTO audit_candidates VALUES (?,?,?,?,?)',
                     (candidate_id,digest,now,_hash(cohort),_json(payload)))
+        for arm, receipt in (receipts or {}).items():
+            receipt['candidateId'] = candidate_id
+            con.execute('INSERT INTO audit_decisions VALUES (?,?,?,?)',
+                        (candidate_id,arm,now,_json(receipt)))
     return candidate_id
 
 
-def record_decision(candidate_id, arm, allowed, *, size_multiplier=0.0, blockers=None,
+def _decision_payload(candidate_id, arm, allowed, *, size_multiplier=0.0, blockers=None,
                     execution_mode='shadow', prompt_version=None, model_versions=None,
-                    decision_at=None, db_path=None):
-    """One arm receipt per opportunity. Repeated conflicting results are refused."""
+                    decision_at=None):
     size=_number(size_multiplier)
     if arm not in ARMS or type(allowed) is not bool or size is None or not 0<=size<=1:
         raise ValueError('Invalid arm decision')
     if execution_mode not in ('shadow','paper','demo','counterfactual'):
         raise ValueError('Invalid observation mode')
-    payload=dict(candidateId=candidate_id,arm=arm,allowed=allowed,sizeMultiplier=size,
+    stamp=time.time() if decision_at is None else _number(decision_at)
+    if stamp is None or not 0<=stamp<=time.time():
+        raise ValueError('Decision must already be observable')
+    return dict(candidateId=candidate_id,arm=arm,allowed=allowed,sizeMultiplier=size,
                  blockers=[str(v)[:160] for v in (blockers or [])[:12]],
-                 observedAt=time.time() if decision_at is None else decision_at,
+                 observedAt=stamp,
                  executionMode=execution_mode,promptVersion=prompt_version,
                  modelVersions=model_versions or {},profitabilityProven=False,
                  outcomeAvailable=False,version=VERSION)
+
+
+def record_decision(candidate_id, arm, allowed, *, db_path=None, **kwargs):
+    """One immutable arm receipt per opportunity."""
+    payload=_decision_payload(candidate_id,arm,allowed,**kwargs)
     with _connect(write=True, db_path=db_path) as con:
-        if not con.execute('SELECT 1 FROM audit_candidates WHERE candidate_id=?',(candidate_id,)).fetchone():
+        candidate=con.execute('SELECT observed_at FROM audit_candidates WHERE candidate_id=?',(candidate_id,)).fetchone()
+        if not candidate:
             raise ValueError('Unknown candidate')
+        if payload['observedAt']<candidate[0]:
+            raise ValueError('Decision precedes its candidate')
         old=con.execute('SELECT payload FROM audit_decisions WHERE candidate_id=? AND arm=?',(candidate_id,arm)).fetchone()
         if old:
             prior=json.loads(old[0]);new=dict(payload)
@@ -157,19 +182,27 @@ def record_decision(candidate_id, arm, allowed, *, size_multiplier=0.0, blockers
 
 
 def record_outcome(candidate_id, arm, *, net_pnl, currency, initial_risk, fees,
-                   slippage, carry, outcome_type, observed_at=None, db_path=None):
+                   slippage, carry, outcome_type, observed_at=None, db_path=None,
+                   execution_id=None):
     """Explicit observed evidence only; no synthetic PnL for an unfilled arm."""
     values=[_number(v) for v in (net_pnl,initial_risk,fees,slippage,carry)]
     if (any(v is None for v in values) or initial_risk<=0
             or outcome_type not in ('observed-paper','broker-demo','counterfactual-observed')
-            or currency not in ('EUR','USD','USDT')):
+            or min(fees,slippage,carry)<0
+            or currency not in ('EUR','USD','USDT')
+            or (observed_at is not None and (_number(observed_at) is None or observed_at>time.time()))):
         raise ValueError('Incomplete observed outcome')
     payload=dict(candidateId=candidate_id,arm=arm,netPnl=net_pnl,currency=currency,
                  initialRisk=initial_risk,fees=fees,slippage=slippage,carry=carry,
-                 outcomeType=outcome_type,observedAt=observed_at or time.time(),version=VERSION)
+                 outcomeType=outcome_type,observedAt=time.time() if observed_at is None else observed_at,version=VERSION)
+    if execution_id is not None:
+        payload['executionId']=execution_id
     with _connect(write=True, db_path=db_path) as con:
-        if not con.execute('SELECT 1 FROM audit_decisions WHERE candidate_id=? AND arm=?',(candidate_id,arm)).fetchone():
+        decision=con.execute('SELECT payload FROM audit_decisions WHERE candidate_id=? AND arm=?',(candidate_id,arm)).fetchone()
+        if not decision or not json.loads(decision[0])['allowed']:
             raise ValueError('Outcome has no decision receipt')
+        if payload['observedAt']<json.loads(decision[0])['observedAt']:
+            raise ValueError('Outcome precedes its decision')
         old=con.execute('SELECT payload FROM audit_outcomes WHERE candidate_id=? AND arm=?',(candidate_id,arm)).fetchone()
         if old:
             prior=json.loads(old[0]); current=dict(payload)
@@ -178,6 +211,25 @@ def record_outcome(candidate_id, arm, *, net_pnl, currency, initial_risk, fees,
             raise ValueError('Outcome is immutable')
         con.execute('INSERT INTO audit_outcomes VALUES (?,?,?,?)',
                     (candidate_id,arm,payload['observedAt'],_json(payload)))
+
+
+def candidate_receipt(candidate_id, db_path=None):
+    with _connect(db_path=db_path) as con:
+        row=con.execute('SELECT payload FROM audit_candidates WHERE candidate_id=?',(candidate_id,)).fetchone()
+        if row is None:
+            raise ValueError('Unknown candidate')
+        return dict(candidate=json.loads(row[0]), decisions={arm:json.loads(payload) for arm,payload in
+            con.execute('SELECT arm,payload FROM audit_decisions WHERE candidate_id=?',(candidate_id,))})
+
+
+def find_candidate(source, key, policy, db_path=None):
+    if not (Path(db_path) if db_path else _path()).is_file():
+        return None
+    with _connect(db_path=db_path) as con:
+        row=con.execute("""SELECT candidate_id FROM audit_candidates
+            WHERE json_extract(payload,'$.source')=? AND json_extract(payload,'$.candidateKey')=?
+            AND json_extract(payload,'$.strategyVersion')=? LIMIT 1""",(source,key,policy)).fetchone()
+        return row[0] if row else None
 
 
 def health_snapshot(db_path=None):

@@ -36,7 +36,8 @@ class TemporaryDatabaseTests(unittest.TestCase):
                     reasons, exit_time, pnl, status, initial_risk_dist, snapshot)
                    VALUES (?, 'BTC', 'long', 1, 100, ?, 90, 120, '[]', ?, ?, ?, 10, ?)''',
                 (bot, exit_time - 60, exit_time, pnl, status,
-                 json.dumps(snapshot) if snapshot is not None else None),
+                 json.dumps(snapshot if snapshot is not None else dict(engineVersion=training.ENGINE_VERSION,
+                     economics=dict(version='net-costs-v1'),executionCosts=dict(version='net-costs-v1')))),
             )
 
 
@@ -97,7 +98,7 @@ class TrainingAttemptTests(TemporaryDatabaseTests):
 
 
 class LearningWindowTests(TemporaryDatabaseTests):
-    def test_statistics_survive_long_shutdown_and_expire_by_last_close(self):
+    def test_statistics_survive_long_shutdown_and_keep_minimum_event_memory(self):
         last_exit = 1000000
         for age in (0, 1, 7*86400, 7*86400 + 1):
             self.trade(last_exit - age)
@@ -106,9 +107,9 @@ class LearningWindowTests(TemporaryDatabaseTests):
         self.trade(last_exit + 30*86400, status='open')
         with patch.object(learning.time, 'time', return_value=last_exit + 60*86400):
             stats = learning.analyze('scalper')
-        self.assertEqual(stats['trades'], 3)
-        self.assertEqual(stats['bySymbol']['BTC']['pnl'], -30)
-        self.assertEqual(learning.analyze('scalper', window_days=1)['trades'], 2)
+        self.assertEqual(stats['trades'], 4)
+        self.assertEqual(stats['bySymbol']['BTC']['pnl'], -40)
+        self.assertEqual(learning.analyze('scalper', window_days=1)['trades'], 4)
 
     def test_empty_bot_has_empty_statistics(self):
         self.assertEqual(learning.analyze('scalper')['trades'], 0)

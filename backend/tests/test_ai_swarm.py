@@ -588,7 +588,7 @@ class DerivativesAndBatchTests(unittest.IsolatedAsyncioTestCase):
         parsed = ai_swarm.parse_batch_pulse({'items': [pulse_row(symbol) for symbol in symbols]}, symbols)
         self.assertEqual(list(parsed), symbols)
         self.assertTrue(all(row['available'] is True for row in parsed.values()))
-        self.assertEqual(ai_swarm.PROMPT_VERSION, 2)
+        self.assertEqual(ai_swarm.PROMPT_VERSION, 3)
         self.assertIn('DATO NO FIABLE', ai_swarm.PROMPT_PULSE_BATCH)
         specs = ai_swarm.MultiAgentSwarm(ai_swarm.Settings(transport='subscription')).specs()
         self.assertEqual([spec.agent_id for spec in specs],

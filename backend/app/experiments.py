@@ -7,6 +7,7 @@ they are not a claim of tamper resistance against a filesystem administrator.
 """
 
 import hashlib
+from functools import lru_cache
 import json
 import math
 import os
@@ -21,6 +22,36 @@ REGISTRY_VERSION = 'research-ledger-v1'
 DB_PATH = Path(__file__).resolve().parents[2] / '.runtime' / 'research-ledger.sqlite'
 CODE_SCOPE = 'all backend/app Python sources and backend/requirements.lock when present; runtime data excluded'
 _decision_experiments = {}
+PLAN_FAMILIES = {'A1':'daily-trend','A2':'four-hour-trend',
+                 'A3':'relative-strength','A4':'adx-regime'}
+PURGED_PROTOCOL = 'purged-walk-forward-family-v1'
+
+
+def purged_walk_forward(length, lookback, max_hold_bars, embargo_bars=1):
+    """Expanding past-only training, three validation blocks, untouched final 20%.
+
+    Training labels are purged by their maximum lifespan; an additional explicit
+    embargo separates evaluation blocks. Indicators may warm up on past bars.
+    """
+    if any(type(v) is not int or v<1 for v in (length,lookback,max_hold_bars,embargo_bars)):
+        raise ValueError('Positive integer temporal bounds are required')
+    holdout=int(length*.8)
+    gap=max_hold_bars+embargo_bars
+    start=max(lookback+1,int(length*.2))+gap
+    stop=holdout-gap
+    width=stop-start-2*embargo_bars
+    folds=[]
+    if width>=6:
+        for i in range(3):
+            lo=start+width*i//3+i*embargo_bars
+            hi=start+width*(i+1)//3+i*embargo_bars
+            folds.append(dict(train=[0,lo-gap],test=[lo,hi],purged=[lo-gap,lo-embargo_bars],
+                              embargo=[lo-embargo_bars,lo]))
+    return dict(version=PURGED_PROTOCOL,folds=folds,holdout=[holdout,length],
+                holdoutPurge=[stop,holdout-embargo_bars],
+                holdoutEmbargo=[holdout-embargo_bars,holdout],
+                purgeBars=max_hold_bars,embargoBars=embargo_bars,
+                sufficient=len(folds)==3,parametersFrozen=True)
 
 
 def canonical(value):
@@ -84,11 +115,19 @@ def log_decision(owner, symbol, bar_time, base_score, overlays, decision,
 
 def code_fingerprint():
     root = Path(__file__).resolve().parent
-    files={str(path.relative_to(root)).replace('\\','/'):hashlib.sha256(path.read_bytes()).hexdigest()
-           for path in sorted(root.rglob('*.py')) if '.runtime' not in path.relative_to(root).parts}
+    paths=[path for path in sorted(root.rglob('*.py')) if '.runtime' not in path.relative_to(root).parts]
     lock=root.parent/'requirements.lock'
-    if lock.is_file():
-        files['../requirements.lock']=hashlib.sha256(lock.read_bytes()).hexdigest()
+    if lock.is_file(): paths.append(lock)
+    # Rehash content only when a source changes; repeated prospective receipts
+    # must not reread the entire engine during a single scan.
+    identity=tuple((str(p),p.stat().st_mtime_ns,p.stat().st_ctime_ns,p.stat().st_size) for p in paths)
+    return _code_fingerprint(identity,str(root))
+
+
+@lru_cache(maxsize=2)
+def _code_fingerprint(identity, root):
+    files={os.path.relpath(p,root).replace('\\','/'):hashlib.sha256(Path(p).read_bytes()).hexdigest()
+           for p,*_ in identity}
     return fingerprint(files)
 
 
@@ -216,16 +255,32 @@ def claim_holdout(experiment_id, dataset, db_path=None):
     try:
         with con:
             con.execute('BEGIN IMMEDIATE')
-            exp = con.execute('SELECT frozen_at FROM research_experiments WHERE id=?', (experiment_id,)).fetchone()
+            exp = con.execute('SELECT frozen_at,plan_id,manifest FROM research_experiments WHERE id=?', (experiment_id,)).fetchone()
             if exp is None:
                 raise ValueError('Unknown preregistered experiment')
-            reused = bool(con.execute('SELECT 1 FROM research_holdouts WHERE stream=? AND start<? AND end>? LIMIT 1',
-                                      (stream, dataset['end'], dataset['start'])).fetchone())
-            independent = dataset['start'] >= exp['frozen_at'] and not reused
+            manifest=json.loads(exp['manifest'])
+            family=(PLAN_FAMILIES.get(exp['plan_id']) if
+                    manifest.get('evaluationProtocol')==PURGED_PROTOCOL
+                    or manifest.get('plan',{}).get('id')==exp['plan_id'] else None)
+            overlaps=con.execute('''SELECT e.plan_id,e.manifest FROM research_holdouts h
+                JOIN research_experiments e ON e.id=h.experiment_id
+                WHERE h.stream=? AND h.start<? AND h.end>?''',
+                (stream,dataset['end'],dataset['start'])).fetchall()
+            def same_family(row):
+                prior=json.loads(row['manifest'])
+                previous=(PLAN_FAMILIES.get(row['plan_id']) if
+                          prior.get('evaluationProtocol')==PURGED_PROTOCOL
+                          or prior.get('plan',{}).get('id')==row['plan_id'] else None)
+                return family is None or previous is None or previous==family
+            reused=any(same_family(row) for row in overlaps)
+            cross_family=bool(overlaps) and any(not same_family(row) for row in overlaps)
+            independent = dataset['start'] >= exp['frozen_at'] and not overlaps
             claim_id = uuid.uuid4().hex
             claim = dict(id=claim_id, experimentId=experiment_id, allowed=not reused,
                          reused=reused, independentFuture=independent, dataset=dataset,
                          classification='previously_seen' if reused else 'future' if independent else 'historical')
+            claim.update(family=family,crossFamilyOverlap=cross_family,
+                         selectionAdjusted=False,automaticPromotion=False)
             con.execute('INSERT INTO research_holdouts VALUES (?,?,?,?,?,?,?)',
                         (claim_id, experiment_id, stream, dataset['start'], dataset['end'], dataset['dataHash'], int(reused)))
             _append(con, experiment_id, 'holdout_claim', claim, time.time(), time.time())
@@ -254,7 +309,8 @@ def finalize_evidence(experiment_id, metrics, checks, claim, equivalence=False, 
             if con.execute("SELECT 1 FROM research_events WHERE kind='evaluation' AND json_extract(payload,'$.claimId')=? LIMIT 1",(claim['id'],)).fetchone():
                 raise ValueError('A holdout claim can be finalized only once')
             manifest=json.loads(row['manifest'])
-            claim=dict(claim,reused=bool(row['reused']),independentFuture=row['start']>=row['frozen_at'] and not row['reused'])
+            claim=dict(claim,reused=bool(row['reused']),independentFuture=row['start']>=row['frozen_at']
+                       and not row['reused'] and not claim.get('crossFamilyOverlap',False))
             passed=bool(checks) and all(c.get('passed') is True for c in checks)
             now=time.time()
             event=_append(con,experiment_id,'evaluation',dict(metrics=metrics,checks=checks,claimId=claim['id']),now,now)

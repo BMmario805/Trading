@@ -23,7 +23,8 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
         self.stack=ExitStack()
         self.addCleanup(self.stack.close)
         folder=self.stack.enter_context(tempfile.TemporaryDirectory())
-        self.engine=desk.Desk(db_path=Path(folder)/'desk.sqlite')
+        # Preserve the v9 regression suite alongside explicit v10 tests.
+        self.engine=desk.Desk(db_path=Path(folder)/'desk.sqlite',policy_version=desk.LEGACY_POLICY_VERSION)
         fund_unit_desk(self,self.engine)
         self.stack.enter_context(patch.object(gemini_agent,'AGENT',None))
         self.analysis=dict(bar=int(time.time())//3600*3600-3600,close=100,ema20=100,
@@ -41,7 +42,7 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
         p=self.engine.state['positions'][0]
         self.assertEqual((p['candleInterval'],p['maxHoldSeconds']),('1h',48*3600))
         self.assertEqual(p['exitPolicy'],dict(partialAtR=1.5,partialFraction=1/3,trailAtr=2.8,trailAfterR=2.0,residualStopR=-.5,chandelier4h=True,extendProfitableTrend=True))
-        self.assertEqual(self.engine.public()['policy']['version'],desk.POLICY_VERSION)
+        self.assertEqual(self.engine.public()['policy']['version'],desk.LEGACY_POLICY_VERSION)
 
     def test_partial_then_final_exit_is_one_net_trade_with_all_cash_and_fees(self):
         original=dict(self.engine.state['positions'][0])

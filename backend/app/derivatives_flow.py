@@ -64,8 +64,10 @@ def derivatives_regime(funding_rate, oi_change_1h_pct, price_change_1h_pct, dire
                    and oi_change > 3.0 and price_change is not None and price_change <= 0.0)
     clean = bool(price_change is not None and price_change > 0.0 and oi_change is not None
                  and oi_change > 1.5 and funding is not None and funding <= 0.0002)
-    raw = -0.25 if crowded else 0.25 if clean else 0.0
-    return dict(crowdedLong=crowded, cleanBreakout=clean,
+    squeeze = bool(funding is not None and funding<0.0 and oi_change is not None
+                   and oi_change>=2.0 and price_change is not None and price_change>0.0)
+    raw = -0.25 if crowded else 0.25 if squeeze or clean else 0.0
+    return dict(crowdedLong=crowded, cleanBreakout=clean, shortSqueezeSetup=squeeze,
                 flowAdjustment=max(-0.25, min(0.25, raw * side)))
 
 

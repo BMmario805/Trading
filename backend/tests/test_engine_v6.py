@@ -68,7 +68,7 @@ class MemoryTests(EconomicDatabaseTests):
     def test_forgetting_applies_once_per_new_close_and_preserves_unused_feature(self):
         model=learning._new_model();model['w']={'old':1}
         learning._meta_sgd_step(model,{'bias':1},True)
-        self.assertAlmostEqual(model['w']['old'],.98)
+        self.assertAlmostEqual(model['w']['old'],.98-learning.META_LR*learning.META_L1)
         tid=self.trade(pnl=1)
         self.assertEqual(learning.meta_learn_new_trades('scalper'),1)
         before=deepcopy(learning._load_model('scalper'))

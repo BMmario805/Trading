@@ -17,6 +17,9 @@ from . import desk, market_data
 from .research import _bounded_history
 from .training import expectancy_uncertainty
 from .spot_orders import partial_quantity
+from .execution import closed_candles
+from .indicators import atr, adx_series
+from .strategy import resample
 
 
 @dataclass(frozen=True)
@@ -36,7 +39,13 @@ INTERVALS = {'15m':900,'1h':3600,'4h':14400}
 
 def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None,
            order_options=None,partial_fraction=.5,trail_after_r=0,residual_stop_r=None,
-           fee_rate=None,slippage_rate=None,spread_pct=.0002):
+           fee_rate=None,slippage_rate=None,spread_pct=.0002,desk_policy_version=None,
+           flow_observations=None):
+    versioned=desk.exit_policy(desk_policy_version) if desk_policy_version else None
+    if versioned:
+        partial_fraction=versioned['partialFraction']
+        trail_after_r=versioned['trailAfterR']
+        residual_stop_r=versioned['residualStopR']
     cash=peak=100.0
     max_dd=0.0
     position=None
@@ -99,13 +108,18 @@ def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None
                     partials+=1
                     equilibrium=(position['entry']+residual_stop_r*position['risk']/(position['notional']/position['entry'])
                                  if residual_stop_r is not None else position['entry']*(1+fee)/exit_factor)
-                    if equilibrium<bid: position['sl']=max(position['sl'],equilibrium)
+                    if versioned and versioned.get('netResidualStop'):
+                        equilibrium=(position['entry']*(1+fee)+residual_stop_r*position['risk']/(position['notional']/position['entry']))/exit_factor
+                    if equilibrium<bid or (versioned and versioned.get('netResidualStop')):
+                        position['sl']=max(position['sl'],equilibrium)
                 else:
                     skipped+=1
         if not had_position and not stopped and now>=cooldown and a:
             ask=bar['open']*(1+spread/2)
             if desk.price_allowed(a,ask):
-                order=desk.size_order(cash,cash,ask,a['atr'],info,fee=fee,slippage=slip,**(order_options or {}))
+                options=dict(order_options or {})
+                if desk_policy_version: options['policy_version']=desk_policy_version
+                order=desk.size_order(cash,cash,ask,a['atr'],info,fee=fee,slippage=slip,**options)
                 if order:
                     cash-=order['notional']+order['fee']
                     position=dict(order,entryTime=now,atr=a['atr'],best=order['entry'],
@@ -123,14 +137,40 @@ def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None
                 if policy.partial and not position['partialTried']:
                     net_per_unit=current*exit_factor-position['entry']*(1+fee)
                     risk_per_unit=position['risk']/(position['notional']/position['entry'])
-                    if net_per_unit>=1.5*risk_per_unit: position['partialPending']=True
+                    if net_per_unit>=(versioned['partialAtR'] if versioned else 1.5)*risk_per_unit:
+                        position['partialPending']=True
                 position['best']=max(position['best'],current)
                 trigger=position['partialDone'] if policy.partial else current>=position['entry']+policy.trail_start_r*position['initialDist']
-                if trigger and policy.partial and trail_after_r:
+                if trigger and policy.partial and trail_after_r and not (versioned and versioned.get('dynamicChandelier')):
                     if current*exit_factor-position['entry']*(1+fee)>=trail_after_r*position['risk']/(position['notional']/position['entry']):
                         position['trailActivated']=True
                     trigger=position.get('trailActivated',False)
-                if trigger:
+                if versioned and versioned.get('chandelier4h'):
+                    # Only completed 4h bars through this decision close. Flow
+                    # observations need their original availability timestamp;
+                    # replay never consults today's live derivatives cache.
+                    decision_at=now+seconds
+                    history=rows[:i+1]
+                    higher=resample(history,14400) if seconds<14400 else history
+                    counts={r['time']:0 for r in higher}
+                    for r in history: counts[r['time']//14400*14400]=counts.get(r['time']//14400*14400,0)+1
+                    higher=closed_candles([r for r in higher if counts.get(r['time'],0)*seconds>=14400],14400,decision_at)
+                    context=higher[-50:]
+                    if len(context)>=50:
+                        closed_net=context[-1]['close']*exit_factor-position['entry']*(1+fee)
+                        if not versioned.get('dynamicChandelier') and closed_net>=2*position['risk']/(position['notional']/position['entry']):
+                            position['trailActivated']=True
+                        enabled=position['partialDone'] if versioned.get('dynamicChandelier') else position.get('trailActivated')
+                        highs=[r['high'] for r in higher if r['time']>=position['entryTime']]
+                        if enabled and highs:
+                            position['bestHigh4h']=max(position.get('bestHigh4h',0),max(highs))
+                            flow=(flow_observations or {}).get(i,{})
+                            available=flow.get('availableAt')
+                            if type(available) not in (int,float) or not math.isfinite(available) or available>decision_at:
+                                flow={}
+                            multiple=desk.chandelier_multiple(versioned,adx_series(context)[-1],flow.get('regime'),flow.get('cvdDelta'))
+                            position['sl']=max(position['sl'],position['bestHigh4h']-multiple*atr(context))
+                elif trigger:
                     stop=max(position['sl'],position['entry']*(1+fee)/exit_factor,position['best']-policy.trail_atr*position['atr'])
                     if stop<current: position['sl']=stop
                 worst=cash+position['qty']*low*exit_factor
@@ -146,10 +186,20 @@ def replay(rows,info,seconds,policy,*,start_time=0,cost_multiple=1,analyses=None
     losses=-sum(min(0,p) for p in pnls)
     if abs(cash-100-sum(pnls))>1e-7:
         raise RuntimeError('No reconcilian los flujos de caja del experimento')
-    return dict(policy=asdict(policy),pnl=round(cash-100,6),trades=len(trades),wins=sum(p>0 for p in pnls),
+    return dict(policy=asdict(policy),policyVersion=desk_policy_version,pnl=round(cash-100,6),trades=len(trades),wins=sum(p>0 for p in pnls),
                 profitFactor=gains/losses if losses else None,maxDrawdownUSDT=round(max_dd,6),
                 fees=round(sum(t['fees'] for t in trades),6),partials=partials,partialsSkippedByFilters=skipped,
                 forcedFinalClose=open_at_end,uncertainty=expectancy_uncertainty(pnls),promotionApplied=False)
+
+
+def compare_versions(rows,info,seconds=3600,**kwargs):
+    """Fixed v9/v10 comparison; diagnostic replay with no policy promotion."""
+    policy=ExitPolicy('versioned-chandelier',desk.MAX_HOLD_S,True,2.8)
+    results={version:dict(normal=replay(rows,info,seconds,policy,desk_policy_version=version,**kwargs),
+                          stress=replay(rows,info,seconds,policy,desk_policy_version=version,cost_multiple=2,**kwargs))
+             for version in (desk.LEGACY_POLICY_VERSION,desk.POLICY_VERSION)}
+    return dict(results=results,trialCount=4,automaticPromotion=False,costVersion='net-costs-v1',
+                limitation='OHLC replay; queue fills, historical universe and live execution equivalence are unverified')
 
 
 async def run(days=90):

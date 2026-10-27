@@ -4,6 +4,7 @@ import asyncio
 from collections import Counter
 from contextlib import closing
 import json
+import inspect
 import logging
 import math
 import sqlite3
@@ -18,7 +19,7 @@ from .execution import closed_candles
 from .indicators import atr, ema, rsi, adx_series, choppiness_series
 from .flow import chaikin_money_flow
 from .strategy import modulate_flow, resample
-from .economics import planned_trade,ECONOMICS_VERSION
+from .economics import planned_trade,net_outcome,ECONOMICS_VERSION
 from .book_stream import BOOKS
 from .spot_orders import partial_quantity, valid_quantity
 from .desk_maker import DeskMaker, valid_lot
@@ -64,7 +65,8 @@ CANDLE_SECONDS = 3600
 MAX_HOLD_S = 48*3600
 MAX_NOTIONAL_FRACTION = aggressive.DESK_CAPACITY['maxNotionalFraction']
 MIN_NET_REWARD_RISK = 1.5
-POLICY_VERSION = 'desk-rs-chandelier-1h-v9'
+LEGACY_POLICY_VERSION = 'desk-rs-chandelier-1h-v9'
+POLICY_VERSION = 'desk-rs-chandelier-1h-v10'
 CASH_POLICY_VERSION = 'desk-cash-guarded-v3'
 MIN_QUOTE_VOLUME = 2_000_000
 RISK_FRACTION = aggressive.DESK_CAPACITY['riskFraction']
@@ -191,9 +193,31 @@ def tape(rows,now,candle_seconds=CANDLE_SECONDS):
     return aggressive.desk_signal(rows,now,candle_seconds)
 
 
+def exit_policy(version):
+    if version not in (LEGACY_POLICY_VERSION,POLICY_VERSION):
+        raise ValueError('Unknown desk exit policy')
+    policy=dict(partialAtR=1.5,partialFraction=1/3,trailAtr=2.8,trailAfterR=2.0,residualStopR=-.5,
+                chandelier4h=True,extendProfitableTrend=True)
+    if version==POLICY_VERSION:
+        policy.update(partialAtR=1.8,partialFraction=.30,residualStopR=0.0,
+                      netResidualStop=True,dynamicChandelier=True,trailAfterR=1.8)
+    return policy
+
+
+def chandelier_multiple(policy, adx=None, regime=None, cvd=None):
+    regime=regime if isinstance(regime,dict) else {}
+    if policy.get('dynamicChandelier'):
+        if regime.get('crowdedLong') is True or (type(cvd) in (int,float) and math.isfinite(cvd) and cvd<-.20):
+            return 1.8
+        if (type(adx) in (int,float) and math.isfinite(adx) and adx>=28
+                and regime.get('cleanBreakout') is True):
+            return 3.0
+    return policy.get('trailAtr',2.8)
+
+
 def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage=SLIPPAGE,
                partial=True,risk_fraction=RISK_FRACTION,notional_fraction=MAX_NOTIONAL_FRACTION,
-               stop_atr=2.0,target_atr=6.0,min_net_rr=MIN_NET_REWARD_RISK):
+               stop_atr=2.0,target_atr=6.0,min_net_rr=MIN_NET_REWARD_RISK,policy_version=POLICY_VERSION):
     if not all(math.isfinite(v) and v>0 for v in (equity,cash,ask,a)): return None
     fill=ask*(1+slippage)
     stop=fill-stop_atr*a
@@ -213,12 +237,11 @@ def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage
         return None
     return dict(qty=qty,entry=fill,notional=qty*fill,fee=qty*fill*fee,
                 sl=stop,tp=target,risk=qty*risk_per_unit,economics=plan,
-                costPolicy=dict(version=ECONOMICS_VERSION,feeRate=fee,slippageRate=slippage),policyVersion=POLICY_VERSION,
+                costPolicy=dict(version=ECONOMICS_VERSION,feeRate=fee,slippageRate=slippage),policyVersion=policy_version,
                 maxHoldSeconds=MAX_HOLD_S if partial else 6*3600,
                 candleInterval=CANDLE_INTERVAL if partial else '15m',
                 riskProfile=aggressive.CAPACITY_VERSION,
-                exitPolicy=dict(partialAtR=1.5,partialFraction=1/3,trailAtr=2.8,trailAfterR=2.0,residualStopR=-.5,
-                                chandelier4h=True,extendProfitableTrend=True) if partial else
+                exitPolicy=exit_policy(policy_version) if partial else
                     dict(partialEnabled=False,fixedTarget=True,trailStartR=2.0,trailAtr=2.5),
                 targetIsReference=partial)
 
@@ -232,7 +255,8 @@ def price_allowed(analysis, ask):
 
 
 class Desk:
-    def __init__(self, market='crypto', db_path=None):
+    def __init__(self, market='crypto', db_path=None, *, policy_version=POLICY_VERSION):
+        if market=='crypto': exit_policy(policy_version)
         self.desk_id=market
         self.db_path=Path(db_path or DB_PATH)
         self.currency='USDT' if market=='crypto' else 'USD'
@@ -244,7 +268,7 @@ class Desk:
         self.slippage=SLIPPAGE if self.feed is None else self.feed.slippage
         self.candle_interval=CANDLE_INTERVAL if self.feed is None else '15m'
         self.candle_seconds=CANDLE_SECONDS if self.feed is None else 900
-        self.policy_version=POLICY_VERSION if self.feed is None else CASH_POLICY_VERSION
+        self.policy_version=policy_version if self.feed is None else CASH_POLICY_VERSION
         self.min_net_rr=2.0 if market=='stocks' else MIN_NET_REWARD_RISK
         with self.connect() as con:
             row=con.execute("SELECT payload FROM state WHERE key='desk'").fetchone()
@@ -378,7 +402,7 @@ class Desk:
                 state=dict(initial=initial,cash=initial,enabled=True,position=None,positions=[],
                     selected=None,selectionAt=0,selection=None,candidates=[],benchmark=None,
                     startedAt=now,day=int(now//86400),dayEquity=initial,dailyStopped=False,
-                    roles={},lastScan=0,cooldowns={},policyEpochs={POLICY_VERSION:dict(at=now,equity=initial)},funding=dict(currency='EUR',amount=100.0,
+                    roles={},lastScan=0,cooldowns={},policyEpochs={self.policy_version:dict(at=now,equity=initial)},funding=dict(currency='EUR',amount=100.0,
                     netQuotePerEuro=rate,bid=quote[0],at=data['at'],source='Binance EURUSDT',
                     fee=FEE,slippage=SLIPPAGE),previousSession=archive.name)
                 con.execute('DELETE FROM events')
@@ -462,7 +486,7 @@ class Desk:
         fee,slip=self.costs(p)
         exit_price=bid*(1-slip)
         proceeds=p['qty']*exit_price*(1-fee)
-        pnl=proceeds-p['notional']-p['fee']+p.get('realizedPnl',0)
+        pnl=net_outcome(p['entry'],exit_price,p['qty'],entry_fee=p['fee'],exit_fee_rate=fee)+p.get('realizedPnl',0)
         partials=p.get('partialExits',[])
         original_qty=p.get('originalQty',p['qty'])
         average_exit=(p['qty']*exit_price+sum(e['qty']*e['price'] for e in partials))/original_qty
@@ -493,15 +517,49 @@ class Desk:
     def record_closed_outcome(self,closed):
         if not closed.get('candidateId') or not closed.get('attributionPending'): return
         try:
-            arm=closed.get('observedArm','rules_local')
             path=decision_audit.storage_for(self.db_path)
-            # Binding IA is a separate arm. A missing decision cannot acquire an invented outcome.
-            decision_audit.record_outcome(closed['candidateId'],arm,
-                net_pnl=closed['pnl'],currency=self.currency,
-                initial_risk=closed.get('initialRisk',closed['risk']),
-                fees=closed.get('fee',0)+closed.get('exitFee',0),
-                slippage=closed.get('entrySlippage',0)+closed.get('exitSlippageEstimate',0),
-                carry=0.0,outcome_type='observed-paper',observed_at=closed['exitTime'],db_path=path)
+            receipt=decision_audit.candidate_receipt(closed['candidateId'],path)
+            outcomes={}
+            for arm,decision in receipt['decisions'].items():
+                # A veto has no fill. Shadow approvals reprice the observed
+                # execution path with their frozen size (linear cost model).
+                if not decision['allowed'] or decision['sizeMultiplier']<=0:
+                    continue
+                execution=receipt['candidate'].get('inputs',{}).get('execution',{})
+                reference_qty=execution.get('referenceQuantity',closed['qty'])
+                scale=reference_qty*decision['sizeMultiplier']/closed['qty']
+                if arm==closed.get('observedArm','rules_local'): scale=1.0
+                values=dict(net_pnl=closed['pnl']*scale,currency=self.currency,
+                    initial_risk=closed.get('initialRisk',closed['risk'])*scale,
+                    fees=(closed.get('fee',0)+closed.get('exitFee',0))*scale,
+                    slippage=(closed.get('entrySlippage',0)+closed.get('exitSlippageEstimate',0)
+                        +sum(e['qty']*max(0,e['bid']-e['price']) for e in closed.get('partialExits',[])))*scale,
+                    carry=0.0,outcome_type='observed-paper' if arm==closed.get('observedArm','rules_local') else 'counterfactual-observed',
+                    observed_at=closed['exitTime'],execution_id=closed['entryKey'])
+                decision_audit.record_outcome(closed['candidateId'],arm,db_path=path,**values)
+                outcomes[arm]=dict(netPnl=values['net_pnl'],initialRisk=values['initial_risk'],
+                    currency=self.currency,observedAt=closed['exitTime'],executionId=closed['entryKey'])
+            from . import research_plans,experiments
+            twin=closed.get('pairedTaker')
+            partials=closed.get('partialExits',[])
+            if twin and all(e.get('execution')!='maker-observed' or e.get('takerBid') is not None for e in partials):
+                fee,slip=self.costs(closed)
+                # The immediate taker alternative uses its full frozen quantity
+                # and the common exit schedule, even if maker only partly filled.
+                ratio=twin['qty']/closed['qty']
+                gross_exit=closed['finalExitQty']*closed['exitPrice']+sum(e['qty']*e['price'] for e in partials)
+                exit_fees=closed['exitFee']
+                for e in partials:
+                    if e.get('execution')=='maker-observed':
+                        delta=e['qty']*(e['takerBid']*(1-slip)-e['price'])
+                        gross_exit+=delta
+                        exit_fees+=delta*fee
+                outcomes['taker']=dict(netPnl=(gross_exit-exit_fees)*ratio-twin['entry']*twin['qty']-twin['fee'],
+                    initialRisk=twin['risk'],currency=self.currency,observedAt=closed['exitTime'],executionId=closed['entryKey']+':taker')
+                outcomes['maker']=dict(netPnl=closed['pnl'],initialRisk=closed.get('initialRisk',closed['risk']),
+                    currency=self.currency,observedAt=closed['exitTime'],executionId=closed['entryKey']+':maker')
+            research_plans.collect_paired_outcomes(receipt['candidate'].get('pairedReceipts',[]),outcomes,
+                db_path=experiments.registry_path(self.db_path))
             closed['attributionPending']=False
             closed.pop('attributionRetryAfter',None)
             closed.pop('attributionError',None)
@@ -559,7 +617,9 @@ class Desk:
         equilibrium=p['entry']*(1+fee)/((1-slip)*(1-fee))
         residual=(p['entry']+policy['residualStopR']*p['risk']/p.get('originalQty',p['qty'])
                   if 'residualStopR' in policy else equilibrium)
-        if residual<bid: p['sl']=max(p['sl'],residual)
+        if policy.get('netResidualStop'):
+            residual=((p['notional']+p['fee'])/p['qty']+policy.get('residualStopR',0)*p.get('initialRisk',p['risk'])/p['originalQty'])/((1-slip)*(1-fee))
+        if residual<bid or policy.get('netResidualStop'): p['sl']=max(p['sl'],residual)
         if not persist:
             return True
         try:
@@ -588,7 +648,7 @@ class Desk:
         if not av or not math.isfinite(av) or av<=0: return None
         highs=[r['high'] for r in rows if r['time']>=position['entryTime']]
         return dict(bar=rows[-1]['time'],close=rows[-1]['close'],ema50=ema([r['close'] for r in rows],50)[-1],
-                    atr=av,bestHigh=max(highs) if highs else None)
+                    atr=av,bestHigh=max(highs) if highs else None,adx=adx_series(rows)[-1])
 
     def manage(self,data):
         self.maker.reconcile(data)
@@ -652,11 +712,20 @@ class Desk:
                 if policy.get('chandelier4h') and context:
                     original_qty=p.get('originalQty',p['qty'])
                     closed_net_per_unit=context['close']*(1-slip)*(1-fee)-p['entry']*(1+fee)
-                    if closed_net_per_unit>=2.0*p['risk']/original_qty: p['trailActivated']=True
+                    if policy.get('dynamicChandelier'):
+                        if p.get('partialDone'): p['trailActivated']=True
+                        elif policy.get('partialEnabled') is False and closed_net_per_unit>=2.0*p['risk']/original_qty:
+                            p['trailActivated']=True
+                    elif closed_net_per_unit>=2.0*p['risk']/original_qty: p['trailActivated']=True
                     if context['bestHigh'] is not None:
                         p['bestHigh4h']=max(p.get('bestHigh4h',p['entry']),context['bestHigh'])
                     if p.get('trailActivated') and p.get('bestHigh4h') is not None:
-                        p['sl']=max(p['sl'],p['bestHigh4h']-2.8*context['atr'])
+                        from .derivatives_flow import peek
+                        flow=peek(p['symbol'],'long') if policy.get('dynamicChandelier') else {}
+                        tape_flow=BOOKS.taker_supports_bid(p['symbol']) if policy.get('dynamicChandelier') else {}
+                        multiple=chandelier_multiple(policy,context.get('adx'),flow.get('regime'),tape_flow.get('cvdDelta'))
+                        p['chandelierAtrMultiple']=multiple
+                        p['sl']=max(p['sl'],p['bestHigh4h']-multiple*context['atr'])
                         p['chandelierBar']=context['bar']
                         if bid<=p['sl']:
                             self.close_position(bid,'Chandelier 4h',p['symbol'])
@@ -877,14 +946,62 @@ class Desk:
         """Prospective receipt; inability to record blocks entries, never exits."""
         path=decision_audit.storage_for(self.db_path)
         try:
+            key=f'{candidate["symbol"]}:{bar}:{self.state["controlGeneration"]}'
+            old=decision_audit.find_candidate('desk:'+self.desk_id,key,self.policy_version,path)
+            if old:
+                candidate['candidateId']=economics['candidateId']=old
+                return old
+            now=time.time()
+            base=candidate.get('base') or candidate['symbol'].removesuffix('USDT')
+            cached=ai_swarm.fresh_decision(base,now) or {}
+            pulse=ai_swarm.fresh_pulse(base,now) or {}
+            commander=cached.get('commander') or {}
+            from .derivatives_flow import peek
+            derivatives=peek(candidate['symbol'])
+            news=candidate.get('catalystGate') or gemini_agent.catalyst_gate(base,'long',now=now)
+            news_items=news.get('evidence') or []
+            agent=gemini_agent.AGENT
+            snap=gemini_agent.snapshot(base) if agent is None or not inspect.iscoroutinefunction(agent.snapshot) else {}
+            news_data=snap.get('data') or {} if isinstance(snap,dict) else {}
+            analyzed=news_data.get('analyzedAt')
+            if type(analyzed) in (int,float) and math.isfinite(analyzed) and 0<=now-analyzed<7200:
+                news_items=news_items+[e for e in news_data.get('items',[]) if isinstance(e,dict)
+                                       and e.get('relevant') is True and e.get('is_noise') is False]
+            news_items=[e for e in news_items if type(e.get('publishedAt')) in (int,float)
+                        and math.isfinite(e['publishedAt']) and e['publishedAt']<=now]
+            dated=[e['publishedAt'] for e in news_items]
+            inputs=dict(pulse=dict(available=bool(pulse.get('available')),availableAt=now,data=pulse),
+                commander=dict(available=bool(commander.get('available')),availableAt=now,data=commander),
+                derivatives=dict(available=bool(derivatives.get('available')),availableAt=now,data=derivatives),
+                news=dict(available=bool(dated),availableAt=now,publishedAt=max(dated) if dated else None,
+                          data=dict(gate=news,items=news_items)))
+            pulse_veto=pulse.get('fakeout') is True and pulse.get('trapDirection') in ('long','both','none',None)
+            pulse_ok=pulse.get('available') is True and not pulse_veto and news['allowed']
+            commander_ok=commander.get('available') is True and commander.get('action')=='enter' and commander.get('direction')=='long'
+            ai_ok=cached.get('quorum') is True and cached.get('direction')=='long' and pulse_ok and commander_ok
+            decisions={arm:dict(allowed=bool(allowed),size_multiplier=1.0 if allowed else 0.0,
+                               blockers=[] if allowed else ['Cached overlay unavailable or vetoed'],execution_mode='shadow',
+                               prompt_version=ai_swarm.PROMPT_VERSION)
+                       for arm,allowed in zip(decision_audit.ARMS,(True,pulse_ok,commander_ok,ai_ok))}
+            for arm,mult in (('rules_plus_pulse',pulse.get('convictionMultiplier',1.0)),
+                             ('rules_plus_commander',commander.get('sizeMultiplier',1.0)),
+                             ('rules_plus_ai',cached.get('sizeMultiplier',0.0))):
+                size=min(1.0,max(0.0,float(mult))) if type(mult) in (int,float) and math.isfinite(mult) else 0.0
+                if decisions[arm]['allowed']:
+                    decisions[arm].update(allowed=size>0,size_multiplier=size)
+            inputs['execution']=dict(available=True,availableAt=now,referenceQuantity=order['qty'],
+                basis='fixed-observed-path-repricing; quantities and costs scale linearly; execution equivalence unverified')
+            from . import research_plans,experiments
+            costs=dict(order['costPolicy'],spreadPct=0.0,carryDailyRate=0.0)
+            paired=research_plans.capture_paired_predictions(candidate['symbol'],self.policy_version,
+                costs,order['risk'],self.currency,inputs,db_path=experiments.registry_path(self.db_path))
             candidate_id=decision_audit.record_candidate('desk:'+self.desk_id,candidate['symbol'],'long',
                 strategy_version=self.policy_version,cost_version=ECONOMICS_VERSION,
                 risk_policy=aggressive.CAPACITY_VERSION,economics=dict(economics,planned=order['economics']),
                 cost_model=order['costPolicy'],risk_eur=order['risk']/rate,notional_eur=order['notional']/rate,
-                candidate_key=f'{candidate["symbol"]}:{bar}:{self.state["controlGeneration"]}',db_path=path)
+                candidate_key=key,db_path=path,
+                decisions=decisions,inputs=inputs,paired_receipts=paired)
             if candidate_id is None: raise ValueError('Daily attribution budget exhausted')
-            decision_audit.record_decision(candidate_id,'rules_local',True,size_multiplier=1.0,
-                execution_mode='shadow',db_path=path)
             candidate['candidateId']=candidate_id
             economics['candidateId']=candidate_id
             return candidate_id
@@ -905,7 +1022,7 @@ class Desk:
         if analysis is None: return None,None
         open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-self.costs(p)[1])*(1-self.costs(p)[0])) for p in self.state['positions'])
         order=size_order(self.equity(),self.state['cash'],q[1],analysis['atr'],data['metadata'][symbol],
-                         max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr)
+                         max(0,self.equity()*TOTAL_RISK_FRACTION-open_risk),fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr,policy_version=self.policy_version)
         fill=q[1]*(1+self.slippage)
         sl_mult,tp_mult=2,6
         geometry=planned_trade(fill,fill-sl_mult*analysis['atr'],fill+tp_mult*analysis['atr'],1,
@@ -924,6 +1041,9 @@ class Desk:
         if order is None: return None,analysis
         available=float(data['books'][symbol].get('askQty',0))
         if not math.isfinite(available) or order['qty']>available*.1: return None,analysis
+        rate=self.risk_conversion()
+        if rate and await asyncio.to_thread(self.audit_candidate,candidate,order,gpt_quant_agent.proposal_context(self,order),rate,analysis['bar']) is None:
+            return None,analysis
         gate=gemini_agent.catalyst_gate(candidate.get('base') or data['metadata'][symbol].get('baseAsset'),'long')
         candidate['catalystGate']=gate
         if not gate['allowed']: return None,analysis
@@ -1133,7 +1253,7 @@ class Desk:
         open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-self.costs(p)[1])*(1-self.costs(p)[0])) for p in self.state['positions'])
         order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,
                          min(max(0,self.equity()*TOTAL_RISK_FRACTION*master.get('maxExposureMultiplier',1.0)-open_risk),self.equity()*RISK_FRACTION*master.get('maxExposureMultiplier',1.0)),
-                         fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr)
+                         fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr,policy_version=self.policy_version)
         if order: order['policyVersion']=self.policy_version
         sl_mult,tp_mult=2,6
         geometry=planned_trade(ask*(1+self.slippage),ask*(1+self.slippage)-sl_mult*analysis['atr'],
@@ -1146,6 +1266,12 @@ class Desk:
         if not self.state['enabled'] or self.state['dailyStopped'] or not price_ok or not identity['ok'] or not order:
             self.evaluated(candidate,'waiting',f'Sin confirmación de entrada; RSI {analysis["rsi"]:.0f}, extensión {extension:.1f} ATR' if not price_ok else size_reason if not order else 'Entradas pausadas por control de riesgo')
             self.role('Exec','waiting','Esperando aprobación de Price, Wire, Size y Risk')
+            return
+        rate=self.risk_conversion()
+        economics=gpt_quant_agent.proposal_context(self,order)
+        candidate_id=await asyncio.to_thread(self.audit_candidate,candidate,order,economics,rate,analysis['bar']) if rate else None
+        if candidate_id is None:
+            self.evaluated(candidate,'blocked','Registro o conversión de riesgo no disponible')
             return
         gate=gemini_agent.catalyst_gate(base,'long')
         candidate['catalystGate']=gate
@@ -1184,8 +1310,6 @@ class Desk:
             self.evaluated(candidate,'blocked',audit['rationale'])
             self.role('Risk','blocked',audit['rationale'])
             return
-        candidate_id=self.audit_candidate(candidate,order,economics,rate,analysis['bar'])
-        if candidate_id is None: return
         ai_swarm.request_entry_audit(base,'long',economics,
             order['risk']/rate if rate else None,order['notional']/rate if rate else None)
         clearance=ai_swarm.execution_clearance(base,'long',candidate_id=candidate_id)
@@ -1208,7 +1332,7 @@ class Desk:
                 return
             budget=min(budget,approved_risk*rate*mult)
             order=size_order(self.equity(),self.state['cash'],ask,analysis['atr'],meta,budget,
-                fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr,
+                fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr,policy_version=self.policy_version,
                 notional_fraction=min(MAX_NOTIONAL_FRACTION,approved_notional*rate*mult/self.equity()))
             if not order:
                 self.evaluated(candidate,'blocked','El tamaño auditado no cumple el lote mínimo')
@@ -1279,7 +1403,7 @@ class Desk:
             if clearance['binding']:
                 nominal_cap=min(nominal_cap,clearance['maxNotionalEUR']*rate*clearance['sizeMultiplier'])
             order=size_order(equity,self.state['cash'],ask,analysis['atr'],meta,risk_budget,
-                fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr,
+                fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr,policy_version=self.policy_version,
                 notional_fraction=nominal_cap/equity if equity>0 else 0)
             available=float(data['books'][symbol].get('askQty',0))
             if not order or not math.isfinite(available) or available<=0 or order['qty']>available*.1:
@@ -1453,6 +1577,7 @@ class Desk:
         filtered=sum(not c['eligible'] for c in candidates)
         eligible=len(candidates)-filtered
         reasons=Counter(c.get('qualityReason',c['reason']) for c in candidates if not c['eligible'])
+        exits=exit_policy(self.policy_version) if self.feed is None else {}
         return dict(id=self.desk_id,name={'crypto':'Cripto','forex':'Forex','stocks':'Acciones'}[self.desk_id],currency=self.currency,
                     session=self.feed.session() if self.feed else dict(open=True,label='Abierto 24/7'),
                     mode='paper',experimental=True,enabled=self.state['enabled'],initial=self.initial,
@@ -1470,10 +1595,12 @@ class Desk:
                     policy=dict(version=self.policy_version,costVersion=ECONOMICS_VERSION,maxNotionalPct=MAX_NOTIONAL_FRACTION*100,minNetRewardRisk=self.min_net_rr,
                                 riskPct=RISK_FRACTION*100,totalRiskPct=TOTAL_RISK_FRACTION*100,minVolumeUSD=MIN_QUOTE_VOLUME,
                                 maxHoldSeconds=MAX_HOLD_S if self.feed is None else 6*3600,
-                                partialAtR=1.5 if self.feed is None else None,trailAtr=2.8 if self.feed is None else 2.5,
+                                partialAtR=exits.get('partialAtR'),trailAtr=exits.get('trailAtr',2.5),
                                 strategyProfile=aggressive.VERSION,riskProfile=aggressive.CAPACITY_VERSION,stopAtr=2,referenceTargetAtr=6,
-                                partialFraction=1/3 if self.feed is None else None,
-                                trailAfterR=2,residualStopR=-.5 if self.feed is None else None,
+                                partialFraction=exits.get('partialFraction'),
+                                trailAfterR=exits.get('trailAfterR',2),residualStopR=exits.get('residualStopR'),
+                                netResidualStop=exits.get('netResidualStop',False),
+                                dynamicChandelier=exits.get('dynamicChandelier',False),automaticPromotion=False,
                                 chandelierInterval='4h' if self.feed is None else None,
                                 longRsMinPercentile=85 if self.feed is None else None,
                                 profitableTrendMayExtendHold=self.feed is None,

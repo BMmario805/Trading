@@ -12,7 +12,7 @@ import time
 
 from .book_stream import BOOKS
 from .maker_simulation import PostOnlyOrder
-from .economics import planned_trade
+from .economics import planned_trade, execution_fill
 from .hub import hub
 from . import telemetry
 from .spot_orders import valid_quantity
@@ -103,6 +103,17 @@ class DeskMaker:
                  generation=BOOKS.generation_for(symbol),accountedQty=0.0,template=deepcopy(position),
                  reservedRisk=position['risk'] if side=='buy' else 0,
                  reservedCash=position['notional']+position['fee'] if side=='buy' else 0)
+        if side=='buy' and position.get('candidateId'):
+            # Freeze the immediate taker alternative now, before any queue fills.
+            # It uses the full submitted quantity, including unfilled maker units.
+            ask=float(book['askPrice'])
+            fee,slip=engine.costs(position)
+            fill=execution_fill(ask,'long',True,slippage_pct=slip)
+            row['template']['pairedTaker']=dict(entry=fill,qty=quantity,fee=fill*quantity*fee,
+                entrySlippage=(fill-ask)*quantity,observedAt=order.placed_at,
+                risk=planned_trade(fill,position['sl'],position['tp'],quantity,
+                                   fee_rate=fee,exit_slippage=slip)['netRisk'],
+                costVersion=position['costPolicy']['version'],basis='observed-quote-counterfactual')
         self.commit(lambda:self.orders.append(row))
         engine.role('Exec','pending',f'Orden limitada SIMULADA: cola observada, hasta {ttl} s; sin fill supuesto')
         return True
@@ -180,6 +191,8 @@ class DeskMaker:
                             engine.take_partial(p,order.price,data,qty_override=delta,
                                                 price_override=order.price,persist=False)
                             p['partialExits'][-1]['observedFills']=observed
+                            quote=engine.quote(row['symbol'],data)
+                            p['partialExits'][-1]['takerBid']=quote[0] if quote else None
                     row['accountedQty']=order.filled
                 order.advance(time.time() if cutoff is None else cutoff)
                 if row['side']=='buy' and (not engine.state['enabled'] or engine.state.get('flatten') or engine.state['dailyStopped']):

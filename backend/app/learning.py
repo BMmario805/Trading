@@ -61,6 +61,8 @@ log = logging.getLogger("learning")
 
 # Ventana de análisis de las operaciones en vivo
 WINDOW_DAYS = 7
+MIN_EVENT_WINDOW = 50
+EVENT_DECAY = .98  # exponential age in completed events, preserving sparse 1h/4h history
 
 # Muestras mínimas antes de sacar conclusiones (contra el sobreajuste al ruido)
 MIN_TRADES_SYMBOL = 8
@@ -86,6 +88,8 @@ META_MIN_SAMPLES = 30     # madurez mínima antes de que pueda vetar señales
 META_GATE_P = 0.25        # puntuación ponderada mínima para dejar pasar
 META_LR = 0.05            # tasa de aprendizaje SGD
 META_L2 = 0.001           # regularización L2 (evita pesos desbocados)
+META_L1 = .002            # proximal soft threshold; exact zeros for redundant confirmations
+META_REGULARIZATION_VERSION = 'elastic-net-online-v1'
 # Cambiar las features exige reaprender: quitar un peso no elimina su
 # influencia anterior sobre el sesgo y los demás coeficientes.
 META_FEATURE_VERSION = 5  # Interacciones causales; migración aditiva desde v3/v4.
@@ -167,35 +171,59 @@ def analyze(bot_id: str, window_days: int = WINDOW_DAYS,
     La expectativa se mide en R (pnl / riesgo inicial |entrada - stop| × qty):
     es comparable entre símbolos con precios y volatilidades distintas.
     """
+    if type(window_days) not in (int,float) or not math.isfinite(window_days) or window_days<=0:
+        raise ValueError('A finite positive time window is required')
+    rows=[];reference=None
     with _conn() as con:
-        last_exit = con.execute(
-            """SELECT MAX(exit_time) FROM bot_trades
-               WHERE bot = ? AND status = 'closed' AND pnl IS NOT NULL""",
-            (bot_id,),
-        ).fetchone()[0]
-        # El tiempo con el equipo apagado no debe borrar la muestra reciente.
-        reference = last_exit if last_exit is not None else int(time.time())
-        since = reference - window_days * 86400
-        rows = con.execute(
+        cursor = con.execute(
             """SELECT symbol, direction, qty, entry_price, sl, pnl,
                       entry_time, exit_reason,
-                      COALESCE(economic_risk_dist,initial_risk_dist,ABS(entry_price-sl))*COALESCE(quote_to_account,1), exit_time
+                      COALESCE(economic_risk_dist,initial_risk_dist,ABS(entry_price-sl))*COALESCE(quote_to_account,1), exit_time, snapshot
                FROM bot_trades
                WHERE bot = ? AND status = 'closed' AND pnl IS NOT NULL
-                 AND exit_time >= ?""",
-            (bot_id, since),
-        ).fetchall()
+                 AND exit_time <= ? ORDER BY exit_time DESC,id DESC""",
+            (bot_id, time.time()),
+        )
+        # bot_trades.pnl is the authoritative net closing cash flow. Incomplete,
+        # nonfinite or future closures cannot fill the event floor.
+        for stored in cursor:
+            row=stored[:-1]
+            try:
+                snap=json.loads(stored[-1] or '{}')
+            except (ValueError,TypeError):
+                continue
+            if not isinstance(snap,dict): continue
+            economy=snap.get('economics') if isinstance(snap.get('economics'),dict) else {}
+            costs=snap.get('executionCosts') if isinstance(snap.get('executionCosts'),dict) else {}
+            declared_net=(economy.get('version')==ECONOMICS_VERSION and costs.get('version')==ECONOMICS_VERSION)
+            # v5+ engines write net closing cash flows. Older/unknown ledgers
+            # need an explicit net-costs-v1 contract; gross legacy PnL is excluded.
+            if not declared_net and snap.get('engineVersion') not in (5,6,7,training.ENGINE_VERSION):
+                continue
+            sym,_,qty,entry,sl,pnl,entry_time,_,dist,exit_time=row
+            if any(type(v) not in (int,float) or not math.isfinite(v)
+                   for v in (qty,entry,sl,pnl,entry_time,dist,exit_time)):
+                continue
+            if (qty<=0 or dist<=0 or entry<=0 or qty*dist<=0 or not math.isfinite(qty*dist)
+                    or not math.isfinite(pnl/(qty*dist)) or entry_time>exit_time):
+                continue
+            if reference is None: reference=exit_time
+            if after_by_symbol and exit_time<=after_by_symbol.get(sym,-1):
+                continue
+            if len(rows)>=MIN_EVENT_WINDOW and exit_time<reference-window_days*86400:
+                break
+            rows.append(row)
 
     def _bucket() -> dict:
-        return {"n": 0, "wins": 0, "pnl": 0.0, "sumR": 0.0}
+        return {"n": 0, "wins": 0, "pnl": 0.0, "sumR": 0.0,
+                "weight":0.0,"weight2":0.0,"weightedWins":0.0,"firstAge":None}
 
     by_symbol: dict[str, dict] = {}
     by_dir: dict[tuple[str, str], dict] = {}
     by_hour: dict[int, dict] = {}
     by_exit: dict[str, dict] = {}
-    for sym, direction, qty, entry, sl, pnl, entry_time, exit_reason, initial_dist, exit_time in rows:
-        if after_by_symbol and exit_time <= after_by_symbol.get(sym, -1):
-            continue
+    for age,row in enumerate(rows):
+        sym, direction, qty, entry, sl, pnl, entry_time, exit_reason, initial_dist, exit_time=row
         risk = (initial_dist if initial_dist is not None else abs(entry - sl)) * qty
         r_mult = pnl / risk if risk > 0 else 0.0
         for bucket in (
@@ -204,23 +232,34 @@ def analyze(bot_id: str, window_days: int = WINDOW_DAYS,
             by_hour.setdefault(int(entry_time % 86400 // 3600), _bucket()),
             by_exit.setdefault(exit_reason or "?", _bucket()),
         ):
+            if bucket['firstAge'] is None: bucket['firstAge']=age
+            # Rescale within each bucket: same weighted means without underflow
+            # for a rare symbol after many closes in other markets.
+            weight=EVENT_DECAY**(age-bucket['firstAge'])
             bucket["n"] += 1
             bucket["wins"] += 1 if pnl > 0 else 0
             bucket["pnl"] += pnl
-            bucket["sumR"] += r_mult
+            bucket["sumR"] += weight*r_mult
+            bucket['weight']+=weight
+            bucket['weight2']+=weight*weight
+            bucket['weightedWins']+=weight*(pnl>0)
 
     def _fin(d: dict) -> dict:
         n = d["n"]
         return {
             "n": n,
             "wins": d["wins"],
-            "winRate": round(d["wins"] / n * 100, 1) if n else None,
+            "winRate": round(d['weightedWins'] / d['weight'] * 100, 1) if n else None,
             "pnl": round(d["pnl"], 2),
-            "expectancyR": round(d["sumR"] / n, 3) if n else None,
+            "expectancyR": round(d["sumR"] / d['weight'], 3) if n else None,
+            "effectiveN":round(d['weight']**2/d['weight2'],3) if n else 0,
         }
 
     return {
         "windowDays": window_days,
+        "minEventWindow":MIN_EVENT_WINDOW,"eventDecay":EVENT_DECAY,
+        "weighting":"exponential-by-closed-event-age",
+        "oldestClose":rows[-1][-1] if rows else None,"referenceClose":reference,
         "trades": sum(d["n"] for d in by_symbol.values()),
         "bySymbol": {s: _fin(d) for s, d in by_symbol.items()},
         "byDirection": {f"{s}:{dr}": _fin(d) for (s, dr), d in by_dir.items()},
@@ -376,7 +415,11 @@ def meta_size_multiplier(bot_id,score,validated):
 
 
 def _meta_sgd_step(model: dict, feats: dict[str, float], won: bool, weight: float = 1.0) -> None:
-    """Un paso de descenso de gradiente sobre la pérdida logística."""
+    """R-weighted logistic SGD followed by the L1 proximal operator.
+
+    The intercept is exempt from regularization. Shrink unused coefficients as
+    well as active ones, once per new close; replay receipts prevent repetition.
+    """
     w = model["w"]
     for key in w:
         w[key] *= META_FORGETTING
@@ -384,7 +427,13 @@ def _meta_sgd_step(model: dict, feats: dict[str, float], won: bool, weight: floa
     p = _sigmoid(z)
     err = (1.0 if won else 0.0) - p
     for k, v in feats.items():
-        w[k] = w.get(k, 0.0) + META_LR * weight * (err * v - META_L2 * w.get(k, 0.0))
+        w[k] = w.get(k, 0.0) + META_LR * weight * (err * v - (META_L2 * w.get(k, 0.0) if k!='bias' else 0.0))
+    for k,value in w.items():
+        if k!='bias':
+            w[k]=math.copysign(max(0.0,abs(value)-META_LR*META_L1),value)
+    if model.get('regularizationVersion')!=META_REGULARIZATION_VERSION:
+        model['calibrated']=False
+    model['regularizationVersion']=META_REGULARIZATION_VERSION
 
 
 def meta_gate(bot_id: str, feats: dict[str, float]) -> tuple[bool, float | None, str | None]:
@@ -507,9 +556,9 @@ def meta_learn_new_trades(bot_id: str) -> int:
                FROM bot_trades t
                LEFT JOIN bot_model_processed p ON p.bot=t.bot AND p.trade_id=t.id
                WHERE t.bot = ? AND t.status = 'closed' AND t.pnl IS NOT NULL
-                 AND p.trade_id IS NULL
+                 AND t.exit_time <= ? AND t.entry_time <= t.exit_time AND p.trade_id IS NULL
                ORDER BY t.exit_time, t.id""",
-            (bot_id,),
+            (bot_id,time.time()),
         ).fetchall()
         learned = 0
         for tid, symbol, direction, entry_time, snap, pnl, initial_risk in rows:
@@ -553,6 +602,8 @@ def meta_summary(bot_id: str) -> dict:
         "mode": 'validated' if m.get('calibrated') is True and promotion_allowed(m.get('promotion')) else 'shadow',
         "featureVersion": META_FEATURE_VERSION,
         "forgettingPerClose": META_FORGETTING,
+        "regularization":dict(version=META_REGULARIZATION_VERSION,l1=META_L1,l2=META_L2,interceptPenalized=False),
+        "minEventWindow":MIN_EVENT_WINDOW,
         "topFeatures": [
             {"feature": k, "weight": round(v, 3)} for k, v in top
         ],
