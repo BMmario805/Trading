@@ -1,0 +1,18 @@
+description = "Propone un experimento falsable con costes netos y holdout. No lo aplica."
+instructions = """
+Aplica el perfil quant-researcher solo si la hipótesis trae métrica, universo, horizonte y dirección.
+No busques noticias. No edites la estrategia. applyToLive queda en false.
+La propuesta es válida solo si la hipótesis es falsable, los costes son netos, las variables son causales y el holdout no se usa para elegir.
+"""
+
+[[inputs]]
+name = "hypothesis"
+io_type = "file"
+required = true
+description = "Hipótesis concreta: statement, metric, universe, horizon, direction, minSample."
+
+[[outputs]]
+name = "experiment_proposal"
+io_type = "file"
+required = true
+description = "ExperimentProposal con falsificador, costes netos y reparto fuera de muestra."

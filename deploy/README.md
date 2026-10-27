@@ -33,7 +33,8 @@ duplicar los motores de trading.
 
 ## Operación y límites
 
-- `docker compose ps` y `/api/health` verifican API y tareas de ejecución/riesgo.
+- `docker compose ps` y `/api/health` verifican API, tareas y progreso de los
+  bucles de mesas. Un monitor vivo con latido vencido devuelve estado degradado.
 - Docker reinicia procesos caídos; el vigilante recupera un motor con fallos
   de supervisión persistentes. No reinicia un contenedor detenido manualmente.
 - Copias SQLite diarias en `state/backups`, con las últimas 14 conservadas.
@@ -49,6 +50,70 @@ duplicar los motores de trading.
 
 Referencias: [Always Free](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm),
 [Docker en Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+
+## Ensayo de recuperación sin activar motores
+
+La copia incluye `backend/data.db` y los libros presentes de cripto, forex,
+acciones, laboratorio, MT5, swarm, registro de investigación, coordinación y
+auditoría de decisiones. También conserva los snapshots publicados de
+`.runtime/research-data/<sha256>.json` y comprueba las referencias del registro
+de investigación. Usa la API de backup de SQLite, incorpora transacciones
+confirmadas que sigan en WAL y genera cada libro como un archivo independiente,
+sin necesitar `-wal` ni `-shm`. La consistencia es por libro: una copia mientras
+funcionan los motores no constituye una transacción atómica entre todos ellos.
+Para una migración definitiva hay que detener primero todos los escritores.
+
+Desde la raíz del proyecto, con Python 3.13:
+
+```text
+python deploy/state_bundle.py backup --output <directorio-copias>
+python deploy/state_bundle.py verify --snapshot <directorio-copias>/snapshot-<fecha>
+python deploy/state_bundle.py restore --snapshot <directorio-copias>/snapshot-<fecha> --output <directorio-nuevo-de-ensayo>
+```
+
+`verify` comprueba lista permitida, SHA-256 e integridad SQLite; rechaza rutas
+fuera de la copia, duplicados, enlaces, junctions y archivos adicionales,
+incluidos sidecars no verificados. Los hashes detectan cambios respecto del
+manifiesto; no autentican a su autor. Conservar la copia y el manifiesto en un
+almacenamiento privado fiable. `gemini.env` solo se incluye con
+`--include-gemini`; `mt5-demo.json` y sus credenciales no se exportan.
+El archivo de datasets se limita a 1.024 snapshots, 8 MiB por archivo y 256 MiB
+en conjunto. Superar un límite o perder una referencia aborta la comprobación;
+no se descartan snapshots para lograr una copia aparentemente completa.
+
+`restore` exige un destino que no exista, fuera de la copia, y vuelve a verificar
+los archivos copiados. Crea únicamente un directorio de ensayo: no inicia
+servicios ni cambia la ubicación que utilizan los motores. Si falla una copia,
+el destino parcial no debe utilizarse como estado recuperado.
+
+Antes de una activación manual, comparar saldos, posiciones, reservas e intentos
+pendientes, y verificar la continuidad de los registros de investigación y
+decisiones. Conciliar cualquier estado incierto con su origen antes de admitir
+entradas. Una integridad SQLite correcta no prueba esa conciliación económica.
+Medir y registrar duración de copia/restauración y antigüedad del último estado
+recuperado para fijar los objetivos de recuperación. Las pruebas automatizadas
+usan libros temporales con recibos conocidos; no sustituyen ese ensayo operativo.
+
+## Dependencias y comprobaciones reproducibles
+
+`backend/requirements.lock` fija las versiones directas y transitivas del
+entorno Python 3.13 comprobado en Windows, incluidas las herramientas de prueba.
+`requirements-cloud.txt` reutiliza exactamente ese archivo y conserva el
+marcador que limita MetaTrader a Windows. El Dockerfile usa Python 3.13. No se
+deben actualizar paquetes automáticamente durante un despliegue: una renovación
+del lock exige revisión y repetir las comprobaciones.
+
+El flujo `.github/workflows/ci.yml` define pruebas del backend en Windows y
+Ubuntu con Python 3.13, comprobación de dependencias y construcción/análisis del
+panel con Node 24 y `npm ci`. La ejecución local equivalente, sin reinstalar,
+es `python -m pip check` y `python -m pytest tests -q` dentro de `backend`, más
+`npm run build` y `npm run lint` dentro de `frontend`. Un workflow guardado no
+confirma que GitHub lo haya ejecutado; comprobar su resultado al publicar.
+
+Los tags base de Docker y las imágenes de CI siguen siendo actualizables.
+Para reconstrucción bit a bit hay que fijar además sus digests y conservar los
+artefactos de dependencias de la versión validada. La matriz actual no prueba
+la imagen ARM de Oracle: construirla y ensayarla por separado antes de migrar.
 
 ## Reintentos acotados de capacidad
 

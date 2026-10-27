@@ -71,9 +71,14 @@ TREND_STEP = {
     "trend": 14400,      # 4h
     "meanrev": 86400,    # 1d
     "orb": 900,          # 15m
-    "flow": 3600,
+    "flow": 14400,
     "squeeze": 14400,    # 4h
 }
+
+
+def trend_seconds(bot_id):
+    """One public timeframe for adapters and historical aggregation."""
+    return TREND_STEP[bot_id]
 
 
 def _clip(v: float, lo: float = -1.0, hi: float = 1.0) -> float:

@@ -5,6 +5,7 @@ import { PriceSocket } from '../api'
 import type { DeskState as Desk, DeskCandle as Candle, OpenPositions, DeskRole as KitchenRole } from '../types'
 import LiveSwarmTicker from './LiveSwarmTicker'
 import ResearchPanel from './ResearchPanel'
+import ProfessionalPanel from './ProfessionalPanel'
 import './DeskPanel.css'
 
 const PerformanceReview = lazy(() => import('./PerformanceReview'))
@@ -261,6 +262,7 @@ function DeskPanel({ market }: { market: Desk['id'] }) {
     <LiveSwarmTicker socket={socket} maker={desk.maker} market={market} />
     <OpenPositionsPanel socket={socket} />
     {market === 'crypto' && <ResearchPanel />}
+    {market === 'crypto' && <ProfessionalPanel />}
     <AvailableMarkets desk={desk} />
     <section className="kitchen-activity" aria-label="Últimos procesos registrados"><div className="kitchen-activity-head"><span className="kitchen-activity-icon" aria-hidden="true">⌁</span><div><h2>Recién salido de cocina</h2><p>Lo que está haciendo el equipo.</p></div><span className="kitchen-live-note">Registro del motor</span></div><div className="kitchen-activity-grid">{desk.events.length ? desk.events.slice(0, 3).map(event => <article className={`kitchen-activity-item ${newEvents.has(event.id) ? 'is-new' : ''}`} key={event.id}><div><span className={`kitchen-event-dot state-${event.status}`} /><strong>{event.role}</strong><time>{timeOf(event.at)}</time></div><p>{event.detail}</p><span className={`kitchen-event-status state-${event.status}`}>{statusOf(event.status)}</span></article>) : <p className="kitchen-empty">Todavía no hay decisiones registradas. El equipo está esperando datos.</p>}</div></section>
     <details className="kitchen-notebook" ref={chartDetails} onToggle={event => setNotebookOpen(event.currentTarget.open)}><summary><span className="kitchen-notebook-icon" aria-hidden="true">▤</span><div><strong>El cuaderno de la mesa</strong><span>Mercados, gráficos y todas las decisiones, al detalle.</span></div><span className="kitchen-notebook-chevron" aria-hidden="true">↓</span></summary><div className="kitchen-notebook-body"><div className="kitchen-detail-tabs" role="tablist" aria-label="Detalles de la mesa">{([['market', 'Mercado y candidatos'], ['performance', 'Rendimiento'], ['history', 'Historial de la mesa']] as const).map(([key, label]) => <button key={key} id={`kitchen-tab-${key}`} role="tab" aria-selected={view === key} aria-controls={`kitchen-panel-${key}`} onClick={() => setView(key)}>{label}</button>)}</div>

@@ -1,0 +1,66 @@
+{
+  "capturedAt": 1793040985.173719,
+  "purpose": "Bounded historical exploration only; no future evidence or trading orders",
+  "datasets": [
+    {
+      "symbol": "BTC",
+      "interval": "1d",
+      "status": "captured",
+      "bars": 999,
+      "receipt": {
+        "version": "market-snapshot-v1",
+        "sha256": "de69ad813cb3a967e6f15a1e3bf9351868e0d3ffa45b837b102a4afb5c7bf73f",
+        "artifact": "de69ad813cb3a967e6f15a1e3bf9351868e0d3ffa45b837b102a4afb5c7bf73f.json",
+        "capturedAt": 1793040985.163185,
+        "bars": 999,
+        "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+        "historicalAvailabilityReconstructed": false
+      }
+    },
+    {
+      "symbol": "BTC",
+      "interval": "4h",
+      "status": "captured",
+      "bars": 999,
+      "receipt": {
+        "version": "market-snapshot-v1",
+        "sha256": "52684680f12357cf0d813b595f26d92e048faa06d15b8742a051afdc95d790a1",
+        "artifact": "52684680f12357cf0d813b595f26d92e048faa06d15b8742a051afdc95d790a1.json",
+        "capturedAt": 1793040985.1464262,
+        "bars": 999,
+        "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+        "historicalAvailabilityReconstructed": false
+      }
+    },
+    {
+      "symbol": "ETH",
+      "interval": "1d",
+      "status": "captured",
+      "bars": 999,
+      "receipt": {
+        "version": "market-snapshot-v1",
+        "sha256": "f0886a4f2b6f74b0ed155cc4bec898a51f4ae3c34dac9db1c569e6d566cf9666",
+        "artifact": "f0886a4f2b6f74b0ed155cc4bec898a51f4ae3c34dac9db1c569e6d566cf9666.json",
+        "capturedAt": 1793040985.1726282,
+        "bars": 999,
+        "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+        "historicalAvailabilityReconstructed": false
+      }
+    },
+    {
+      "symbol": "ETH",
+      "interval": "4h",
+      "status": "captured",
+      "bars": 999,
+      "receipt": {
+        "version": "market-snapshot-v1",
+        "sha256": "b4bb282299e389c12152fba8a11cd6d95cbb151bd45421c2e5837e63bd26bd92",
+        "artifact": "b4bb282299e389c12152fba8a11cd6d95cbb151bd45421c2e5837e63bd26bd92.json",
+        "capturedAt": 1793040985.1561847,
+        "bars": 999,
+        "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+        "historicalAvailabilityReconstructed": false
+      }
+    }
+  ]
+}

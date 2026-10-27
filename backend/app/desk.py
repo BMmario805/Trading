@@ -20,10 +20,10 @@ from .flow import chaikin_money_flow
 from .strategy import modulate_flow, resample
 from .economics import planned_trade,ECONOMICS_VERSION
 from .book_stream import BOOKS
-from .spot_orders import partial_quantity
+from .spot_orders import partial_quantity, valid_quantity
 from .desk_maker import DeskMaker, valid_lot
 from .hub import hub
-from . import telemetry, ai_swarm, gpt_quant_agent
+from . import telemetry, ai_swarm, gpt_quant_agent,decision_audit
 
 DB_PATH = Path(__file__).resolve().parents[2]/'.runtime'/'desk.sqlite'
 INITIAL = 1000.0
@@ -64,8 +64,8 @@ CANDLE_SECONDS = 3600
 MAX_HOLD_S = 48*3600
 MAX_NOTIONAL_FRACTION = aggressive.DESK_CAPACITY['maxNotionalFraction']
 MIN_NET_REWARD_RISK = 1.5
-POLICY_VERSION = 'desk-rs-chandelier-1h-v8'
-CASH_POLICY_VERSION = 'desk-cash-aggressive-v2'
+POLICY_VERSION = 'desk-rs-chandelier-1h-v9'
+CASH_POLICY_VERSION = 'desk-cash-guarded-v3'
 MIN_QUOTE_VOLUME = 2_000_000
 RISK_FRACTION = aggressive.DESK_CAPACITY['riskFraction']
 TOTAL_RISK_FRACTION = aggressive.DESK_CAPACITY['totalRiskFraction']
@@ -206,11 +206,7 @@ def size_order(equity, cash, ask, a, info, risk_budget=None, *, fee=FEE,slippage
     if step<=0: raise ValueError('Paso inválido')
     qty=float((Decimal(str(budget/fill))/step).to_integral_value(rounding=ROUND_DOWN)*step)
     filters=info.get('filters',[])
-    minimum=max([float(f.get('minNotional',0)) for f in filters if f['filterType'] in ('MIN_NOTIONAL','NOTIONAL')] or [0])
-    if qty<float(lot.get('minQty',0)) or qty*fill<minimum or qty<=0:
-        return None
-    max_qty=float(lot.get('maxQty',0))
-    if max_qty>0 and qty>max_qty: return None
+    if not valid_quantity(qty,fill,filters,order_type='MARKET'): return None
     target=fill+target_atr*a
     plan=planned_trade(fill,stop,target,qty,fee_rate=fee,exit_slippage=slippage)
     if not plan['viable'] or plan['netRewardRisk']<min_net_rr:
@@ -257,6 +253,7 @@ class Desk:
             day=int(time.time()//86400),dayEquity=INITIAL,dailyStopped=False,roles={},lastScan=0)
         self.state.setdefault('positions',[self.state['position']] if self.state.get('position') else [])
         self.state.setdefault('cooldowns',{})
+        self.state.setdefault('controlGeneration',0)
         if self.feed is not None and row is None:
             self.state.update(initial=100.0,cash=100.0,dayEquity=100.0)
         self.task=None
@@ -267,6 +264,8 @@ class Desk:
         self.last_risk_data=None
         self.risk_error=None
         self.cycle_duration=0.0
+        self.progress=dict(startedAt=time.time(),cycleStartedAt=None,cycleCompletedAt=None,
+                           riskStartedAt=None,riskCompletedAt=None)
         self.chart=[]
         self.last_curve=0
         self.last_error=None
@@ -328,6 +327,36 @@ class Desk:
     def initial(self):
         return self.state.get('initial',INITIAL)
 
+    def risk_conversion(self, now=None):
+        """Current conversion is distinct from the historical funding rate."""
+        now=time.time() if now is None else now
+        conversion=self.state.get('riskConversion') or self.state.get('funding') or {}
+        try:
+            rate=float(conversion.get('quotePerEuro',conversion.get('netQuotePerEuro',0)))
+            age=now-float(conversion.get('at',0))
+            return rate if math.isfinite(rate) and rate>0 and -5<=age<=120 else None
+        except (TypeError,ValueError,OverflowError): return None
+
+    def refresh_conversion(self,data):
+        if self.feed is None:
+            quote=self.quote('EURUSDT',data)
+            if not quote: return
+            # EUR sold to obtain quote currency to cover the loss, including costs.
+            rate=quote[0]*(1-self.slippage)*(1-self.fee)
+            at=data['books']['EURUSDT'].get('receivedAt',data['at'])
+            source='Binance EURUSDT bid; paper conversion including costs'
+        else:
+            rate=self.feed.quote_per_euro
+            at=getattr(self.feed,'quote_per_euro_at',None)
+            if not rate or at is None: return
+            source='Yahoo EURUSD reference; paper conversion'
+        if not math.isfinite(rate) or rate<=0 or not -5<=time.time()-at<=120: return
+        self.state['riskConversion']=dict(quotePerEuro=rate,at=at,source=source,currency=self.currency)
+        # Register the existing virtual allocation; never reset cash or add funds.
+        if not self.state.get('funding'):
+            self.state['funding']=dict(currency='EUR',amount=self.initial/rate,
+                netQuotePerEuro=rate,at=at,source=source,virtual=True,registeredExistingBook=True)
+
     async def reset(self):
         """Nueva sesión paper financiada con 100 EUR; conserva el libro anterior."""
         if self.feed:
@@ -357,6 +386,7 @@ class Desk:
                 con.execute('DELETE FROM equity')
                 con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(state),))
                 con.execute('INSERT INTO equity VALUES (?,?,?)',(int(now),initial,initial))
+            state['controlGeneration']=self.state.get('controlGeneration',0)+1
             self.state=state
             self.last_data=data
             self.chart=[]
@@ -440,6 +470,9 @@ class Desk:
                     qty=original_qty,notional=p.get('originalNotional',p['notional']),
                     fee=p.get('originalFee',p['fee']),averageExitPrice=average_exit,
                     finalExitQty=p['qty'],exitFee=p['qty']*exit_price*fee+sum(e['fee'] for e in partials),exitReason=reason)
+        if closed.get('candidateId'):
+            closed['attributionPending']=True
+            closed['exitSlippageEstimate']=p['qty']*max(0,bid-exit_price)
         self.state['cash']+=proceeds
         self.state['positions'].remove(p)
         seconds={'15m':900,'1h':3600,'4h':14400}.get(p.get('candleInterval'),900)
@@ -454,7 +487,43 @@ class Desk:
             self.focus_position()
             raise
         self.role('Risk','closed',f'{reason}; resultado neto {pnl:+.2f} {self.currency}')
+        self.record_closed_outcome(closed)
         telemetry.changed(self.desk_id)
+
+    def record_closed_outcome(self,closed):
+        if not closed.get('candidateId') or not closed.get('attributionPending'): return
+        try:
+            arm=closed.get('observedArm','rules_local')
+            path=decision_audit.storage_for(self.db_path)
+            # Binding IA is a separate arm. A missing decision cannot acquire an invented outcome.
+            decision_audit.record_outcome(closed['candidateId'],arm,
+                net_pnl=closed['pnl'],currency=self.currency,
+                initial_risk=closed.get('initialRisk',closed['risk']),
+                fees=closed.get('fee',0)+closed.get('exitFee',0),
+                slippage=closed.get('entrySlippage',0)+closed.get('exitSlippageEstimate',0),
+                carry=0.0,outcome_type='observed-paper',observed_at=closed['exitTime'],db_path=path)
+            closed['attributionPending']=False
+            closed.pop('attributionRetryAfter',None)
+            closed.pop('attributionError',None)
+            with self.connect() as con:
+                con.execute('UPDATE trades SET payload=? WHERE entry_key=?',
+                            (json.dumps(closed),closed['entryKey']))
+        except (OSError,sqlite3.Error,ValueError,TypeError,KeyError):
+            # The trading book is authoritative. Keep the persisted outbox for retry.
+            self.state['attributionError']='Pending observed outcome; protection remains active'
+            closed['attributionAttempts']=closed.get('attributionAttempts',0)+1
+            closed['attributionRetryAfter']=time.time()+min(3600,30*2**min(6,closed['attributionAttempts']))
+            closed['attributionError']='Outcome or its decision receipt is unavailable'
+            try:
+                with self.connect() as con:
+                    con.execute('UPDATE trades SET payload=? WHERE entry_key=?',
+                                (json.dumps(closed),closed['entryKey']))
+            except (OSError,sqlite3.Error): pass
+
+    def reconcile_attribution(self):
+        with self.connect() as con:
+            row=con.execute("SELECT payload FROM trades WHERE json_extract(payload,'$.attributionPending')=1 AND COALESCE(json_extract(payload,'$.attributionRetryAfter'),0)<=? ORDER BY id LIMIT 1",(time.time(),)).fetchone()
+        if row:self.record_closed_outcome(json.loads(row[0]))
 
     def take_partial(self,p,bid,data,*,qty_override=None,price_override=None,persist=True):
         """Una realización por entrada; estado y flujos se confirman juntos."""
@@ -684,7 +753,9 @@ class Desk:
                         return candidate['symbol'],None
             download_pool=[c for c in candidates if c['eligible']]
             for offset in range(0,len(download_pool),SCAN_BATCH_SIZE):
+                self.progress['scanProgressAt']=time.time()
                 prefetched.update(await asyncio.gather(*(download(c) for c in download_pool[offset:offset+SCAN_BATCH_SIZE])))
+                self.progress['scanProgressAt']=time.time()
             if self.feed is None and self.task is not None:
                 # Un libro reciente compartido por el lote; el monitor de riesgo
                 # sigue teniendo su tarea independiente y su tiempo máximo.
@@ -801,6 +872,26 @@ class Desk:
         else:
             candidate.pop('retryAfter',None)
             candidate.pop('errorCount',None)
+
+    def audit_candidate(self,candidate,order,economics,rate,bar):
+        """Prospective receipt; inability to record blocks entries, never exits."""
+        path=decision_audit.storage_for(self.db_path)
+        try:
+            candidate_id=decision_audit.record_candidate('desk:'+self.desk_id,candidate['symbol'],'long',
+                strategy_version=self.policy_version,cost_version=ECONOMICS_VERSION,
+                risk_policy=aggressive.CAPACITY_VERSION,economics=dict(economics,planned=order['economics']),
+                cost_model=order['costPolicy'],risk_eur=order['risk']/rate,notional_eur=order['notional']/rate,
+                candidate_key=f'{candidate["symbol"]}:{bar}:{self.state["controlGeneration"]}',db_path=path)
+            if candidate_id is None: raise ValueError('Daily attribution budget exhausted')
+            decision_audit.record_decision(candidate_id,'rules_local',True,size_multiplier=1.0,
+                execution_mode='shadow',db_path=path)
+            candidate['candidateId']=candidate_id
+            economics['candidateId']=candidate_id
+            return candidate_id
+        except (OSError,ValueError,sqlite3.Error) as exc:
+            self.state['attributionError']=type(exc).__name__
+            self.evaluated(candidate,'blocked','Registro de la propuesta no disponible; entrada bloqueada')
+            return None
 
     async def selector_setup(self,candidate,data,prefetched):
         """Solo métricas públicas de setups viables; no entrega saldo ni posiciones al modelo."""
@@ -937,6 +1028,8 @@ class Desk:
         return round(max(0,max(correlations)),4) if correlations else None
 
     async def review_candidate(self,candidate,data,prefetched=None,prepared=None):
+        self.progress['scanProgressAt']=time.time()
+        generation=self.state['controlGeneration']
         symbol=candidate['symbol']
         meta=data['metadata'].get(symbol,{})
         base=meta.get('baseAsset','')
@@ -1007,14 +1100,27 @@ class Desk:
                   f'Señal confirmada: {analysis.get("strategy") or "continuidad"}' if price_ok else 'Esperando recuperación o tendencia confirmada, RSI 35–78 y extensión moderada')
         existing=next((p for p in self.state['positions'] if p['symbol']==symbol),None)
         if existing:
+            expected_key=existing['entryKey']
             if self.feed is None and existing.get('candleInterval')=='1h':
                 await self.candidate_candles(sym,'4h')
-            self.role('Size','managing',f'Asignación existente: {existing["notional"]:.2f} USDT; no se solicita otro lote')
-            if not analysis['trend'] and analysis['close']<analysis['ema50'] - 2.0 * analysis['atr']:
-                self.close_position(bid,'Tape detecta pérdida de estructura',symbol)
-                self.evaluated(candidate,'waiting','Posición cerrada por pérdida de estructura')
-                self.role('Exec','waiting','Posición cerrada por cambio de tendencia')
-                return
+            if isinstance(self.task,asyncio.Task):
+                data=await self.market_books([symbol],data)
+            async with self.lock:
+                existing=next((p for p in self.state['positions'] if p['entryKey']==expected_key),None)
+                if existing is None:
+                    self.evaluated(candidate,'waiting','La posición cambió durante el análisis; se conserva su gestión actual')
+                    return
+                self.role('Size','managing',f'Asignación existente: {existing["notional"]:.2f} {self.currency}; no se solicita otro lote')
+                if not analysis['trend'] and analysis['close']<analysis['ema50'] - 2.0 * analysis['atr']:
+                    frames=[frame for frame in (data,self.last_risk_data,self.last_data) if frame and self.quote(symbol,frame)]
+                    frame=max(frames,key=lambda f:f['at']) if frames else None
+                    if frame is None or frame['at']<existing.get('quoteAt',0):
+                        self.evaluated(candidate,'blocked','Salida de estructura pendiente de una cotización actual; stops activos')
+                        return
+                    self.close_position(self.quote(symbol,frame)[0],'Tape detecta pérdida de estructura',symbol)
+                    self.evaluated(candidate,'waiting','Posición cerrada por pérdida de estructura')
+                    self.role('Exec','waiting','Posición cerrada por cambio de tendencia')
+                    return
             self.role('Exec','managing',f'{symbol} ya está abierto; no se duplica')
             self.evaluated(candidate,'managing','Posición abierta: se mantiene su gestión de riesgo')
             return
@@ -1061,7 +1167,10 @@ class Desk:
             self.evaluated(candidate,'blocked','Tamaño superior a la liquidez publicada al mejor ask')
             self.role('Exec','blocked','Tamaño superior a la liquidez publicada al mejor ask')
             return
-        rate=(self.state.get('funding') or {}).get('netQuotePerEuro')
+        rate=self.risk_conversion()
+        if not rate:
+            self.evaluated(candidate,'blocked','Conversión EUR reciente pendiente para el riesgo agregado')
+            return
         economics=gpt_quant_agent.proposal_context(self,order)
         if self.feed is None:
             economics.update(strategy=analysis.get('strategy'),symbol=base,
@@ -1075,9 +1184,11 @@ class Desk:
             self.evaluated(candidate,'blocked',audit['rationale'])
             self.role('Risk','blocked',audit['rationale'])
             return
+        candidate_id=self.audit_candidate(candidate,order,economics,rate,analysis['bar'])
+        if candidate_id is None: return
         ai_swarm.request_entry_audit(base,'long',economics,
             order['risk']/rate if rate else None,order['notional']/rate if rate else None)
-        clearance=ai_swarm.execution_clearance(base,'long')
+        clearance=ai_swarm.execution_clearance(base,'long',candidate_id=candidate_id)
         candidate['swarmClearance']=clearance
         if clearance['binding']:
             if not clearance['allowed'] or clearance.get('venue')!='spot' or not audit['approved']:
@@ -1103,8 +1214,8 @@ class Desk:
                 self.evaluated(candidate,'blocked','El tamaño auditado no cumple el lote mínimo')
                 return
             order['policyVersion']=self.policy_version
-        if self.feed and not rate:
-            self.evaluated(candidate,'blocked','Conversión EUR/USD reciente pendiente para el riesgo agregado')
+        if not rate:
+            self.evaluated(candidate,'blocked','Conversión EUR reciente pendiente para el riesgo agregado')
             return
         derivatives=None
         if self.feed is None and isinstance(self.task, asyncio.Task):
@@ -1115,87 +1226,149 @@ class Desk:
                 raise
             except Exception:
                 derivatives=None
-        reservation=None
-        if rate:
-            decision=portfolio_risk.assess(symbol,'long',order['risk']/rate,order['notional']/rate,
-                                           source='desk',bot_id='desk' if self.desk_id=='crypto' else self.desk_id,reserve=True)
-            self.state['portfolioDecision']={k:v for k,v in decision.items() if k!='token'}
-            if not decision['allowed']:
-                self.evaluated(candidate,'blocked',decision['reason'])
-                self.role('Risk','blocked',decision['reason'])
+        # Network work ends before the commit lock. A pause/resume or reset
+        # invalidates this proposal even if the desk is enabled again.
+        if isinstance(self.task,asyncio.Task):
+            data=await self.market_books([symbol],data)
+        async with self.lock:
+            if (generation!=self.state['controlGeneration'] or not self.state['enabled']
+                    or self.state['dailyStopped'] or self.state.get('flatten')):
+                self.evaluated(candidate,'blocked','La decisión caducó por pausa, cierre o cambio de sesión')
                 return
-            reservation=decision.get('token')
-        position=dict(order,symbol=symbol,entryKey=key,entryTime=time.time(),quoteAt=data['at'],atr=analysis['atr'],
-                      initialDist=order['entry']-order['sl'],best=order['entry'],lastBid=bid,status='open',
-                      marketFilters=meta.get('filters',[]),
-                      evidence=dict(tape=self.state['tape'],wire=identity,selection=self.state['selection'],catalystGate=gate))
-        position['quantAudit']=audit
-        position['strategy']=analysis.get('strategy')
-        regime=(derivatives or {}).get('regime') or {}
-        adjustment=regime.get('flowAdjustment') or 0.0
-        cmf=(chaikin_money_flow(analysis['rows']) or [None])[-1]
-        position['entryContext']=dict(extension_atr=extension,spread_to_atr=(ask-bid)/analysis['atr'],
-            cmf20=cmf,flowAdjustment=adjustment if isinstance(adjustment,(int,float)) and math.isfinite(adjustment) else 0.0,
-            rsScore=candidate.get('rsScore'),rsPercentile=candidate.get('rsPercentile'))
-        if isinstance(derivatives, dict):
-            if isinstance(derivatives.get('fundingRate'), (int, float)):
-                position['entryContext']['funding']=derivatives['fundingRate']
-            if isinstance(derivatives.get('oiChange1hPct'), (int, float)):
-                position['entryContext']['oi_delta']=derivatives['oiChange1hPct']
-        position['confirmations']=[dict(system='Régimen',vote=float(bool(analysis.get('higherRegimeConfirmed')))),
-            dict(system='Disparador de precio',vote=float(bool(analysis.get('entryAllowed')))),
-            dict(system='Flujo CMF',vote=modulate_flow(cmf or 0.0, position['entryContext']['flowAdjustment']))]
-        maker_route=(clearance['binding'] and clearance.get('profile')=='maker') or master.get('requireMakerEntry',False)
-        if maker_route and (self.feed is not None or self.task is None):
-            portfolio_risk.release(reservation)
-            self.evaluated(candidate,'blocked','La asignación requiere una entrada Post-Only con cola observada')
-            return
-        if (self.feed is None and self.task is not None and (maker_route or analysis.get('strategy') in ('trend-pullback','recovery'))
-                and (maker_route or key not in self.state.get('makerFallback',{}))):
-            try:
-                posted=self.maker.post(position,'buy',position['qty'])
-            except BaseException:
-                portfolio_risk.release(reservation)
-                raise
-            if posted:
-                portfolio_risk.release(reservation)
-                self.evaluated(candidate,'pending','Orden limitada simulada pendiente; espera operaciones agresoras observadas')
+            if (len(self.state['positions'])>=MAX_OPEN_POSITIONS
+                    or any(p['symbol']==symbol for p in self.state['positions'])
+                    or self.maker.pending_entry()
+                    or self.state['cooldowns'].get(symbol,0)>time.time()):
+                self.evaluated(candidate,'blocked','Cupo, posición, orden pendiente o espera cambiaron durante el análisis')
                 return
-            if maker_route or self.maker.last_reject=='cvd':
-                portfolio_risk.release(reservation)
-                reason=('Flujo taker vendiendo contra la compra limitada (CVD < -0.15)' if self.maker.last_reject=='cvd'
-                        else 'El perfil maker requiere una cola válida; no se sustituye por mercado')
-                self.evaluated(candidate,'blocked',reason)
-                self.role('Exec','blocked',reason)
+            q=self.quote(symbol,data)
+            rate=self.risk_conversion()
+            if (q is None or rate is None or (isinstance(self.task,asyncio.Task)
+                    and not 0<=time.time()-data.get('at',0)<=2)):
+                self.evaluated(candidate,'blocked','Cotización o conversión caducada antes de confirmar la entrada')
                 return
-        self.state['cash']-=order['notional']+order['fee']
-        self.state['positions'].append(position)
-        self.state['position']=position
-        try:
+            bid,ask=q
+            if not price_allowed(analysis,ask) or not self.market_quality(symbol,data)['eligible']:
+                self.evaluated(candidate,'blocked','El precio o la calidad cambiaron antes de confirmar')
+                return
             with self.connect() as con:
-                con.execute('INSERT INTO trades(entry_key,payload) VALUES (?,?)',(key,json.dumps(position)))
-                con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
-        except Exception:
-            self.state['positions'].remove(position)
-            self.state['cash']+=order['notional']+order['fee']
-            self.focus_position()
-            raise
-        finally:
-            portfolio_risk.release(reservation)
-        self.role('Exec','executed',f'Compra SIMULADA de {base}; comisión y deslizamiento incluidos')
-        self.evaluated(candidate,'executed','Operación simulada abierta; stop, objetivo, comisión y deslizamiento aplicados')
-        self.role('Risk','managing','Stop y objetivo establecidos al abrir')
-        telemetry.changed(self.desk_id)
+                duplicate=con.execute('SELECT 1 FROM trades WHERE entry_key=?',(key,)).fetchone()
+            if duplicate:
+                self.evaluated(candidate,'blocked','Esta vela ya produjo una operación; no se duplica')
+                return
+            gate=gemini_agent.catalyst_gate(base,'long')
+            clearance=ai_swarm.execution_clearance(base,'long',candidate_id=candidate_id)
+            if not gate['allowed']:
+                self.evaluated(candidate,'blocked','El veto contextual cambió antes de confirmar la entrada')
+                return
+            if clearance['binding'] and (not clearance['allowed'] or clearance.get('venue')!='spot'
+                    or type(clearance.get('sizeMultiplier')) not in (int,float)
+                    or not math.isfinite(clearance['sizeMultiplier']) or not 0<clearance['sizeMultiplier']<=1
+                    or any(type(clearance.get(k)) not in (int,float) or not math.isfinite(clearance[k])
+                           or clearance[k]<=0 for k in ('maxRiskEUR','maxNotionalEUR'))):
+                self.evaluated(candidate,'blocked',clearance.get('reason') or 'Quorum o presupuesto ya no válidos')
+                return
+            open_risk=sum(max(0,p['notional']+p['fee']-p['qty']*p['sl']*(1-self.costs(p)[1])*(1-self.costs(p)[0])) for p in self.state['positions'])
+            risk_budget=min(order['risk'],max(0,self.equity()*TOTAL_RISK_FRACTION*master.get('maxExposureMultiplier',1.0)-open_risk),
+                            self.equity()*RISK_FRACTION*master.get('maxExposureMultiplier',1.0))
+            if clearance['binding']:
+                risk_budget=min(risk_budget,clearance['maxRiskEUR']*rate*clearance['sizeMultiplier'],
+                                self.equity()*audit['adjusted_risk_fraction'])
+            equity=self.equity()
+            nominal_cap=min(order['notional'],equity*MAX_NOTIONAL_FRACTION)
+            if clearance['binding']:
+                nominal_cap=min(nominal_cap,clearance['maxNotionalEUR']*rate*clearance['sizeMultiplier'])
+            order=size_order(equity,self.state['cash'],ask,analysis['atr'],meta,risk_budget,
+                fee=self.fee,slippage=self.slippage,partial=self.feed is None,min_net_rr=self.min_net_rr,
+                notional_fraction=nominal_cap/equity if equity>0 else 0)
+            available=float(data['books'][symbol].get('askQty',0))
+            if not order or not math.isfinite(available) or available<=0 or order['qty']>available*.1:
+                self.evaluated(candidate,'blocked','El presupuesto, filtros o liquidez cambiaron antes de confirmar')
+                return
+            order['policyVersion']=self.policy_version
+            reservation=None
+            if rate:
+                decision=portfolio_risk.assess(symbol,'long',order['risk']/rate,order['notional']/rate,
+                                               source='desk',bot_id='desk' if self.desk_id=='crypto' else self.desk_id,reserve=True)
+                self.state['portfolioDecision']={k:v for k,v in decision.items() if k!='token'}
+                if not decision['allowed']:
+                    self.evaluated(candidate,'blocked',decision['reason'])
+                    self.role('Risk','blocked',decision['reason'])
+                    return
+                reservation=decision.get('token')
+            position=dict(order,symbol=symbol,entryKey=key,entryTime=time.time(),quoteAt=data['at'],atr=analysis['atr'],
+                          initialDist=order['entry']-order['sl'],best=order['entry'],lastBid=bid,status='open',
+                          marketFilters=meta.get('filters',[]),
+                          evidence=dict(tape=self.state['tape'],wire=identity,selection=self.state['selection'],catalystGate=gate))
+            position['quantAudit']=audit
+            position['candidateId']=candidate_id
+            position['observedArm']='rules_plus_ai' if clearance['binding'] else 'rules_local'
+            position['initialRisk']=order['risk']
+            position['entrySlippage']=max(0,order['entry']-ask)*order['qty']
+            position['strategy']=analysis.get('strategy')
+            regime=(derivatives or {}).get('regime') or {}
+            adjustment=regime.get('flowAdjustment') or 0.0
+            cmf=(chaikin_money_flow(analysis['rows']) or [None])[-1]
+            position['entryContext']=dict(extension_atr=extension,spread_to_atr=(ask-bid)/analysis['atr'],
+                cmf20=cmf,flowAdjustment=adjustment if isinstance(adjustment,(int,float)) and math.isfinite(adjustment) else 0.0,
+                rsScore=candidate.get('rsScore'),rsPercentile=candidate.get('rsPercentile'))
+            if isinstance(derivatives, dict):
+                if isinstance(derivatives.get('fundingRate'), (int, float)):
+                    position['entryContext']['funding']=derivatives['fundingRate']
+                if isinstance(derivatives.get('oiChange1hPct'), (int, float)):
+                    position['entryContext']['oi_delta']=derivatives['oiChange1hPct']
+            position['confirmations']=[dict(system='Régimen',vote=float(bool(analysis.get('higherRegimeConfirmed')))),
+                dict(system='Disparador de precio',vote=float(bool(analysis.get('entryAllowed')))),
+                dict(system='Flujo CMF',vote=modulate_flow(cmf or 0.0, position['entryContext']['flowAdjustment']))]
+            maker_route=(clearance['binding'] and clearance.get('profile')=='maker') or master.get('requireMakerEntry',False)
+            if maker_route and (self.feed is not None or self.task is None):
+                portfolio_risk.release(reservation)
+                self.evaluated(candidate,'blocked','La asignación requiere una entrada Post-Only con cola observada')
+                return
+            if (self.feed is None and self.task is not None and (maker_route or analysis.get('strategy') in ('trend-pullback','recovery'))
+                    and (maker_route or key not in self.state.get('makerFallback',{}))):
+                try:
+                    posted=self.maker.post(position,'buy',position['qty'])
+                except BaseException:
+                    portfolio_risk.release(reservation)
+                    raise
+                if posted:
+                    portfolio_risk.release(reservation)
+                    self.evaluated(candidate,'pending','Orden limitada simulada pendiente; espera operaciones agresoras observadas')
+                    return
+                if maker_route or self.maker.last_reject=='cvd':
+                    portfolio_risk.release(reservation)
+                    reason=('Flujo taker vendiendo contra la compra limitada (CVD < -0.15)' if self.maker.last_reject=='cvd'
+                            else 'El perfil maker requiere una cola válida; no se sustituye por mercado')
+                    self.evaluated(candidate,'blocked',reason)
+                    self.role('Exec','blocked',reason)
+                    return
+            self.state['cash']-=order['notional']+order['fee']
+            self.state['positions'].append(position)
+            self.state['position']=position
+            try:
+                with self.connect() as con:
+                    con.execute('INSERT INTO trades(entry_key,payload) VALUES (?,?)',(key,json.dumps(position)))
+                    con.execute("INSERT OR REPLACE INTO state VALUES ('desk',?)",(json.dumps(self.state),))
+            except Exception:
+                self.state['positions'].remove(position)
+                self.state['cash']+=order['notional']+order['fee']
+                self.focus_position()
+                raise
+            finally:
+                portfolio_risk.release(reservation)
+            self.role('Exec','executed',f'Compra SIMULADA de {base}; comisión y deslizamiento incluidos')
+            self.evaluated(candidate,'executed','Operación simulada abierta; stop, objetivo, comisión y deslizamiento aplicados')
+            self.role('Risk','managing','Stop y objetivo establecidos al abrir')
+            telemetry.changed(self.desk_id)
 
     async def cycle(self):
+        self.progress['cycleStartedAt']=time.time()
         started=time.monotonic()
         data=await self.market_snapshot()
         async with self.lock:
             self.last_data=data
-            if self.feed and self.feed.quote_per_euro and not self.state.get('funding'):
-                rate=self.feed.quote_per_euro
-                self.state['funding']=dict(currency='EUR',amount=self.initial/rate,netQuotePerEuro=rate,
-                                           at=time.time(),source='Yahoo EURUSD; cuenta inicial 100 USD')
+            self.refresh_conversion(data)
             self.manage(data)
             scan_due=(self.state['enabled'] or self.state['selected']) and time.time()-self.state['lastScan']>=SCAN_INTERVAL_S
             if scan_due:
@@ -1211,18 +1384,24 @@ class Desk:
             self.save()
             self.last_error=None
             if scan_due: self.cycle_duration=time.monotonic()-started
+            self.progress['cycleCompletedAt']=time.time()
 
     async def risk_cycle(self):
+        self.progress['riskStartedAt']=time.time()
         symbols=list({p['symbol'] for p in self.state['positions']} | {o['symbol'] for o in self.maker.orders})
         if not symbols:
             self.risk_error=None
+            self.progress['riskCompletedAt']=time.time()
+            self.reconcile_attribution()
             return
         data=await self.market_books(symbols,self.last_data or {})
         async with self.lock:
             self.last_risk_data=data
             self.manage(data)
+            self.reconcile_attribution()
             self.risk_error=None
             self.save()
+            self.progress['riskCompletedAt']=time.time()
 
     async def run_risk(self):
         while True:
@@ -1246,12 +1425,17 @@ class Desk:
 
     async def control(self,action):
         async with self.lock:
+            if action not in ('start','pause','close'): raise ValueError('Acción inválida')
+            if action in ('pause','close'):
+                self.maker.reconcile(self.last_risk_data or self.last_data or {},cutoff=time.time())
             if action=='start': self.state['enabled']=not self.state['dailyStopped']
             elif action=='pause': self.state['enabled']=False
             elif action=='close':
                 self.state['enabled']=False
                 self.state['flatten']=True
-            else: raise ValueError('Acción inválida')
+            self.state['controlGeneration']+=1
+            if action in ('pause','close'):
+                self.maker.cancel_entries()
             self.save()
         return self.public()
 
@@ -1297,6 +1481,9 @@ class Desk:
                                 selectorCoverage=self.state.get('selectorCoverage'),catalystGate='fresh-opposing-catalyst-v2',
                                 strategies=['trend-pullback','breakout','recovery'],validated=False),
                     monitoring=dict(riskIndependent=True,riskError=self.risk_error,
+                                    progress=dict(self.progress),riskConversion=self.state.get('riskConversion'),
+                                    riskConversionFresh=self.risk_conversion() is not None,
+                                    attributionError=self.state.get('attributionError'),
                                     reviewedMarkets=sum(c.get('checkedAt',0)>=time.time()-self.candle_seconds for c in candidates if c['eligible']),
                                     eligibleMarkets=eligible,
                                     quoteAt=(self.last_risk_data or {}).get('at'),scanDurationSeconds=round(self.cycle_duration,3),

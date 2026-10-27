@@ -236,8 +236,14 @@ class ProbationEngineTests(unittest.TestCase):
         self.assertEqual(mt5_demo.STATE['scan']['blockers'],[dict(reason='Sin señal nueva de entrada',count=1)])
 
     def test_validated_demo_pair_uses_normal_budget_and_threshold(self):
+        from app.mt5_policy import EXECUTION_POLICY_VERSION
+        from app.mt5_risk import RISK_MODEL_VERSION
+        from app.validation import promotion_decision
         mt5_demo.save(self.engine.owner+'params:scalper/XAUUSD', dict(
             applied=True, engineVersion=training.ENGINE_VERSION, brokerReplayVersion=broker_replay.VERSION,
+            executionPolicyVersion=EXECUTION_POLICY_VERSION,riskModelVersion=RISK_MODEL_VERSION,executionEquivalent=True,
+            promotion=promotion_decision(checks_passed=True,independent_future=True,execution_equivalent=True,
+                                         costs_verified=True,experiment_id='test-future',evidence_id='test-evidence'),
             source=dict(provider='mt5',account=self.engine.owner,symbol='XAUUSD'),params=dict(entryThreshold=.5)))
         prepare, _ = self.cycle(score=.51)
         prepare.assert_called_once()
@@ -248,6 +254,17 @@ class ProbationEngineTests(unittest.TestCase):
             applied=True,engineVersion=training.ENGINE_VERSION,params=dict(entryThreshold=.5)))
         prepare, _ = self.cycle(score=.8)
         self.assertEqual(prepare.call_args.kwargs['risk_mult'], learning.PROBATION_SIZE)
+
+    def test_current_historical_replay_without_promotion_still_uses_probation(self):
+        from app.mt5_policy import EXECUTION_POLICY_VERSION
+        from app.mt5_risk import RISK_MODEL_VERSION
+        mt5_demo.save(self.engine.owner+'params:scalper/XAUUSD', dict(
+            applied=True,engineVersion=training.ENGINE_VERSION,brokerReplayVersion=broker_replay.VERSION,
+            executionPolicyVersion=EXECUTION_POLICY_VERSION,riskModelVersion=RISK_MODEL_VERSION,
+            executionEquivalent=False,historicalPassed=True,
+            source=dict(provider='mt5',account=self.engine.owner,symbol='XAUUSD'),params=dict(entryThreshold=.5)))
+        prepare,_=self.cycle(score=.8)
+        self.assertEqual(prepare.call_args.kwargs['risk_mult'],learning.PROBATION_SIZE)
 
     def test_unreconciled_virtual_budget_blocks_entries_but_keeps_management(self):
         with mt5_performance.connection() as con:

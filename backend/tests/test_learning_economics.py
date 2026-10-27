@@ -7,15 +7,24 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock,patch
 
-from app import bots, learning, training, portfolio_risk
+from app import bots, learning, training, portfolio_risk, experiments, fx_rates
+from app.validation import promotion_decision
+
+def forward_contract():
+    return promotion_decision(checks_passed=True, independent_future=True, execution_equivalent=True,
+                              costs_verified=True, experiment_id="synthetic-experiment", evidence_id="synthetic-evidence")
+
+def oos_event(identity, features, r):
+    return dict(id=str(identity),features=features,r=r)
 
 
 class EconomicDatabaseTests(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
+        self.stack.enter_context(patch.object(fx_rates,'get',side_effect=lambda currency:dict(rate={'USDT':.9,'USD':1,'JPY':.005,'EUR':1}[currency],at=bots.time.time(),source='synthetic unit conversion')))
         self.addCleanup(self.stack.close)
         folder = self.stack.enter_context(tempfile.TemporaryDirectory())
-        for module in (bots, learning, training):
+        for module in (bots, learning, training, experiments):
             self.stack.enter_context(patch.object(module, 'DB_PATH', Path(folder) / 'economics.db'))
         for cache in (learning._models, learning._policies, learning._edges):
             self.stack.enter_context(patch.dict(cache, {}, clear=True))
@@ -35,7 +44,7 @@ class EconomicDatabaseTests(unittest.TestCase):
     def validation(self, symbol, trained_at):
         with training._conn() as con:
             con.execute('INSERT OR REPLACE INTO bot_params VALUES (?,?,?,?,?,?)',
-                        ('scalper', symbol, '{}', json.dumps(dict(engineVersion=training.ENGINE_VERSION)), 1, trained_at))
+                        ('scalper', symbol, '{}', json.dumps(dict(engineVersion=training.ENGINE_VERSION,promotion=forward_contract())), 1, trained_at))
 
 
 class LearningReceiptTests(EconomicDatabaseTests):
@@ -69,7 +78,7 @@ class LearningReceiptTests(EconomicDatabaseTests):
         self.assertEqual(after['featureVersion'],5)
 
     def test_oos_warm_start_is_attenuated_persistent_idempotent_and_does_not_mature_live_gate(self):
-        batch=[({'bias':1.0},1.0)]
+        batch=[oos_event('a',{'bias':1.0},1.0)]
         self.assertEqual(learning.warm_start_from_oos('scalper',batch),1)
         model=learning._load_model('scalper')
         self.assertAlmostEqual(model['w']['bias'],.30*learning.META_LR*.5)
@@ -92,7 +101,7 @@ class LearningReceiptTests(EconomicDatabaseTests):
         def fail(model,feats,*args):
             if feats.get('fail'):raise RuntimeError('interrumpido')
             real(model,feats,*args)
-        batch=[({'bias':1},1),({'fail':1},-1)]
+        batch=[oos_event('a',{'bias':1},1),oos_event('b',{'fail':1},-1)]
         with patch.object(learning,'_meta_sgd_step',side_effect=fail),self.assertRaises(RuntimeError):
             learning.warm_start_from_oos('trend',batch)
         with learning._conn() as con:
@@ -100,7 +109,7 @@ class LearningReceiptTests(EconomicDatabaseTests):
             self.assertEqual(con.execute("SELECT COUNT(*) FROM bot_oos_processed WHERE bot='trend'").fetchone()[0],0)
 
     def test_reset_removes_oos_receipts_and_allows_a_fresh_seed(self):
-        batch=[({'bias':1},1)]
+        batch=[oos_event('a',{'bias':1},1)]
         learning.warm_start_from_oos('scalper',batch)
         learning.reset('scalper')
         self.assertEqual(learning.warm_start_from_oos('scalper',batch),1)
@@ -111,7 +120,7 @@ class LearningReceiptTests(EconomicDatabaseTests):
         sym=bots.SYMBOLS_BY_ID['BTC']
         now=600*3600
         rows=[dict(time=i*3600,open=100+i*.1,close=100+i*.1,high=101+i*.1,low=99+i*.1,volume=100) for i in range(600)]
-        exported=[({'bias':1},1)]
+        exported=[oos_event('a',{'bias':1},1)]
         applied=[True]
         def optimize(*args,**kwargs):
             build=kwargs['meta_builder']
@@ -127,7 +136,7 @@ class LearningReceiptTests(EconomicDatabaseTests):
             result=asyncio.run(training._train_symbol(bot,sym))
             self.assertEqual(result['warmStartSamples'],1)
             self.assertNotIn('oosTrades',result)
-            warm.assert_called_once_with('trend',exported)
+            warm.assert_called_once_with('trend',exported,namespace='BTC')
             applied[0]=False
             asyncio.run(training._train_symbol(bot,sym))
             self.assertEqual(warm.call_count,1)
@@ -238,11 +247,11 @@ class OosExportTests(unittest.TestCase):
              patch.object(training,'deflated_sharpe',return_value=dict(passed=True)):
             args=('trend',rows,[.8]*2000,[2]*2000,.001,10,2,1,100)
             result=training.optimize(*args,meta_builder=lambda *a:dict(bias=1))
-            self.assertTrue(result['applied'])
+            self.assertTrue(result['historicalPassed']); self.assertFalse(result['applied'])
             self.assertEqual([f['foldStart'] for f,r in result['oosTrades']],[lo for lo,hi in protocol['folds']])
             fold_pnls[2]=-1
             result=training.optimize(*args,meta_builder=lambda *a:dict(bias=1))
-            self.assertTrue(result['applied'])  # conserva el protocolo 2-de-3
+            self.assertTrue(result['historicalPassed']); self.assertFalse(result['applied'])  # conserva el protocolo 2-de-3
             self.assertEqual(result['oosTrades'],[])  # warm-start exige los tres
             fold_pnls[:]=[-1,-1,-1];ranges.clear()
             result=training.optimize(*args,meta_builder=lambda *a:dict(bias=1))
@@ -261,8 +270,8 @@ class OosExportTests(unittest.TestCase):
                                  0,5,cost_model=dict(feeRate=.001,slippageRate=.0002),meta_builder=meta)
         self.assertEqual(calls,[(1,'long')])
         self.assertEqual(len(result['oosTrades']),1)
-        self.assertEqual(result['oosTrades'][0][0],{'signalIndex':1})
-        self.assertAlmostEqual(result['oosTrades'][0][1],result['tradePnls'][0])  # riesgo inicial = 1
+        self.assertEqual(result['oosTrades'][0]['features'],{'signalIndex':1})
+        self.assertAlmostEqual(result['oosTrades'][0]['r'],result['tradePnls'][0])  # riesgo inicial = 1
 
 
 class LabCostTests(EconomicDatabaseTests):
@@ -273,7 +282,7 @@ class LabCostTests(EconomicDatabaseTests):
              patch.object(bots.systems, 'chart_overlays', return_value={}), \
              patch.object(bots.time, 'time', return_value=100000):
             bot._open(bots.SYMBOLS_BY_ID['BTC'], direction, 100, atr, .8,
-                      dict(reasons=[], candles=[], confirmations=[]), 2, 4, 1, p_win=p_win)
+                      dict(reasons=[], entryQuote=dict(price=100,time=bots.time.time()), candles=[dict(time=0,open=100,high=101,low=99,close=100,volume=100)], confirmations=[]), 2, 4, 1, p_win=p_win)
         return bot
 
     def test_tiny_target_is_rejected_after_round_trip_costs(self):
@@ -352,6 +361,7 @@ class LabCostTests(EconomicDatabaseTests):
                         self.assertLess(level, pos.entry_price)
                 with bots._conn() as con:
                     con.execute('DELETE FROM bot_trades')
+                    con.execute('DELETE FROM bot_signal_receipts')
 
     def test_global_risk_denial_prevents_persisting_a_euro_entry(self):
         bot = bots.TradingBot(replace(bots.SCALPER, initial_balance=100))
@@ -361,7 +371,7 @@ class LabCostTests(EconomicDatabaseTests):
              patch.object(bots.systems, 'chart_overlays', return_value={}), \
              patch.object(portfolio_risk, 'assess', return_value=dict(allowed=False, reason='factor exposure')) as assess:
             bot._open(bots.SYMBOLS_BY_ID['BTC'], 'long', 100, 2, .8,
-                      dict(reasons=[], candles=[], confirmations=[]), 2, 4, 1)
+                      dict(reasons=[], entryQuote=dict(price=100,time=bots.time.time()), candles=[dict(time=0,open=100,high=101,low=99,close=100,volume=100)], confirmations=[]), 2, 4, 1)
         self.assertFalse(bot.positions)
         self.assertEqual(bot.diagnostics['BTC']['reason'], 'factor exposure')
         self.assertAlmostEqual(assess.call_args.args[2], 1)
@@ -380,7 +390,7 @@ class LabCostTests(EconomicDatabaseTests):
              patch.object(bots, '_conn', side_effect=RuntimeError('disk unavailable')):
             with self.assertRaises(RuntimeError):
                 bot._open(bots.SYMBOLS_BY_ID['BTC'], 'long', 100, 2, .8,
-                          dict(reasons=[], candles=[], confirmations=[]), 2, 4, 1)
+                          dict(reasons=[], entryQuote=dict(price=100,time=bots.time.time()), candles=[dict(time=0,open=100,high=101,low=99,close=100,volume=100)], confirmations=[]), 2, 4, 1)
         release.assert_called_once_with('reservation')
         self.assertFalse(bot.positions)
 

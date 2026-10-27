@@ -55,6 +55,7 @@ from .config import SYMBOLS_BY_ID
 from .history import DB_PATH
 from .database import Connection
 from .economics import ECONOMICS_VERSION
+from .validation import promotion_allowed
 
 log = logging.getLogger("learning")
 
@@ -149,6 +150,7 @@ def _conn() -> sqlite3.Connection:
         )"""
     )
     con.execute('CREATE TABLE IF NOT EXISTS bot_oos_processed (bot TEXT, digest TEXT, PRIMARY KEY(bot,digest))')
+    con.execute('CREATE TABLE IF NOT EXISTS bot_oos_events (bot TEXT, event_id TEXT, PRIMARY KEY(bot,event_id))')
     return con
 
 
@@ -369,8 +371,7 @@ def meta_predict(bot_id: str, feats: dict[str, float]) -> float:
 def meta_size_multiplier(bot_id,score,validated):
     if score is None: return 1.0
     base=max(.5,min(1.0,.5+(score-.35)*2.5))
-    if validated and score>=.65 and _load_model(bot_id)['n']>=META_MIN_SAMPLES:
-        return min(1.25,1+(score-.65)/.35*.25)
+    # A weighted score is not calibrated money expectancy. No score-based uplift.
     return base
 
 
@@ -396,6 +397,8 @@ def meta_gate(bot_id: str, feats: dict[str, float]) -> tuple[bool, float | None,
     if m["n"] < META_MIN_SAMPLES:
         return True, None, f"meta-modelo en aprendizaje ({m['n']}/{META_MIN_SAMPLES})"
     p = meta_predict(bot_id, feats)
+    if not (m.get('calibrated') is True and promotion_allowed(m.get('promotion'))):
+        return True, None, f'meta-modelo en sombra: puntuación {p:.3f}; sin validación posterior equivalente'
     if p < META_GATE_P:
         return False, p, f"señal filtrada: puntuación ponderada por R={p:.0%} < {META_GATE_P:.0%}"
     return True, p, None
@@ -429,28 +432,34 @@ def _trade_features(bot_id: str, row: tuple) -> dict[str, float] | None:
     return meta_features(bot_id, category, direction, hour, confs, snap.get('entryContext'))
 
 
-def warm_start_from_oos(bot_id: str, oos_trades) -> int:
+def warm_start_from_oos(bot_id: str, oos_trades, namespace='') -> int:
     """Semilla atenuada, idempotente y atómica; n cuenta solo cierres en vivo."""
     batch = list(oos_trades)
-    digest = hashlib.sha256(json.dumps(batch, sort_keys=True, allow_nan=False).encode()).hexdigest()
     with _conn() as con:
         con.execute('BEGIN IMMEDIATE')
         saved = con.execute('SELECT model FROM bot_model WHERE bot=?', (bot_id,)).fetchone()
         model = json.loads(saved[0]) if saved else _new_model()
         model = _migrate_model(model) if _compatible_model(model) else _new_model()
-        if model['n'] >= META_MIN_SAMPLES or con.execute('SELECT 1 FROM bot_oos_processed WHERE bot=? AND digest=?', (bot_id,digest)).fetchone():
+        if model['n'] >= META_MIN_SAMPLES:
             return 0
         learned = 0
-        for feats, r_mult in batch:
+        for event in batch:
+            # Old (features,R) batches have no operation identity. Do not invent it.
+            if not isinstance(event,dict) or not event.get('id'):
+                continue
+            event_id=hashlib.sha256((namespace+':'+str(event['id'])).encode()).hexdigest()
+            if con.execute('SELECT 1 FROM bot_oos_events WHERE bot=? AND event_id=?',(bot_id,event_id)).fetchone():
+                continue
+            feats,r_mult=event.get('features'),event.get('r')
             if (not isinstance(feats, dict) or not feats or type(r_mult) not in (int,float)
                 or not math.isfinite(r_mult) or any(type(v) not in (int,float) or not math.isfinite(v) for v in feats.values())):
                 continue
             _meta_sgd_step(model, feats, r_mult>0, .30*min(3.0,max(.25,abs(r_mult))))
+            con.execute('INSERT INTO bot_oos_events VALUES (?,?)',(bot_id,event_id))
             learned += 1
         model['oosSamples'] = model.get('oosSamples',0)+learned
         model['updatedAt'] = int(time.time())
         con.execute('INSERT OR REPLACE INTO bot_model VALUES (?,?,?)', (bot_id,json.dumps(model),model['updatedAt']))
-        con.execute('INSERT INTO bot_oos_processed VALUES (?,?)', (bot_id,digest))
     _models[bot_id] = model
     return learned
 
@@ -536,11 +545,12 @@ def meta_summary(bot_id: str) -> dict:
         "mature": m["n"] >= META_MIN_SAMPLES,
         "minSamples": META_MIN_SAMPLES,
         "gateP": META_GATE_P,
-        "calibrated": False,
+        "calibrated": m.get('calibrated') is True,
         "objective": "r-weighted-logistic-v1",
         "outputMeaning": "Puntuación ponderada por R; no probabilidad de éxito ni expectativa R",
-        "sizeIncreaseAllowed": True,
-        "sizeIncreaseRequires": "Validación vigente, modelo maduro y puntuación ≥0,65; máximo 1,25x",
+        "sizeIncreaseAllowed": False,
+        "sizeIncreaseRequires": "Deshabilitado: una puntuación sin expectativa monetaria calibrada no aumenta riesgo",
+        "mode": 'validated' if m.get('calibrated') is True and promotion_allowed(m.get('promotion')) else 'shadow',
         "featureVersion": META_FEATURE_VERSION,
         "forgettingPerClose": META_FORGETTING,
         "topFeatures": [
@@ -692,6 +702,7 @@ def reset(bot_id: str) -> None:
         con.execute("DELETE FROM bot_model WHERE bot = ?", (bot_id,))
         con.execute("DELETE FROM bot_model_processed WHERE bot = ?", (bot_id,))
         con.execute("DELETE FROM bot_oos_processed WHERE bot = ?", (bot_id,))
+        con.execute("DELETE FROM bot_oos_events WHERE bot = ?", (bot_id,))
 
 
 # ---------------------------------------------------------------------------

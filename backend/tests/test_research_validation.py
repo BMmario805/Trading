@@ -1,11 +1,14 @@
 import asyncio
+import hashlib
 import json
 import math
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from app import research, training
-from app.economics import execution_fill, net_outcome
+from app import data_archive, experiments, research, training
+from app.economics import cost_profile, execution_fill, net_outcome
 from app.research_strategies import REGISTRY, signal_series
 from app.strategy import volatility_risk_series
 
@@ -107,6 +110,35 @@ class NetSimulationTests(unittest.TestCase):
 
 
 class TemporalValidationTests(unittest.TestCase):
+    def test_run_research_archives_exact_short_and_empty_inputs_in_its_isolated_registry_folder(self):
+        with tempfile.TemporaryDirectory() as folder:
+            default=Path(folder)/'MUST-NOT-USE-GLOBAL-ARCHIVE'
+            for count in (600,7,0):
+                with self.subTest(bars=count):
+                    ledger=Path(folder)/str(count)/'ledger.sqlite'
+                    data=[candle(i,high=100,low=100) for i in range(count)]
+                    with patch.object(research,'_bounded_history',AsyncMock(return_value=data)), \
+                         patch.object(research.market_data,'_binance_get',AsyncMock()) as network, \
+                         patch.object(data_archive,'ROOT',default):
+                        report=asyncio.run(research.run_research(['BTC'],['5m'],max_bars=600,db_path=ledger))
+                    network.assert_not_awaited()
+                    result=report['results'][0]
+                    self.assertEqual(result['bars'],count)
+                    self.assertEqual(result['ok'],count>=600)
+                    exp=experiments.get_experiment(result['experimentId'],ledger)
+                    events=experiments.observations(exp['id'],research.time.time(),db_path=ledger)
+                    receipts=[e['payload'] for e in events if e['kind']=='dataset_snapshot']
+                    self.assertEqual(len(receipts),1)
+                    receipt=receipts[0]
+                    self.assertEqual(receipt['rowOffset'],0)
+                    self.assertEqual(receipt['totalBars'],count)
+                    self.assertEqual(receipt['inputDataHash'],exp['manifest']['dataset']['dataHash'])
+                    raw=(ledger.parent/'research-data'/receipt['artifact']).read_bytes()
+                    self.assertEqual(hashlib.sha256(raw).hexdigest(),receipt['sha256'])
+                    self.assertEqual(json.loads(raw)['candles'],data)
+                    self.assertEqual(json.loads(raw)['source'],'Binance Spot USDT')
+                    self.assertFalse(default.exists())
+
     def test_protocol_has_separate_discovery_and_final_holdout(self):
         protocol = training.temporal_protocol(2000, max_hold_bars=48)
         self.assertEqual(protocol['selection'], (0, 900))
@@ -124,7 +156,8 @@ class TemporalValidationTests(unittest.TestCase):
             calls.append((start, end))
             return dict(pnl=3, trades=10, maxDrawdown=1, tradePnls=[.3] * 10,
                         expectancy=.3, wins=10, winRate=100, profitFactor=None)
-        with patch.object(research, 'simulate', side_effect=replay):
+        with patch.object(research, 'simulate', side_effect=replay), \
+             patch.object(research,'deflated_sharpe',return_value=dict(passed=True,probability=.99)):
             result = research.evaluate_dataset(data, 'BTC', '5m')
         holdout = tuple(result['protocol']['holdout'])
         final_calls = [call for call in calls if call == holdout]
@@ -132,6 +165,69 @@ class TemporalValidationTests(unittest.TestCase):
         self.assertTrue(result['selected'])
         self.assertFalse(result['promotionApplied'])
         self.assertFalse(result['candidateEligible'])  # solo diez cierres en holdout
+
+    def test_failed_dsr_never_reads_or_claims_the_holdout_and_records_all_trials(self):
+        calls=[]
+        def replay(*args,**kwargs):
+            start,end=args[12:14];calls.append((start,end))
+            return dict(pnl=3,trades=10,maxDrawdown=1,tradePnls=[.3]*10,
+                        periodPnls=[.3,-.1,.2]*20,expectancy=.3,wins=10,winRate=100,profitFactor=None)
+        with tempfile.TemporaryDirectory() as folder:
+            ledger=Path(folder)/'isolated.sqlite'
+            for plan in ('earlier','current'):
+                exp=experiments.register_experiment(plan,dict(parameters={'fixed':1},
+                    costModel=cost_profile('binance','cripto'),trialCount=len(REGISTRY)),db_path=ledger)
+            with patch.object(research,'simulate',side_effect=replay), \
+                 patch.object(research,'deflated_sharpe',return_value=dict(passed=False,probability=.1)) as dsr:
+                result=research.evaluate_dataset(rows(),'BTC','5m',ledger_context=dict(experimentId=exp['id'],dbPath=ledger))
+            self.assertEqual(dsr.call_args.kwargs['total_trials'],2*len(REGISTRY))
+            self.assertEqual(len(dsr.call_args.args[1]),len(REGISTRY))
+            self.assertNotIn(tuple(result['protocol']['holdout']),calls)
+            self.assertIsNone(result['holdout'])
+            events=experiments.observations(exp['id'],research.time.time(),db_path=ledger)
+            trials=next(e for e in events if e['kind']=='selection_trials')['payload']
+            self.assertEqual(len(trials['sharpes']),len(REGISTRY))
+            self.assertTrue(trials['winnerFound'])
+            self.assertFalse(any(e['kind']=='holdout_claim' for e in events))
+
+    def test_failed_search_is_still_persisted_and_exploration_does_not_create_a_ledger(self):
+        data=[candle(i,high=100,low=100) for i in range(900)]
+        with tempfile.TemporaryDirectory() as folder:
+            default=Path(folder)/'default-MUST-NOT-EXIST.sqlite'
+            ledger=Path(folder)/'explicit.sqlite'
+            with patch.object(experiments,'DB_PATH',default):
+                result=research.evaluate_dataset(data,'BTC','5m')
+                self.assertFalse(default.exists())
+                exp=experiments.register_experiment('failed-search',dict(parameters={'fixed':1},
+                    costModel=cost_profile('binance','cripto'),trialCount=len(REGISTRY)),db_path=ledger)
+                result=research.evaluate_dataset(data,'BTC','5m',ledger_context=dict(experimentId=exp['id'],dbPath=ledger))
+                events=experiments.observations(exp['id'],research.time.time(),db_path=ledger)
+                selection=next(e for e in events if e['kind']=='selection_trials')['payload']
+                self.assertFalse(selection['winnerFound'])
+                self.assertEqual(len(selection['sharpes']),len(REGISTRY))
+                self.assertIsNone(result['holdout'])
+                self.assertEqual(experiments.accumulated_trials(db_path=ledger),len(REGISTRY))
+                self.assertFalse(default.exists())
+
+    def test_registry_backed_research_has_one_final_claim_without_promoting_history(self):
+        data=rows()
+        def replay(*args,**kwargs):
+            return dict(pnl=3,trades=30,maxDrawdown=1,tradePnls=[.3]*30,
+                        periodPnls=[.3,-.1,.2]*20,expectancy=.3,wins=30,winRate=100,profitFactor=None)
+        with tempfile.TemporaryDirectory() as folder:
+            ledger=Path(folder)/'explicit.sqlite'
+            exp=experiments.register_experiment('fixed-families',dict(parameters={'registry':'fixed'},
+                costModel=cost_profile('binance','cripto'),trialCount=len(REGISTRY)),db_path=ledger)
+            with patch.object(research,'simulate',side_effect=replay), \
+                 patch.object(research,'deflated_sharpe',return_value=dict(passed=True,probability=.99)):
+                first=research.evaluate_dataset(data,'BTC','5m',ledger_context=dict(experimentId=exp['id'],dbPath=ledger))
+                second=research.evaluate_dataset(data,'BTC','5m',ledger_context=dict(experimentId=exp['id'],dbPath=ledger))
+            self.assertIsNotNone(first['holdout'])
+            self.assertFalse(first['promotion']['promotable'])
+            self.assertFalse(first['promotion']['independentFuture'])
+            self.assertIsNone(second['holdout'])
+            self.assertTrue(second['holdoutClaim']['reused'])
+            self.assertTrue(experiments.verify_ledger(ledger))
 
     def test_changed_final_prices_do_not_change_selection_or_development(self):
         data = rows()

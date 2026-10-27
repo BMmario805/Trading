@@ -1,0 +1,20 @@
+{
+  "testedAt": 1793125694.68687,
+  "purpose": "Bounded subscription transport response per provider; no tools or orders",
+  "paidApiFallback": false,
+  "results": [
+    {
+      "provider": "xai",
+      "state": "success",
+      "schemaAndMarkerVerified": true,
+      "durationSeconds": 7.84
+    },
+    {
+      "provider": "openai",
+      "state": "success",
+      "schemaAndMarkerVerified": true,
+      "durationSeconds": 4.05
+    }
+  ],
+  "liveProcessHealthUpdated": false
+}

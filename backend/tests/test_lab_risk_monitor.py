@@ -17,7 +17,7 @@ class IndependentRiskTests(unittest.IsolatedAsyncioTestCase):
         self.bot=bots.TradingBot(bots.SCALPER)
         self.bot.load_state()
         with patch.object(learning,'size_multiplier',return_value=(1,None)),patch.object(bots.systems,'chart_overlays',return_value={}):
-            self.bot._open(SYMBOLS_BY_ID['BTC'],'long',100,2,.8,dict(reasons=[],candles=[],confirmations=[]),2,4,.8)
+            self.bot._open(SYMBOLS_BY_ID['BTC'],'long',100,2,.8,dict(reasons=[],entryQuote=dict(price=100,time=bots.time.time()),candles=[dict(time=0,open=100,high=101,low=99,close=100,volume=100)],confirmations=[]),2,4,.8)
 
     async def asyncTearDown(self):
         await self.bot.stop_task()

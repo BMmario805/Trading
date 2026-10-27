@@ -20,6 +20,38 @@ import weakref
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = ROOT / '.runtime' / 'subscription-bridge'
+_HEALTH_LOCK = threading.Lock()
+_HEALTH = {}
+
+
+def _observe(provider, state, *, started=None):
+    """Safe transport receipts; no prompts, responses, identities or credentials."""
+    now = time.time()
+    with _HEALTH_LOCK:
+        row = _HEALTH.setdefault(provider, {})
+        row.update(state=state, observedAt=now)
+        if started is not None:
+            row['durationSeconds'] = max(0.0, time.monotonic() - started)
+        if state == 'success':
+            row['lastSuccessAt'] = now
+
+
+def health_snapshot():
+    """Read-only presence and previously observed responses, never an auth probe."""
+    with _HEALTH_LOCK:
+        observed = {provider: dict(row) for provider, row in _HEALTH.items()}
+    providers = []
+    for provider in ('xai', 'openai'):
+        row = observed.get(provider, {})
+        providers.append(dict(provider=provider, installed=bool(executable(provider)),
+                              state=row.get('state', 'unobserved'),
+                              lastObservedAt=row.get('observedAt'),
+                              lastSuccessAt=row.get('lastSuccessAt'),
+                              durationSeconds=row.get('durationSeconds'),
+                              authenticated=None, probePerformed=False))
+    return dict(providers=providers, readOnly=True, startedClients=0,
+                authenticationChecked=False, paidApiFallback=False,
+                meaning='Installation and prior transport receipts only; no current quota or authentication guarantee')
 
 
 class SubscriptionError(RuntimeError):
@@ -134,6 +166,8 @@ def parse_result(provider, output):
             raw = json.loads(output)
         except ValueError:
             raise SubscriptionError('invalid','Grok Build no devolvió un resultado JSON válido') from None
+        if not isinstance(raw, dict):
+            raise SubscriptionError('invalid','Grok Build no devolvió un objeto de respuesta')
         if raw.get('isError') or raw.get('stopReason') in ('error','cancelled'):
             raise _failure(str(raw.get('text','')))
         result = raw.get('structuredOutput')
@@ -186,8 +220,10 @@ def _run(spec,payload,schema,timeout,cancelled):
         deadline=time.monotonic()+timeout
         try:
             while True:
-                if cancelled.is_set() or time.monotonic()>=deadline:
-                    raise SubscriptionError('unavailable','Evaluación de suscripción cancelada o fuera de plazo')
+                if cancelled.is_set():
+                    raise SubscriptionError('cancelled','Evaluación de suscripción cancelada')
+                if time.monotonic()>=deadline:
+                    raise SubscriptionError('timeout','Evaluación de suscripción fuera de plazo')
                 try:
                     output,errors=process.communicate(input=input_text,timeout=.5)
                     break
@@ -274,7 +310,13 @@ async def complete(spec,payload,schema,timeout,priority=None):
     """Ejecuta el cliente. priority 0 adelanta a los sondeos ya encolados."""
     rank = _PRIORITY.get() if priority is None else (0 if priority == 0 else 1)
     gate = priority_gate()
-    await gate.acquire(rank)
+    started = time.monotonic()
+    provider = getattr(spec, 'provider', 'unknown')
+    try:
+        await asyncio.wait_for(gate.acquire(rank), timeout=max(1.0, min(float(timeout), 120.0)))
+    except asyncio.TimeoutError:
+        _observe(provider, 'queue_timeout', started=started)
+        raise SubscriptionError('timeout', 'Espera del cliente de suscripción fuera de plazo') from None
     cancelled=threading.Event()
     worker=asyncio.create_task(asyncio.to_thread(_run,spec,payload,schema,timeout,cancelled))
     release_now=True
@@ -285,13 +327,22 @@ async def complete(spec,payload,schema,timeout,priority=None):
         finally:
             gate.release()
     try:
-        return await asyncio.shield(worker)
+        result = await asyncio.shield(worker)
+        _observe(provider, 'success', started=started)
+        return result
+    except SubscriptionError as exc:
+        _observe(provider, exc.state, started=started)
+        raise
     except asyncio.CancelledError:
+        _observe(provider, 'cancelled', started=started)
         cancelled.set()
         # _run aún debe terminar su proceso y recoger su salida. Ningún otro
         # cliente puede arrancar durante esa limpieza, incluso si tarda.
         release_now=False
         worker.add_done_callback(release_after_exit)
+        raise
+    except Exception:
+        _observe(provider, 'unavailable', started=started)
         raise
     finally:
         if release_now:

@@ -1,3 +1,4 @@
+from desk_unit_support import fund_unit_desk
 import tempfile
 import time
 import unittest
@@ -35,6 +36,7 @@ class DeskEfficiencyTests(unittest.IsolatedAsyncioTestCase):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.engine=desk.Desk(db_path=Path(self.tmp.name)/'desk.sqlite')
+        fund_unit_desk(self,self.engine)
 
     def candles(self,now,lag=0):
         seconds=desk.CANDLE_SECONDS

@@ -127,7 +127,7 @@ class FrozenPositionsTests(EconomicDatabaseTests):
         bot=bots.TradingBot(bots.SWING)
         with patch.object(bots.systems,'chart_overlays',return_value={}):
             bot._open(bots.SYMBOLS_BY_ID['BTC'],'long',100,2,.8,
-                      dict(reasons=[],candles=[],confirmations=[]),2,7,2.6,probation_why='Sin validar')
+                      dict(reasons=[],entryQuote=dict(price=100,time=bots.time.time()),candles=[dict(time=0,open=100,high=101,low=99,close=100,volume=100)],confirmations=[]),2,7,2.6,probation_why='Sin validar')
         self.assertEqual(bot.positions['BTC'].exit_policy['trailStartR'],2)
         restored=bots.TradingBot(bots.SWING);restored.load_state()
         self.assertEqual(restored.positions['BTC'].exit_policy,bot.positions['BTC'].exit_policy)

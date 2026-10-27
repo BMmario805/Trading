@@ -1,0 +1,1194 @@
+{
+  "schemaVersion": 1,
+  "auditAtUTC": "2026-10-25T11:57:12.746855+00:00",
+  "auditAtMadrid": "2026-10-25T12:57:12.746855+01:00",
+  "mode": "SQLite URI mode=ro; PRAGMA query_only=ON; BEGIN read transaction per database; no runtime imports or broker calls",
+  "scope": "Anonymous aggregate evidence only; no account identities, logins, servers, orders or credentials",
+  "atomicity": "Consistent transaction within each database; different books read sequentially, not a cross-database atomic snapshot",
+  "realMoney": "All examined books are paper or DEMO. Virtual allocations are not real deposits. No real deposited capital is established by these records.",
+  "desks": [
+    {
+      "label": "Cripto",
+      "source": ".runtime/desk.sqlite",
+      "currency": "USDT",
+      "initialVirtualQuote": 112.09534644600001,
+      "virtualFundingEUR": 100.0,
+      "fundingQuotePerEUR": 1.12095346446,
+      "sessionStartedMadrid": "2026-10-15T20:56:41.200491+02:00",
+      "cash": 87.84215771128837,
+      "latestPersistedEquity": 87.84215771128837,
+      "equitySnapshotAtMadrid": "2026-10-25T12:56:49+01:00",
+      "equityNote": "No open positions or maker reservations: equity equals cash in this paper book; no broker reconciliation applies",
+      "openPositions": 0,
+      "openCurrentPolicyPositions": 0,
+      "pendingMakerOrders": 0,
+      "latestScanAtMadrid": "2026-10-25T12:56:54.759460+01:00",
+      "currentPolicy": "desk-rs-chandelier-1h-v8",
+      "currentPolicyStartedMadrid": "2026-10-25T12:24:57.233355+01:00",
+      "currentPolicyStartingEquity": 87.84215771128837,
+      "currentPolicyClosed": {
+        "closed": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0,
+        "winRatePct": null,
+        "expectancy": null,
+        "profitFactor": null,
+        "firstEntryMadrid": null,
+        "lastExitMadrid": null
+      },
+      "allClosedAsBooked": {
+        "closed": 54,
+        "wins": 10,
+        "losses": 44,
+        "pnl": -24.253188735,
+        "winRatePct": 18.51851851851852,
+        "expectancy": -0.4491331247168819,
+        "profitFactor": 0.18211329203767337,
+        "firstEntryMadrid": "2026-10-15T20:57:14.278093+02:00",
+        "lastExitMadrid": "2026-10-24T17:38:54.795622+02:00"
+      },
+      "explicitNetCostsV1Closed": {
+        "closed": 37,
+        "wins": 7,
+        "losses": 30,
+        "pnl": -19.260334571,
+        "winRatePct": 18.91891891891892,
+        "expectancy": -0.5205495830020682,
+        "profitFactor": 0.16684773267134823,
+        "firstEntryMadrid": "2026-10-17T10:37:35.818299+02:00",
+        "lastExitMadrid": "2026-10-24T17:38:54.795622+02:00"
+      },
+      "closedMissingCostVersion": 17,
+      "byPolicy": {
+        "legacy": {
+          "closed": 17,
+          "wins": 3,
+          "losses": 14,
+          "pnl": -4.992854164,
+          "winRatePct": 17.647058823529413,
+          "expectancy": -0.29369730374324093,
+          "profitFactor": 0.23610614830072965,
+          "firstEntryMadrid": "2026-10-15T20:57:14.278093+02:00",
+          "lastExitMadrid": "2026-10-17T10:36:39.629477+02:00"
+        },
+        "desk-net-v1": {
+          "closed": 14,
+          "wins": 4,
+          "losses": 10,
+          "pnl": -2.529233586,
+          "winRatePct": 28.571428571428573,
+          "expectancy": -0.1806595418807136,
+          "profitFactor": 0.5716863303163293,
+          "firstEntryMadrid": "2026-10-17T10:37:35.818299+02:00",
+          "lastExitMadrid": "2026-10-18T21:00:52.813608+02:00"
+        },
+        "desk-confirmed-v2": {
+          "closed": 8,
+          "wins": 3,
+          "losses": 5,
+          "pnl": -0.145098011,
+          "winRatePct": 37.5,
+          "expectancy": -0.01813725132674848,
+          "profitFactor": 0.7683342647224675,
+          "firstEntryMadrid": "2026-10-20T21:57:09.253803+02:00",
+          "lastExitMadrid": "2026-10-21T12:14:59.498478+02:00"
+        },
+        "desk-partial-1h-v3": {
+          "closed": 2,
+          "wins": 0,
+          "losses": 2,
+          "pnl": -1.730097796,
+          "winRatePct": 0.0,
+          "expectancy": -0.8650488979499982,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-21T10:11:53.493510+02:00",
+          "lastExitMadrid": "2026-10-24T10:56:17.157184+02:00"
+        },
+        "desk-partial-1h-v4": {
+          "closed": 2,
+          "wins": 0,
+          "losses": 2,
+          "pnl": -5.05663169,
+          "winRatePct": 0.0,
+          "expectancy": -2.5283158447649963,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-21T10:17:57.022903+02:00",
+          "lastExitMadrid": "2026-10-24T10:56:25.662792+02:00"
+        },
+        "desk-aggressive-1h-v6": {
+          "closed": 1,
+          "wins": 0,
+          "losses": 1,
+          "pnl": -1.964211762,
+          "winRatePct": 0.0,
+          "expectancy": -1.9642117623600006,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-21T18:06:13.864143+02:00",
+          "lastExitMadrid": "2026-10-24T10:56:25.684229+02:00"
+        },
+        "desk-aggressive-1h-v7": {
+          "closed": 10,
+          "wins": 0,
+          "losses": 10,
+          "pnl": -7.835061726,
+          "winRatePct": 0.0,
+          "expectancy": -0.7835061726342557,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-21T18:53:44.838967+02:00",
+          "lastExitMadrid": "2026-10-24T17:38:54.795622+02:00"
+        }
+      },
+      "policyEpochs": [
+        {
+          "policy": "desk-confirmed-v2",
+          "startedMadrid": "2026-10-18T21:02:12.805526+02:00",
+          "startingEquity": 104.57325869603491
+        },
+        {
+          "policy": "desk-partial-1h-v3",
+          "startedMadrid": "2026-10-21T10:07:11.771953+02:00",
+          "startingEquity": 104.76860173359091
+        },
+        {
+          "policy": "desk-partial-1h-v4",
+          "startedMadrid": "2026-10-21T10:17:45.991935+02:00",
+          "startingEquity": 104.41584941349093
+        },
+        {
+          "policy": "desk-partial-1h-v5",
+          "startedMadrid": "2026-10-21T14:41:20.666424+02:00",
+          "startingEquity": 104.12373439000893
+        },
+        {
+          "policy": "desk-aggressive-1h-v6",
+          "startedMadrid": "2026-10-21T18:06:00.824697+02:00",
+          "startingEquity": 104.49942309723693
+        },
+        {
+          "policy": "desk-aggressive-1h-v7",
+          "startedMadrid": "2026-10-21T18:53:21.732404+02:00",
+          "startingEquity": 104.41711371610953
+        },
+        {
+          "policy": "desk-rs-chandelier-1h-v8",
+          "startedMadrid": "2026-10-25T12:24:57.233355+01:00",
+          "startingEquity": 87.84215771128837
+        }
+      ],
+      "oldestOpenQuoteAtMadrid": null,
+      "equityPnlFromInitial": -24.253188734711642
+    },
+    {
+      "label": "Forex",
+      "source": ".runtime/desk-forex.sqlite",
+      "currency": "USD",
+      "initialVirtualQuote": 100.0,
+      "virtualFundingEUR": 88.98380494749956,
+      "fundingQuotePerEUR": 1.1238,
+      "sessionStartedMadrid": "2026-10-18T20:59:08.014075+02:00",
+      "cash": 99.93443522710164,
+      "latestPersistedEquity": 99.93443522710164,
+      "equitySnapshotAtMadrid": "2026-10-25T12:57:03+01:00",
+      "equityNote": "No open positions or maker reservations: equity equals cash in this paper book; no broker reconciliation applies",
+      "openPositions": 0,
+      "openCurrentPolicyPositions": 0,
+      "pendingMakerOrders": 0,
+      "latestScanAtMadrid": "2026-10-25T12:57:03.313564+01:00",
+      "currentPolicy": "desk-cash-aggressive-v2",
+      "currentPolicyStartedMadrid": "2026-10-21T18:53:21.741551+02:00",
+      "currentPolicyStartingEquity": 99.93443522710164,
+      "currentPolicyClosed": {
+        "closed": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0,
+        "winRatePct": null,
+        "expectancy": null,
+        "profitFactor": null,
+        "firstEntryMadrid": null,
+        "lastExitMadrid": null
+      },
+      "allClosedAsBooked": {
+        "closed": 13,
+        "wins": 4,
+        "losses": 9,
+        "pnl": -0.065564773,
+        "winRatePct": 30.76923076923077,
+        "expectancy": -0.005043444069106661,
+        "profitFactor": 0.48013863118022104,
+        "firstEntryMadrid": "2026-10-20T21:57:00.109196+02:00",
+        "lastExitMadrid": "2026-10-21T17:49:42.971869+02:00"
+      },
+      "explicitNetCostsV1Closed": {
+        "closed": 13,
+        "wins": 4,
+        "losses": 9,
+        "pnl": -0.065564773,
+        "winRatePct": 30.76923076923077,
+        "expectancy": -0.005043444069106661,
+        "profitFactor": 0.48013863118022104,
+        "firstEntryMadrid": "2026-10-20T21:57:00.109196+02:00",
+        "lastExitMadrid": "2026-10-21T17:49:42.971869+02:00"
+      },
+      "closedMissingCostVersion": 0,
+      "byPolicy": {
+        "desk-confirmed-v2": {
+          "closed": 7,
+          "wins": 3,
+          "losses": 4,
+          "pnl": -0.005357827,
+          "winRatePct": 42.857142857142854,
+          "expectancy": -0.0007654038545786403,
+          "profitFactor": 0.9121054227668741,
+          "firstEntryMadrid": "2026-10-20T21:57:00.109196+02:00",
+          "lastExitMadrid": "2026-10-21T10:27:25.698173+02:00"
+        },
+        "desk-cash-context-v3": {
+          "closed": 6,
+          "wins": 1,
+          "losses": 5,
+          "pnl": -0.060206946,
+          "winRatePct": 16.666666666666668,
+          "expectancy": -0.010034490986056018,
+          "profitFactor": 0.07604635445988246,
+          "firstEntryMadrid": "2026-10-21T12:15:50.410152+02:00",
+          "lastExitMadrid": "2026-10-21T17:49:42.971869+02:00"
+        }
+      },
+      "policyEpochs": [
+        {
+          "policy": "desk-confirmed-v2",
+          "startedMadrid": "2026-10-18T21:02:12.814994+02:00",
+          "startingEquity": 100.0
+        },
+        {
+          "policy": "desk-cash-context-v3",
+          "startedMadrid": "2026-10-21T10:07:11.784739+02:00",
+          "startingEquity": 99.98752640370134
+        },
+        {
+          "policy": "desk-cash-aggressive-v1",
+          "startedMadrid": "2026-10-21T18:06:00.833298+02:00",
+          "startingEquity": 99.93443522710164
+        },
+        {
+          "policy": "desk-cash-aggressive-v2",
+          "startedMadrid": "2026-10-21T18:53:21.741551+02:00",
+          "startingEquity": 99.93443522710164
+        }
+      ],
+      "oldestOpenQuoteAtMadrid": null,
+      "equityPnlFromInitial": -0.06556477289835527
+    },
+    {
+      "label": "Acciones",
+      "source": ".runtime/desk-stocks.sqlite",
+      "currency": "USD",
+      "initialVirtualQuote": 100.0,
+      "virtualFundingEUR": 88.98380494749956,
+      "fundingQuotePerEUR": 1.1238,
+      "sessionStartedMadrid": "2026-10-18T20:59:08.034420+02:00",
+      "cash": 83.35886143398645,
+      "latestPersistedEquity": 100.19485984984027,
+      "equitySnapshotAtMadrid": "2026-10-25T12:57:04+01:00",
+      "equityNote": "Persisted paper valuation, not broker reconciliation; equity snapshot timestamp does not guarantee underlying quote freshness",
+      "openPositions": 1,
+      "openCurrentPolicyPositions": 0,
+      "pendingMakerOrders": 0,
+      "latestScanAtMadrid": "2026-10-25T12:56:59.719295+01:00",
+      "currentPolicy": "desk-cash-aggressive-v2",
+      "currentPolicyStartedMadrid": "2026-10-21T18:53:21.748216+02:00",
+      "currentPolicyStartingEquity": 100.13151100601613,
+      "currentPolicyClosed": {
+        "closed": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0,
+        "winRatePct": null,
+        "expectancy": null,
+        "profitFactor": null,
+        "firstEntryMadrid": null,
+        "lastExitMadrid": null
+      },
+      "allClosedAsBooked": {
+        "closed": 5,
+        "wins": 1,
+        "losses": 4,
+        "pnl": 0.000745447,
+        "winRatePct": 20.0,
+        "expectancy": 0.00014908940048069703,
+        "profitFactor": 1.0022954859064044,
+        "firstEntryMadrid": "2026-10-20T21:57:22.078357+02:00",
+        "lastExitMadrid": "2026-10-21T18:51:05.473477+02:00"
+      },
+      "explicitNetCostsV1Closed": {
+        "closed": 5,
+        "wins": 1,
+        "losses": 4,
+        "pnl": 0.000745447,
+        "winRatePct": 20.0,
+        "expectancy": 0.00014908940048069703,
+        "profitFactor": 1.0022954859064044,
+        "firstEntryMadrid": "2026-10-20T21:57:22.078357+02:00",
+        "lastExitMadrid": "2026-10-21T18:51:05.473477+02:00"
+      },
+      "closedMissingCostVersion": 0,
+      "byPolicy": {
+        "desk-confirmed-v2": {
+          "closed": 1,
+          "wins": 0,
+          "losses": 1,
+          "pnl": -0.007089475,
+          "winRatePct": 0.0,
+          "expectancy": -0.007089475317393892,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-20T21:57:22.078357+02:00",
+          "lastExitMadrid": "2026-10-21T15:31:03.802655+02:00"
+        },
+        "desk-cash-context-v3": {
+          "closed": 4,
+          "wins": 1,
+          "losses": 3,
+          "pnl": 0.007834922,
+          "winRatePct": 25.0,
+          "expectancy": 0.0019587305799493443,
+          "profitFactor": 1.0246648580523583,
+          "firstEntryMadrid": "2026-10-21T15:45:03.834145+02:00",
+          "lastExitMadrid": "2026-10-21T18:51:05.473477+02:00"
+        }
+      },
+      "policyEpochs": [
+        {
+          "policy": "desk-confirmed-v2",
+          "startedMadrid": "2026-10-18T21:02:12.821648+02:00",
+          "startingEquity": 100.0
+        },
+        {
+          "policy": "desk-cash-context-v3",
+          "startedMadrid": "2026-10-21T10:07:11.793965+02:00",
+          "startingEquity": 99.95170849248231
+        },
+        {
+          "policy": "desk-cash-aggressive-v1",
+          "startedMadrid": "2026-10-21T18:06:00.839286+02:00",
+          "startingEquity": 100.10320189744343
+        },
+        {
+          "policy": "desk-cash-aggressive-v2",
+          "startedMadrid": "2026-10-21T18:53:21.748216+02:00",
+          "startingEquity": 100.13151100601613
+        }
+      ],
+      "oldestOpenQuoteAtMadrid": "2026-10-21T19:10:03.556250+02:00",
+      "equityPnlFromInitial": 0.19485984984027027
+    }
+  ],
+  "laboratory": {
+    "source": "backend/data.db",
+    "currency": "EUR",
+    "initialVirtualTotal": 700.0,
+    "balanceTotal": 642.9150045474747,
+    "liveMarkedEquity": null,
+    "equityNote": "Current quotes and last_price are held in memory, not persisted in bot_trades; equity cannot be recomputed faithfully read-only from these books without a market feed/runtime snapshot. Balance excludes open PnL.",
+    "families": [
+      {
+        "family": "flow",
+        "currency": "EUR",
+        "initialVirtual": 100.0,
+        "sessionStartedMadrid": "2026-10-15T20:56:41.145010+02:00",
+        "balance": 98.52628373430056,
+        "running": true,
+        "openPositions": 1,
+        "closedNet": {
+          "closed": 15,
+          "wins": 10,
+          "losses": 5,
+          "pnl": -1.110515252,
+          "winRatePct": 66.66666666666667,
+          "expectancy": -0.07403435010953455,
+          "profitFactor": 0.49451810592148104,
+          "firstEntryMadrid": "2026-10-17T10:45:03+02:00",
+          "lastExitMadrid": "2026-10-25T10:29:33+01:00"
+        },
+        "closedLegacy": {
+          "closed": 1,
+          "wins": 0,
+          "losses": 1,
+          "pnl": -0.363201014,
+          "winRatePct": 0.0,
+          "expectancy": -0.3632010140564283,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-15T20:57:16+02:00",
+          "lastExitMadrid": "2026-10-18T00:38:10+02:00"
+        },
+        "currentEngine": 7,
+        "currentRiskProfile": "aggressive-capacity-v4",
+        "currentProfileClosedNet": {
+          "closed": 5,
+          "wins": 4,
+          "losses": 1,
+          "pnl": 0.157897419,
+          "winRatePct": 80.0,
+          "expectancy": 0.031579483724448625,
+          "profitFactor": 1.471277524842674,
+          "firstEntryMadrid": "2026-10-24T12:00:03+02:00",
+          "lastExitMadrid": "2026-10-25T10:29:33+01:00"
+        },
+        "currentProfileOpen": 1,
+        "closedByVersion": [
+          {
+            "engineVersion": 3,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 1,
+            "wins": 0,
+            "losses": 1,
+            "pnl": -0.363201014,
+            "winRatePct": 0.0,
+            "expectancy": -0.3632010140564283,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-15T20:57:16+02:00",
+            "lastExitMadrid": "2026-10-18T00:38:10+02:00"
+          },
+          {
+            "engineVersion": 4,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 8,
+            "wins": 6,
+            "losses": 2,
+            "pnl": -0.524686181,
+            "winRatePct": 75.0,
+            "expectancy": -0.06558577267378794,
+            "profitFactor": 0.5307659818958029,
+            "firstEntryMadrid": "2026-10-17T10:45:03+02:00",
+            "lastExitMadrid": "2026-10-21T17:18:47+02:00"
+          },
+          {
+            "engineVersion": 6,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 1,
+            "wins": 0,
+            "losses": 1,
+            "pnl": -0.285039866,
+            "winRatePct": 0.0,
+            "expectancy": -0.2850398661132299,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-21T17:24:30+02:00",
+            "lastExitMadrid": "2026-10-24T10:56:16+02:00"
+          },
+          {
+            "engineVersion": 7,
+            "riskProfile": null,
+            "strategyProfile": "aggressive-adaptive-v3",
+            "closed": 1,
+            "wins": 0,
+            "losses": 1,
+            "pnl": -0.458686623,
+            "winRatePct": 0.0,
+            "expectancy": -0.4586866227617278,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-21T18:06:08+02:00",
+            "lastExitMadrid": "2026-10-24T10:56:16+02:00"
+          },
+          {
+            "engineVersion": 7,
+            "riskProfile": "aggressive-capacity-v4",
+            "strategyProfile": "aggressive-adaptive-v3",
+            "closed": 5,
+            "wins": 4,
+            "losses": 1,
+            "pnl": 0.157897419,
+            "winRatePct": 80.0,
+            "expectancy": 0.031579483724448625,
+            "profitFactor": 1.471277524842674,
+            "firstEntryMadrid": "2026-10-24T12:00:03+02:00",
+            "lastExitMadrid": "2026-10-25T10:29:33+01:00"
+          }
+        ],
+        "savedValidationRows": 22,
+        "appliedCurrentEngine": 0,
+        "metaModelSamples": 15
+      },
+      {
+        "family": "meanrev",
+        "currency": "EUR",
+        "initialVirtual": 100.0,
+        "sessionStartedMadrid": "2026-10-15T20:56:41.145010+02:00",
+        "balance": 100.579336070993,
+        "running": true,
+        "openPositions": 0,
+        "closedNet": {
+          "closed": 2,
+          "wins": 2,
+          "losses": 0,
+          "pnl": 0.271335174,
+          "winRatePct": 100.0,
+          "expectancy": 0.13566758680246593,
+          "profitFactor": null,
+          "firstEntryMadrid": "2026-10-17T10:36:42+02:00",
+          "lastExitMadrid": "2026-10-18T00:38:12+02:00"
+        },
+        "closedLegacy": {
+          "closed": 1,
+          "wins": 1,
+          "losses": 0,
+          "pnl": 0.308000897,
+          "winRatePct": 100.0,
+          "expectancy": 0.3080008973880706,
+          "profitFactor": null,
+          "firstEntryMadrid": "2026-10-15T20:57:14+02:00",
+          "lastExitMadrid": "2026-10-18T00:38:10+02:00"
+        },
+        "currentEngine": 7,
+        "currentRiskProfile": "aggressive-capacity-v4",
+        "currentProfileClosedNet": {
+          "closed": 0,
+          "wins": 0,
+          "losses": 0,
+          "pnl": 0,
+          "winRatePct": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "firstEntryMadrid": null,
+          "lastExitMadrid": null
+        },
+        "currentProfileOpen": 0,
+        "closedByVersion": [
+          {
+            "engineVersion": 3,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 1,
+            "wins": 1,
+            "losses": 0,
+            "pnl": 0.308000897,
+            "winRatePct": 100.0,
+            "expectancy": 0.3080008973880706,
+            "profitFactor": null,
+            "firstEntryMadrid": "2026-10-15T20:57:14+02:00",
+            "lastExitMadrid": "2026-10-18T00:38:10+02:00"
+          },
+          {
+            "engineVersion": 4,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 2,
+            "wins": 2,
+            "losses": 0,
+            "pnl": 0.271335174,
+            "winRatePct": 100.0,
+            "expectancy": 0.13566758680246593,
+            "profitFactor": null,
+            "firstEntryMadrid": "2026-10-17T10:36:42+02:00",
+            "lastExitMadrid": "2026-10-18T00:38:12+02:00"
+          }
+        ],
+        "savedValidationRows": 12,
+        "appliedCurrentEngine": 0,
+        "metaModelSamples": 2
+      },
+      {
+        "family": "orb",
+        "currency": "EUR",
+        "initialVirtual": 100.0,
+        "sessionStartedMadrid": "2026-10-15T20:56:41.145010+02:00",
+        "balance": 99.70157996361905,
+        "running": true,
+        "openPositions": 0,
+        "closedNet": {
+          "closed": 7,
+          "wins": 3,
+          "losses": 4,
+          "pnl": -0.298420036,
+          "winRatePct": 42.857142857142854,
+          "expectancy": -0.042631433768709356,
+          "profitFactor": 0.39747287836611656,
+          "firstEntryMadrid": "2026-10-21T15:50:07+02:00",
+          "lastExitMadrid": "2026-10-21T18:40:30+02:00"
+        },
+        "closedLegacy": {
+          "closed": 0,
+          "wins": 0,
+          "losses": 0,
+          "pnl": 0,
+          "winRatePct": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "firstEntryMadrid": null,
+          "lastExitMadrid": null
+        },
+        "currentEngine": 7,
+        "currentRiskProfile": "aggressive-capacity-v4",
+        "currentProfileClosedNet": {
+          "closed": 0,
+          "wins": 0,
+          "losses": 0,
+          "pnl": 0,
+          "winRatePct": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "firstEntryMadrid": null,
+          "lastExitMadrid": null
+        },
+        "currentProfileOpen": 0,
+        "closedByVersion": [
+          {
+            "engineVersion": 6,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 7,
+            "wins": 3,
+            "losses": 4,
+            "pnl": -0.298420036,
+            "winRatePct": 42.857142857142854,
+            "expectancy": -0.042631433768709356,
+            "profitFactor": 0.39747287836611656,
+            "firstEntryMadrid": "2026-10-21T15:50:07+02:00",
+            "lastExitMadrid": "2026-10-21T18:40:30+02:00"
+          }
+        ],
+        "savedValidationRows": 10,
+        "appliedCurrentEngine": 0,
+        "metaModelSamples": 7
+      },
+      {
+        "family": "scalper",
+        "currency": "EUR",
+        "initialVirtual": 100.0,
+        "sessionStartedMadrid": "2026-10-15T20:56:41.145010+02:00",
+        "balance": 82.37869686675164,
+        "running": true,
+        "openPositions": 0,
+        "closedNet": {
+          "closed": 12,
+          "wins": 0,
+          "losses": 12,
+          "pnl": -17.621303133,
+          "winRatePct": 0.0,
+          "expectancy": -1.468441927770696,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-18T21:49:05+02:00",
+          "lastExitMadrid": "2026-10-25T11:04:07+01:00"
+        },
+        "closedLegacy": {
+          "closed": 0,
+          "wins": 0,
+          "losses": 0,
+          "pnl": 0,
+          "winRatePct": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "firstEntryMadrid": null,
+          "lastExitMadrid": null
+        },
+        "currentEngine": 7,
+        "currentRiskProfile": "aggressive-capacity-v4",
+        "currentProfileClosedNet": {
+          "closed": 2,
+          "wins": 0,
+          "losses": 2,
+          "pnl": -3.926360009,
+          "winRatePct": 0.0,
+          "expectancy": -1.9631800045605086,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-21T18:53:27+02:00",
+          "lastExitMadrid": "2026-10-25T11:04:07+01:00"
+        },
+        "currentProfileOpen": 0,
+        "closedByVersion": [
+          {
+            "engineVersion": 4,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 7,
+            "wins": 0,
+            "losses": 7,
+            "pnl": -11.169018385,
+            "winRatePct": 0.0,
+            "expectancy": -1.5955740549559165,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-18T21:49:05+02:00",
+            "lastExitMadrid": "2026-10-20T21:56:59+02:00"
+          },
+          {
+            "engineVersion": 7,
+            "riskProfile": null,
+            "strategyProfile": "aggressive-adaptive-v3",
+            "closed": 3,
+            "wins": 0,
+            "losses": 3,
+            "pnl": -2.525924739,
+            "winRatePct": 0.0,
+            "expectancy": -0.841974913145305,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-21T18:15:11+02:00",
+            "lastExitMadrid": "2026-10-24T10:56:16+02:00"
+          },
+          {
+            "engineVersion": 7,
+            "riskProfile": "aggressive-capacity-v4",
+            "strategyProfile": "aggressive-adaptive-v3",
+            "closed": 2,
+            "wins": 0,
+            "losses": 2,
+            "pnl": -3.926360009,
+            "winRatePct": 0.0,
+            "expectancy": -1.9631800045605086,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-21T18:53:27+02:00",
+            "lastExitMadrid": "2026-10-25T11:04:07+01:00"
+          }
+        ],
+        "savedValidationRows": 15,
+        "appliedCurrentEngine": 0,
+        "metaModelSamples": 12
+      },
+      {
+        "family": "squeeze",
+        "currency": "EUR",
+        "initialVirtual": 100.0,
+        "sessionStartedMadrid": "2026-10-15T20:56:41.145010+02:00",
+        "balance": 79.8606299795302,
+        "running": true,
+        "openPositions": 4,
+        "closedNet": {
+          "closed": 20,
+          "wins": 3,
+          "losses": 17,
+          "pnl": -20.419727553,
+          "winRatePct": 15.0,
+          "expectancy": -1.0209863776685912,
+          "profitFactor": 0.03599005774503207,
+          "firstEntryMadrid": "2026-10-17T10:37:35+02:00",
+          "lastExitMadrid": "2026-10-24T10:56:16+02:00"
+        },
+        "closedLegacy": {
+          "closed": 2,
+          "wins": 2,
+          "losses": 0,
+          "pnl": 0.280357533,
+          "winRatePct": 100.0,
+          "expectancy": 0.14017876645101449,
+          "profitFactor": null,
+          "firstEntryMadrid": "2026-10-15T21:30:07+02:00",
+          "lastExitMadrid": "2026-10-17T10:36:39+02:00"
+        },
+        "currentEngine": 7,
+        "currentRiskProfile": "aggressive-capacity-v4",
+        "currentProfileClosedNet": {
+          "closed": 0,
+          "wins": 0,
+          "losses": 0,
+          "pnl": 0,
+          "winRatePct": null,
+          "expectancy": null,
+          "profitFactor": null,
+          "firstEntryMadrid": null,
+          "lastExitMadrid": null
+        },
+        "currentProfileOpen": 4,
+        "closedByVersion": [
+          {
+            "engineVersion": 3,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 2,
+            "wins": 2,
+            "losses": 0,
+            "pnl": 0.280357533,
+            "winRatePct": 100.0,
+            "expectancy": 0.14017876645101449,
+            "profitFactor": null,
+            "firstEntryMadrid": "2026-10-15T21:30:07+02:00",
+            "lastExitMadrid": "2026-10-17T10:36:39+02:00"
+          },
+          {
+            "engineVersion": 4,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 16,
+            "wins": 2,
+            "losses": 14,
+            "pnl": -18.645138705,
+            "winRatePct": 12.5,
+            "expectancy": -1.1653211690445169,
+            "profitFactor": 0.03572551242140671,
+            "firstEntryMadrid": "2026-10-17T10:37:35+02:00",
+            "lastExitMadrid": "2026-10-21T12:15:50+02:00"
+          },
+          {
+            "engineVersion": 5,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 1,
+            "wins": 0,
+            "losses": 1,
+            "pnl": -0.081716293,
+            "winRatePct": 0.0,
+            "expectancy": -0.0817162928698086,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-21T12:16:27+02:00",
+            "lastExitMadrid": "2026-10-21T16:06:33+02:00"
+          },
+          {
+            "engineVersion": 6,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 1,
+            "wins": 1,
+            "losses": 0,
+            "pnl": 0.071558166,
+            "winRatePct": 100.0,
+            "expectancy": 0.07155816607484183,
+            "profitFactor": null,
+            "firstEntryMadrid": "2026-10-21T16:07:04+02:00",
+            "lastExitMadrid": "2026-10-21T18:52:01+02:00"
+          },
+          {
+            "engineVersion": 7,
+            "riskProfile": null,
+            "strategyProfile": "aggressive-adaptive-v3",
+            "closed": 2,
+            "wins": 0,
+            "losses": 2,
+            "pnl": -1.764430722,
+            "winRatePct": 0.0,
+            "expectancy": -0.8822153609322936,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-21T18:06:05+02:00",
+            "lastExitMadrid": "2026-10-24T10:56:16+02:00"
+          }
+        ],
+        "savedValidationRows": 20,
+        "appliedCurrentEngine": 0,
+        "metaModelSamples": 20
+      },
+      {
+        "family": "swing",
+        "currency": "EUR",
+        "initialVirtual": 100.0,
+        "sessionStartedMadrid": "2026-10-15T20:56:41.145010+02:00",
+        "balance": 89.87180985653472,
+        "running": true,
+        "openPositions": 1,
+        "closedNet": {
+          "closed": 13,
+          "wins": 4,
+          "losses": 9,
+          "pnl": -9.486864159,
+          "winRatePct": 30.76923076923077,
+          "expectancy": -0.7297587814750829,
+          "profitFactor": 0.18297611671963018,
+          "firstEntryMadrid": "2026-10-18T00:38:16+02:00",
+          "lastExitMadrid": "2026-10-24T10:56:16+02:00"
+        },
+        "closedLegacy": {
+          "closed": 8,
+          "wins": 2,
+          "losses": 6,
+          "pnl": -0.641325984,
+          "winRatePct": 25.0,
+          "expectancy": -0.08016574803614666,
+          "profitFactor": 0.6675455391824305,
+          "firstEntryMadrid": "2026-10-15T20:57:11+02:00",
+          "lastExitMadrid": "2026-10-20T22:05:01+02:00"
+        },
+        "currentEngine": 7,
+        "currentRiskProfile": "aggressive-capacity-v4",
+        "currentProfileClosedNet": {
+          "closed": 2,
+          "wins": 0,
+          "losses": 2,
+          "pnl": -7.162838715,
+          "winRatePct": 0.0,
+          "expectancy": -3.5814193573473756,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-21T18:53:25+02:00",
+          "lastExitMadrid": "2026-10-24T10:56:16+02:00"
+        },
+        "currentProfileOpen": 1,
+        "closedByVersion": [
+          {
+            "engineVersion": 3,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 8,
+            "wins": 2,
+            "losses": 6,
+            "pnl": -0.641325984,
+            "winRatePct": 25.0,
+            "expectancy": -0.08016574803614666,
+            "profitFactor": 0.6675455391824305,
+            "firstEntryMadrid": "2026-10-15T20:57:11+02:00",
+            "lastExitMadrid": "2026-10-20T22:05:01+02:00"
+          },
+          {
+            "engineVersion": 4,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 11,
+            "wins": 4,
+            "losses": 7,
+            "pnl": -2.324025444,
+            "winRatePct": 36.36363636363637,
+            "expectancy": -0.21127504040739328,
+            "profitFactor": 0.4775886870935752,
+            "firstEntryMadrid": "2026-10-18T00:38:16+02:00",
+            "lastExitMadrid": "2026-10-24T10:56:16+02:00"
+          },
+          {
+            "engineVersion": 7,
+            "riskProfile": "aggressive-capacity-v4",
+            "strategyProfile": "aggressive-adaptive-v3",
+            "closed": 2,
+            "wins": 0,
+            "losses": 2,
+            "pnl": -7.162838715,
+            "winRatePct": 0.0,
+            "expectancy": -3.5814193573473756,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-21T18:53:25+02:00",
+            "lastExitMadrid": "2026-10-24T10:56:16+02:00"
+          }
+        ],
+        "savedValidationRows": 29,
+        "appliedCurrentEngine": 0,
+        "metaModelSamples": 13
+      },
+      {
+        "family": "trend",
+        "currency": "EUR",
+        "initialVirtual": 100.0,
+        "sessionStartedMadrid": "2026-10-15T20:56:41.145010+02:00",
+        "balance": 91.9966680757455,
+        "running": true,
+        "openPositions": 2,
+        "closedNet": {
+          "closed": 14,
+          "wins": 4,
+          "losses": 10,
+          "pnl": -4.410572316,
+          "winRatePct": 28.571428571428573,
+          "expectancy": -0.31504087972246914,
+          "profitFactor": 0.20596167343269772,
+          "firstEntryMadrid": "2026-10-17T10:37:52+02:00",
+          "lastExitMadrid": "2026-10-25T12:45:10+01:00"
+        },
+        "closedLegacy": {
+          "closed": 5,
+          "wins": 0,
+          "losses": 5,
+          "pnl": -3.592759608,
+          "winRatePct": 0.0,
+          "expectancy": -0.7185519216279911,
+          "profitFactor": 0.0,
+          "firstEntryMadrid": "2026-10-15T20:57:14+02:00",
+          "lastExitMadrid": "2026-10-18T21:28:53+02:00"
+        },
+        "currentEngine": 7,
+        "currentRiskProfile": "aggressive-capacity-v4",
+        "currentProfileClosedNet": {
+          "closed": 3,
+          "wins": 2,
+          "losses": 1,
+          "pnl": -0.024646577,
+          "winRatePct": 66.66666666666667,
+          "expectancy": -0.008215525762207873,
+          "profitFactor": 0.9042038129675796,
+          "firstEntryMadrid": "2026-10-24T11:00:40+02:00",
+          "lastExitMadrid": "2026-10-25T12:45:10+01:00"
+        },
+        "currentProfileOpen": 2,
+        "closedByVersion": [
+          {
+            "engineVersion": 3,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 5,
+            "wins": 0,
+            "losses": 5,
+            "pnl": -3.592759608,
+            "winRatePct": 0.0,
+            "expectancy": -0.7185519216279911,
+            "profitFactor": 0.0,
+            "firstEntryMadrid": "2026-10-15T20:57:14+02:00",
+            "lastExitMadrid": "2026-10-18T21:28:53+02:00"
+          },
+          {
+            "engineVersion": 4,
+            "riskProfile": null,
+            "strategyProfile": null,
+            "closed": 11,
+            "wins": 2,
+            "losses": 9,
+            "pnl": -4.385925739,
+            "winRatePct": 18.181818181818183,
+            "expectancy": -0.39872052171163125,
+            "profitFactor": 0.17204934345019565,
+            "firstEntryMadrid": "2026-10-17T10:37:52+02:00",
+            "lastExitMadrid": "2026-10-24T10:56:31+02:00"
+          },
+          {
+            "engineVersion": 7,
+            "riskProfile": "aggressive-capacity-v4",
+            "strategyProfile": "aggressive-adaptive-v3",
+            "closed": 3,
+            "wins": 2,
+            "losses": 1,
+            "pnl": -0.024646577,
+            "winRatePct": 66.66666666666667,
+            "expectancy": -0.008215525762207873,
+            "profitFactor": 0.9042038129675796,
+            "firstEntryMadrid": "2026-10-24T11:00:40+02:00",
+            "lastExitMadrid": "2026-10-25T12:45:10+01:00"
+          }
+        ],
+        "savedValidationRows": 24,
+        "appliedCurrentEngine": 0,
+        "metaModelSamples": 14
+      }
+    ],
+    "closedNetAcrossIndependentEURBooks": {
+      "closed": 83,
+      "wins": 26,
+      "losses": 57,
+      "pnl": -53.076067276,
+      "winRatePct": 31.325301204819276,
+      "expectancy": -0.6394706900762634,
+      "profitFactor": 0.0952176674984705,
+      "firstEntryMadrid": "2026-10-17T10:36:42+02:00",
+      "lastExitMadrid": "2026-10-25T12:45:10+01:00"
+    },
+    "closedLegacyAcrossIndependentEURBooks": {
+      "closed": 17,
+      "wins": 5,
+      "losses": 12,
+      "pnl": -4.008928176,
+      "winRatePct": 29.41176470588235,
+      "expectancy": -0.23581930448208574,
+      "profitFactor": 0.3187916234133621,
+      "firstEntryMadrid": "2026-10-15T20:57:11+02:00",
+      "lastExitMadrid": "2026-10-20T22:05:01+02:00"
+    },
+    "savedValidationRows": 132,
+    "appliedCurrentEngine": 0,
+    "validationRejectionReasons": {
+      "ninguna configuración rentable neta en el tramo de selección": 84,
+      "Muestra, consistencia, DSR, vecindad o costes insuficientes": 39,
+      "Histórico proxy: resultado informativo, no valida el instrumento spot": 5,
+      "Histórico insuficiente para tres bloques y holdout con embargo": 4
+    },
+    "validationEngineCounts": {
+      "7": 132
+    },
+    "validationFirstTrainedMadrid": "2026-10-25T10:29:47+01:00",
+    "validationLastTrainedMadrid": "2026-10-25T12:16:31+01:00",
+    "modelMaturityThreshold": 30,
+    "modelsAtThreshold": 0
+  },
+  "mt5Demo": {
+    "source": ".runtime/mt5-demo.sqlite",
+    "sessions": [
+      {
+        "currency": "EUR",
+        "initialVirtual": 100.0,
+        "additionalVirtualAllocations": 2400.0,
+        "allocatedVirtualCapital": 2500.0,
+        "sessionStartedMadrid": "2026-10-15T20:56:41.236952+02:00",
+        "latestSnapshotMadrid": "2026-10-25T12:57:10+01:00",
+        "balance": 2497.78,
+        "equity": 2497.78,
+        "openPositions": 0,
+        "netRealizedSinceSession": -2.2199999999999998,
+        "closedPositions": {
+          "closed": 1,
+          "wins": 0,
+          "losses": 1,
+          "pnl": -2.22,
+          "winRatePct": 0.0,
+          "expectancy": -2.2199999999999998,
+          "profitFactor": 0.0
+        },
+        "brokerTransfersIncludedInStoredSessionDeals": 0,
+        "reconciledAtLastSync": true,
+        "reconciliationDifference": 0.0,
+        "lastSyncMadrid": "2026-10-25T12:57:10+01:00",
+        "lastSyncHasError": false,
+        "freshnessSecondsAtAudit": 2.7468550205230713,
+        "validationsSaved": 17,
+        "appliedCurrentEngine": 0,
+        "appliedPriorEngine": 1,
+        "validationGroups": [
+          {
+            "engineVersion": 3,
+            "applied": false,
+            "count": 10
+          },
+          {
+            "engineVersion": 3,
+            "applied": true,
+            "count": 1
+          },
+          {
+            "engineVersion": 7,
+            "applied": false,
+            "count": 6
+          }
+        ]
+      }
+    ],
+    "note": "Broker DEMO accounting. Allocation increases are virtual funding, not profits or real deposits. Reconciliation is the last persisted broker read; freshness depends on audit timestamp."
+  },
+  "aiSwarm": {
+    "source": ".runtime/swarm.sqlite",
+    "cyclesByStatus": {
+      "invalid": 1,
+      "success": 3
+    },
+    "decisionGroups": [
+      {
+        "mode": "shadow",
+        "armed": false,
+        "quorum": false,
+        "authorized": false,
+        "submitted": false,
+        "count": 3
+      }
+    ],
+    "incrementalAdvantageMeasured": false,
+    "reason": "No randomized or paired baseline, counterfactual execution ledger, outcome linkage or incremental net PnL measurement exists in the reviewed evidence. Historical research tests price rules, not the LLM stack.",
+    "sourceCodeSubscriptionMode": "Pulse and commander use LLM subscription; flow and quant risk are deterministic local functions. ChatGPT also supplies slower strategic reviews."
+  },
+  "historicalResearch": [
+    {
+      "report": "reports/grok-only-research-20261024.json",
+      "engineVersion": 7,
+      "combinations": 96,
+      "eligible": 0,
+      "holdoutsOpened": 1,
+      "onlyCandidate": "LINK 4h momentum-vol-12",
+      "holdoutTrades": 7,
+      "holdoutNetUSDT": 1.81,
+      "doubleCostNetUSDT": 1.4,
+      "expectancyLower95USDT": -0.2681589278546696,
+      "minimumFinalTrades": 20,
+      "promoted": false
+    },
+    {
+      "report": "reports/profit-swing-3y-2026-10-18.json",
+      "engineVersion": 4,
+      "eligible": 0,
+      "promoted": false,
+      "note": "Exploratory overlapping history; BTC holdout 10 trades -3.58 USDT; ETH 29 -4.12; SOL 8 +3.00 with negative lower confidence bound and losing neighbors. Does not validate current v7/v8 policies."
+    },
+    {
+      "report": "reports/REVISION_AGRESIVA_2026-10-21.json",
+      "independentValidation": false,
+      "promotionApplied": false,
+      "note": "36 bot comparisons and 7 desk comparisons; variants selected after observing data. Net cost replay is exploratory, not independent OOS."
+    }
+  ]
+}

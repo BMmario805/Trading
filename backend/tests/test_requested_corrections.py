@@ -1,3 +1,4 @@
+from desk_unit_support import fund_unit_desk
 import asyncio
 from contextlib import ExitStack
 import json
@@ -23,6 +24,7 @@ class PartialExitTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.stack.close)
         folder=self.stack.enter_context(tempfile.TemporaryDirectory())
         self.engine=desk.Desk(db_path=Path(folder)/'desk.sqlite')
+        fund_unit_desk(self,self.engine)
         self.stack.enter_context(patch.object(gemini_agent,'AGENT',None))
         self.analysis=dict(bar=int(time.time())//3600*3600-3600,close=100,ema20=100,
             ema50=99,atr=2,rsi=55,trend=True,pullback=True,rows=[])
@@ -173,6 +175,7 @@ class FullUniverseSelectorTests(unittest.IsolatedAsyncioTestCase):
         self.stack.enter_context(patch.object(desk,'rank_relative_strength',side_effect=ranked_fixture))
         folder=self.stack.enter_context(tempfile.TemporaryDirectory())
         self.engine=desk.Desk(db_path=Path(folder)/'desk.sqlite')
+        fund_unit_desk(self,self.engine)
         self.snapshot=add_markets(data(),[f'COIN{i:02}' for i in range(80)])
         self.agent=Mock()
         self.agent.snapshot.return_value=dict(data=None)
@@ -268,14 +271,17 @@ class WeightedMetaTests(EconomicDatabaseTests):
 
 
 class GateIntegrationTests(EconomicDatabaseTests):
-    def test_catalyst_veto_reaches_lab_execution_without_changing_cash(self):
+    def test_unreplayed_catalyst_is_stored_in_shadow_without_changing_base_policy(self):
         bot=bots.TradingBot(bots.SCALPER)
         with patch.object(gemini_agent,'catalyst_gate',return_value=dict(allowed=False,reason='Veto contextual')):
             bot._open(bots.SYMBOLS_BY_ID['BTC'],'long',100,2,.8,
-                      dict(reasons=[],candles=[],confirmations=[]),2,4,1)
-        self.assertFalse(bot.positions)
+                      dict(reasons=[],entryQuote=dict(price=100,time=bots.time.time()),candles=[dict(time=0,open=100,high=101,low=99,close=100,volume=100)],confirmations=[]),2,4,1)
+        self.assertIn('BTC',bot.positions)
         self.assertEqual(bot.balance,bot.cfg.initial_balance)
-        self.assertEqual(bot.diagnostics['BTC']['reason'],'Veto contextual')
+        with bots._conn() as con:
+            snap=json.loads(con.execute('SELECT snapshot FROM bot_trades').fetchone()[0])
+        self.assertEqual(snap['catalystGate']['mode'],'shadow')
+        self.assertFalse(snap['catalystGate']['shadowDecision']['allowed'])
 
     def test_probation_limits_apply_to_all_seven_bots_and_slow_frames_are_explicit(self):
         self.assertEqual((learning.PROBATION_SIZE,learning.MAX_PROBATION_POSITIONS),(.25,2))

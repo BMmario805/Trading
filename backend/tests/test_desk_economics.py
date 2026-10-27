@@ -1,3 +1,4 @@
+from desk_unit_support import fund_unit_desk
 import asyncio
 import tempfile
 import time
@@ -15,6 +16,7 @@ class DeskEconomicsTests(unittest.IsolatedAsyncioTestCase):
         self.path=patch.object(desk,'DB_PATH',Path(self.tmp.name)/'desk.sqlite')
         self.path.start()
         self.engine=desk.Desk()
+        fund_unit_desk(self,self.engine)
         self.analysis=dict(bar=int(time.time())-900,close=100,ema20=100,ema50=99,
                            atr=2,rsi=55,trend=True,pullback=True,rows=[])
         self.patches=[patch.object(desk.market_data,'get_candles',AsyncMock(return_value=[])),

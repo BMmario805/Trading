@@ -345,6 +345,17 @@ lote solicitado. Cada lectura identifica el tipo de catalizador y admite
 El JSON con campos adicionales, tipos incorrectos o citas sin HTTPS se rechaza.
 Los informes almacenados con contratos anteriores se descartan y se renuevan.
 
+Tres perfiles especializados reutilizan ese radar y el commander, sin una
+búsqueda propia si el lote sigue en caché. El verificador de noticias entra
+solo con incertidumbre (titular elevado o evento, fakeout, trampa bilateral,
+catalizador fresco sin dos fuentes). El investigador cuantitativo entra solo
+con una hipótesis concreta y deja el experimento sin aplicar. El revisor
+técnico entra solo ante un fallo demostrable y pide una regresión. Los tres
+comparten cuatro trabajos nuevos por día UTC. No cambian el modo demo, los
+topes de riesgo ni el puente: ese proceso sigue con `--no-subagents` y sin
+recurrir a una API de pago. Los perfiles que Grok descubre están en
+`.grok/agents/` y la activación local en `backend/app/specialist_team.py`.
+
 Codex se reserva para asignación de familias por régimen (caché de 4 horas) y
 post mortem de los últimos 40 cierres netos (12 horas o 10 cierres nuevos).
 La caché y sus intentos se guardan en `.runtime/swarm.sqlite`; comparten los
@@ -400,8 +411,8 @@ npm run dev
 
 O simplemente: `.\start.ps1`
 
-Primera vez: `python -m venv backend\.venv`, `backend\.venv\Scripts\pip install -r backend\requirements.txt`
-y `npm install` dentro de `frontend/`.
+Primera vez (Python 3.13): `python -m venv backend\.venv`, `backend\.venv\Scripts\pip install -r backend\requirements.lock`
+y `npm ci` dentro de `frontend/`.
 
 Abrir <http://localhost:5173>.
 
@@ -413,7 +424,7 @@ Abrir <http://localhost:5173>.
 - `GET /api/candles/{id}?interval=1m|5m|15m|1h|4h|1d` — velas OHLCV
 - `GET /api/sentiment/{id}` — opinión pública agregada (caché de 5 min)
 - `GET /api/sentiment/{id}/history?hours=72` — histórico de sentimiento (SQLite `backend/data.db`)
-- `GET /api/analysis/{id}?interval=` — técnico + sentimiento + probabilidad
+- `GET /api/analysis/{id}?interval=` — técnico + sentimiento + puntuación sin calibrar
 - `WS /ws` — `{"action":"subscribe","symbol":"BTC"}` → ticks en vivo
 - `GET /api/bots` — estado de los bots (equity, posiciones abiertas, estadísticas, aprendizaje)
 - `POST /api/bots/{id}/start|stop|reset` — controlar un bot (`scalper` | `swing` | `trend` | `meanrev` | `orb` | `squeeze`)
@@ -428,9 +439,34 @@ Abrir <http://localhost:5173>.
 - `GET /api/bots/performance?bot=&symbol=&from=&to=` — curva de PnL acumulado
   de operaciones cerradas, filtrable por bot, mercado y fechas (epoch s)
 
-## Mejoras futuras
+## Investigación profesional y comprobación del equipo
 
-- WebSocket nativo de Binance (latencia <100 ms) en lugar de sondeo
+La mesa de investigación del panel permite registrar A1–A7, consultar evidencia y
+crear encargos acotados. Trabaja en paper/demo. Un resultado histórico o un acuse
+de Grok no autoriza operaciones ni acredita rentabilidad.
+
+- `GET /api/professional/status`: versiones, progreso, conversiones y limitaciones.
+- `GET /api/team/health`: entregas de los cinco roles, con caducidad de una hora.
+- `POST /api/team/tasks`: flujo finito e idempotente; máximo cuatro tareas por día.
+- `GET /api/team/tasks/{id}`: etapas, bloqueos y propuesta de investigación.
+- `GET /api/research/plans`: catálogo A1–A7 y registro de experimentos.
+- `POST /api/research/plans/{id}/preregister`: congelar hipótesis y universo.
+- `POST /api/research/experiments/{id}/evaluate`: evaluación local acotada;
+  A5–A7 requieren eventos emparejados disponibles al decidir.
+
+El registro conserva hashes del código, entradas archivadas, intentos y decisiones.
+Los periodos reservados consultados no se reutilizan como evidencia independiente.
+Las capturas públicas registran bytes y fecha; la corroboración factual se declara
+por separado. Los perfiles locales y los bots de escritorio tienen estados distintos.
+
+Validación local: ejecutar `backend\.venv\Scripts\python -m pytest tests -q`
+desde `backend/`; ejecutar `npm run build` y `npm run lint` desde `frontend/`.
+Para copia y recuperación en un directorio nuevo, consultar [deploy/README.md](deploy/README.md).
+Estado, resultados y límites: [informe de implementación](reports/IMPLEMENTACION_PROFESIONAL_2026-10-27.md).
+
+## Ampliaciones futuras
+
+- WebSocket público de Binance ya disponible; su latencia debe medirse, sin prometer un máximo de 100 ms
 - [Finnhub](https://finnhub.io/) o [Twelve Data](https://twelvedata.com/) con API key gratuita
   para streaming real de acciones/forex
 - OAuth de Reddit (app "script" gratuita) para eliminar el rate-limit del RSS

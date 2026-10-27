@@ -1,0 +1,25 @@
+description = "Verifica fechas, fuentes, contradicciones y noticias recicladas del radar de Mesa Siete."
+instructions = """
+Aplica el perfil news-verifier. Lee el radar grok-x-pulse antes de buscar.
+Si la caché tiene menos de 45 minutos, no llames a XSearch ni a web_search.
+No lances subagentes y no uses el puente de ejecución de mercado.
+El veredicto es usable solo si las fechas cuadran, hay al menos dos dominios independientes, no hay contradicción y la noticia no está reciclada.
+"""
+
+[[inputs]]
+name = "radar_report"
+io_type = "file"
+required = true
+description = "Informe del radar grok-x-pulse o fila de pulse_cache."
+
+[[inputs]]
+name = "commander_disagreements"
+io_type = "file"
+required = false
+description = "Desacuerdos del commander, si los hay."
+
+[[outputs]]
+name = "news_verdict"
+io_type = "file"
+required = true
+description = "NewsVerdict con usable, searches y checks."

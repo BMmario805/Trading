@@ -14,8 +14,11 @@ from itertools import product
 from .execution import fresh_signal, atr_spread_multiple
 from .mt5_gateway import lot_floor
 from .strategy import extension_series
+from .mt5_risk import risk_components, RISK_MODEL_VERSION
+from .mt5_policy import COOLDOWN_SECONDS, EXECUTION_POLICY_VERSION
+from .validation import promotion_decision, promotion_allowed
 
-VERSION = 3
+VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -76,7 +79,8 @@ def capture_contract(api, symbol, account, config, tick, clock_offset=0):
     coefficients = [abs(v/probe) for v in probes]
     # Capture is conservative for losses, but remains indicative if conversion
     # is nonlinear or historical conversion/costs have not been supplied.
-    costs = config.get('replay_costs', {}).get(symbol, {})
+    canonical=next((key for key,mapped in config.get('symbols',{}).items() if mapped==symbol),symbol)
+    costs = config.get('replay_costs', {}).get(symbol,config.get('replay_costs', {}).get(canonical,{}))
     margin = api.order_calc_margin(api.ORDER_TYPE_BUY, symbol, 1., tick.ask)
     sell_margin = api.order_calc_margin(api.ORDER_TYPE_SELL, symbol, 1., tick.bid)
     if margin is None or sell_margin is None:
@@ -112,13 +116,13 @@ def entry_plan(contract, direction, price, atr, sl_atr, tp_atr, equity, risk_pct
     if min(stop, target) <= 0 or equity <= 0:
         return dict(executable=False, reason='capital-or-price')
     loss = abs(price-stop)*c.money_per_price_lot
-    per_lot_risk = loss+max(loss*.1,c.commission_roundtrip_per_lot or 0)
+    per_lot_risk = risk_components(loss,1.0,c.commission_roundtrip_per_lot)['risk']
     budget = equity*min(risk_pct, max_open_risk_pct)
     lots = lot_floor(min(c.volume_max, budget/per_lot_risk), c.volume_step)
     minimum_risk = per_lot_risk*c.volume_min
     required = max(minimum_risk/min(risk_pct, max_open_risk_pct), 4*c.volume_min*c.margin_per_lot)
     result = dict(executable=False, lots=lots, stop=stop, target=target, riskBudget=budget,
-                  minimumLotRisk=minimum_risk, requiredCapital=required, currency=c.currency)
+                  minimumLotRisk=minimum_risk, requiredCapital=required, currency=c.currency,riskModelVersion=RISK_MODEL_VERSION)
     if lots < c.volume_min:
         return dict(result, reason='minimum-lot')
     if lots*c.margin_per_lot > equity*.25:
@@ -155,7 +159,7 @@ def simulate(candles, scores, atrs, contract, params, *, initial, risk_pct,
         max_dd = max(max_dd,peak-equity)
         trades.append(dict(pnl=pnl, reason=reason, openedAt=pos['opened'], closedAt=stamp,
                            lots=pos['lots'], entry=pos['entry'], exit=price))
-        cooldown_until = stamp+300
+        cooldown_until = stamp+COOLDOWN_SECONDS
         pos = None
 
     for i in range(max(start, 1), end):
@@ -228,17 +232,27 @@ def simulate(candles, scores, atrs, contract, params, *, initial, risk_pct,
     return dict(trades=len(trades),pnl=round(sum(pnls),6),expectancy=sum(pnls)/len(pnls) if pnls else None,
                 wins=sum(p > 0 for p in pnls),profitFactor=gain/loss if loss else None,
                 maxDrawdown=round(max_dd,6),blocked=blocked,executions=trades,
-                costsKnown=c.promotable)
+                costsKnown=c.promotable,executionEquivalent=False,
+                cooldownSeconds=COOLDOWN_SECONDS,executionPolicyVersion=EXECUTION_POLICY_VERSION)
 
 
 def optimize(cfg, candles, scores, atrs, contract, *, initial, risk_pct, max_open_risk_pct,
-             max_daily_loss_pct, engine_version):
+             max_daily_loss_pct, engine_version, ledger_context=None):
     """Small preregistered grid, chronological validation and untouched holdout."""
     from .aggressive import exit_policy
     base = dict(entryThreshold=cfg.entry_threshold,slAtr=cfg.sl_atr,tpAtr=cfg.tp_atr,trailAtr=cfg.trail_atr)
     extensions = extension_series(candles)
     embargo = max(3, math.ceil(cfg.max_hold_seconds/max(1,candles[1]['time']-candles[0]['time'])))
     train_end, val_end = int(len(candles)*.6), int(len(candles)*.8)
+    claim=None
+    if ledger_context:
+        from . import experiments
+        subset=candles[min(val_end+embargo,len(candles)):]
+        if subset:
+            normalized=[dict(row,time=row['time']-contract.clock_offset) for row in subset]
+            manifest=experiments.dataset_manifest(normalized,ledger_context['symbol'],cfg.work_interval,
+                ledger_context['source'],max(1,candles[1]['time']-candles[0]['time']))
+            claim=experiments.claim_holdout(ledger_context['experimentId'],manifest,db_path=ledger_context['dbPath'])
     common = dict(initial=initial,risk_pct=risk_pct,max_open_risk_pct=max_open_risk_pct,
                   max_hold_seconds=cfg.max_hold_seconds,extensions=extensions,overext_atr=cfg.overext_atr,
                   max_daily_loss_pct=max_daily_loss_pct,min_atr_spread=atr_spread_multiple(cfg.id),exit_policy=exit_policy(cfg.id))
@@ -264,7 +278,21 @@ def optimize(cfg, candles, scores, atrs, contract, *, initial, risk_pct, max_ope
     # Detailed execution ledgers belong in offline diagnostics, not per-symbol UI.
     for result in (best_train,val,holdout,stress):
         result.pop('executions',None)
-    return dict(ok=True,applied=accepted,params=best,train=best_train,validation=val,holdout=holdout,
+    # OHLC, isolated capital, current contract captures and unreplayed live
+    # context cannot certify execution equivalence, even on profitable history.
+    promotion=promotion_decision(checks_passed=accepted,costs_verified=contract.promotable,execution_equivalent=False)
+    if claim:
+        promotion=experiments.finalize_evidence(ledger_context['experimentId'],
+            dict(train=best_train,validation=val,holdout=holdout,stress=stress),
+            [dict(name='contractual-historical-checks',passed=accepted)],claim,equivalence=False,
+            costs_verified=contract.promotable,db_path=ledger_context['dbPath'])
+    if accepted: reason='Replay histórico superado; promoción bloqueada hasta evidencia futura y equivalencia de ejecución'
+    return dict(ok=True,applied=promotion_allowed(promotion),historicalPassed=accepted,promotion=promotion,
+                params=best,train=best_train,validation=val,holdout=holdout,
                 stress=stress,reason=reason,engineVersion=engine_version,brokerReplayVersion=VERSION,
                 bars=len(candles),contract=asdict(contract),embargoBars=embargo,
-                executionModel='mt5-bid-ohlc-conservative',costsVerified=contract.promotable)
+                executionModel='mt5-bid-ohlc-conservative',costsVerified=contract.promotable,
+                executionEquivalent=False,executionPolicyVersion=EXECUTION_POLICY_VERSION,riskModelVersion=RISK_MODEL_VERSION,
+                cooldownSeconds=COOLDOWN_SECONDS,holdoutClaim=claim,
+                equivalenceLimits=['OHLC sin trayectoria de ticks/fills','Capital aislado sin cartera compartida',
+                                   'Contexto y controles operativos sin replay punto a punto'])

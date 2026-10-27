@@ -196,7 +196,10 @@ async def get_price(sym: Symbol) -> dict:
             "symbol": sym.id,
             "price": mid,
             "changePct": cached[1],
-            "time": int(time.time()),
+            "time": 0,
+            "receivedAt": time.time(),
+            "sourceTimeVerified": False,
+            "timestampBasis": "source-time-unavailable; reference-only",
         }
 
     if sym.source == "binance":
@@ -207,7 +210,10 @@ async def get_price(sym: Symbol) -> dict:
             "symbol": sym.id,
             "price": float(data["lastPrice"]),
             "changePct": float(data["priceChangePercent"]),
-            "time": int(time.time()),
+            "time": float(data.get("closeTime") or 0)/1000,
+            "receivedAt": time.time(),
+            "sourceTimeVerified": bool(data.get("closeTime")),
+            "timestampBasis": "exchange-ticker-closeTime",
         }
 
     r = await client().get(

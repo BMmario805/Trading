@@ -3,6 +3,8 @@
 import math
 from decimal import Decimal, ROUND_DOWN
 
+from .mt5_risk import contract_risk, RISK_MODEL_VERSION
+
 # Margen acotado para el pequeño adelanto observado del reloj del bróker.
 # No modifica el límite de antigüedad ni desplaza el cierre de las velas.
 MAX_TICK_FUTURE_SECONDS = 15
@@ -24,6 +26,29 @@ class DemoGateway:
         self.api, self.config = api, config
         self.clock_skew = 0.0
         self.last_entry_diagnostics = None
+        self.entry_commission_per_lot = {}
+
+    def canonical_symbol(self, symbol):
+        """Broker aliases are resolved only by the explicit configured mapping."""
+        matches=[base for base,mapped in self.config.get('symbols',{}).items() if mapped==symbol]
+        return matches[0] if len(matches)==1 else symbol
+
+    def contract_costs(self, symbol):
+        costs=self.config.get('replay_costs',{})
+        return costs.get(symbol,costs.get(self.canonical_symbol(symbol),{}))
+
+    def monetary_risk(self, kind, symbol, volume, entry, stop, *, commission_paid=0.0):
+        try:
+            return contract_risk(self.api,self.contract_costs(symbol),kind,symbol,volume,entry,stop,
+                                 commission_paid=commission_paid)
+        except ValueError as exc:
+            raise DemoOnlyError(str(exc)) from exc
+
+    def position_risk(self, position):
+        identity=getattr(position,'identifier',getattr(position,'ticket',None))
+        paid=self.entry_commission_per_lot.get(identity,0.0)*position.volume
+        return self.monetary_risk(position.type,position.symbol,position.volume,position.price_open,
+                                  position.sl,commission_paid=paid)
 
     def account(self, trading=False):
         a, t = self.api.account_info(), self.api.terminal_info()
@@ -104,17 +129,14 @@ class DemoGateway:
         for pos in positions:
             if pos.sl <= 0:
                 raise DemoOnlyError('Hay una posición sin stop; se bloquean nuevas entradas')
-            loss = api.order_calc_profit(pos.type, pos.symbol, pos.volume, pos.price_open, pos.sl)
-            if loss is None or not math.isfinite(loss):
-                raise DemoOnlyError('Riesgo de cartera desconocido')
-            open_risk += max(0, -loss)
+            open_risk += self.position_risk(pos)['risk']
         budget = min(equity * self.config['risk_pct'] * risk_mult,
                      equity * self.config['max_open_risk_pct'] - open_risk)
-        costs = self.config.get('replay_costs', {}).get(symbol, {})
+        costs = self.contract_costs(symbol)
         commission = costs.get('roundTripCommissionPerLot')
         if commission is not None and (not math.isfinite(commission) or commission < 0):
             raise DemoOnlyError('Comisión del contrato inválida')
-        risk_per_lot = -unit_loss + max(-unit_loss*.1, commission or 0)
+        risk_per_lot = self.monetary_risk(kind,symbol,1.0,price,sl)['risk']
         minimum_risk = risk_per_lot * info.volume_min
         minimum_margin = api.order_calc_margin(kind, symbol, info.volume_min, price)
         if minimum_margin is None or not math.isfinite(minimum_margin) or minimum_margin < 0:
@@ -126,7 +148,8 @@ class DemoGateway:
                        equity=equity, riskBudget=max(0, budget), minimumLot=info.volume_min,
                        volumeStep=info.volume_step, minimumLotRisk=minimum_risk,
                        minimumLotMargin=minimum_margin, requiredCapital=required_capital,
-                       riskMultiplier=risk_mult,commissionKnown=commission is not None)
+                       riskMultiplier=risk_mult,commissionKnown=commission is not None,
+                       openRisk=open_risk,riskModel=RISK_MODEL_VERSION)
         self.last_entry_diagnostics = details
         # Reserva del 10% para fricción; los gaps todavía pueden exceder el stop.
         volume = lot_floor(min(info.volume_max, max(0, budget) / risk_per_lot), info.volume_step)
@@ -164,6 +187,7 @@ class DemoGateway:
         request = dict(action=api.TRADE_ACTION_DEAL, symbol=symbol, volume=volume, type=kind,
                        price=price, sl=sl, tp=tp, deviation=20, magic=magic, comment=comment,
                        type_time=api.ORDER_TIME_GTC)
+        details['contractRisk']=self.monetary_risk(kind,symbol,volume,price,sl)
         return self.check_deal(request, info), abs(price-sl)
 
     def notional_eur(self,symbol,volume,price,now,clock_skew=None):

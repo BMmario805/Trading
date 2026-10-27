@@ -15,26 +15,14 @@ from .maker_simulation import PostOnlyOrder
 from .economics import planned_trade
 from .hub import hub
 from . import telemetry
+from .spot_orders import valid_quantity
 
 TTL = 60
 HOURLY_TTL = 180
 
 
 def valid_lot(quantity,price,filters):
-    if not all(math.isfinite(v) and v>0 for v in (quantity,price)): return False
-    lot=next((f for f in filters if f['filterType']=='LOT_SIZE'),None)
-    if not lot: return False
-    step=Decimal(str(lot['stepSize']))
-    q=Decimal(str(quantity))
-    if step<=0 or q%step!=0 or q<Decimal(str(lot['minQty'])): return False
-    maximum=float(lot.get('maxQty',0))
-    if maximum and quantity>maximum: return False
-    for item in filters:
-        if item['filterType'] in ('MIN_NOTIONAL','NOTIONAL'):
-            if quantity*price<float(item.get('minNotional',0)): return False
-            ceiling=float(item.get('maxNotional',0))
-            if ceiling and quantity*price>ceiling: return False
-    return True
+    return valid_quantity(quantity,price,filters,order_type='LIMIT')
 
 
 class DeskMaker:
@@ -112,7 +100,7 @@ class DeskMaker:
         lot=next(f for f in position['marketFilters'] if f['filterType']=='LOT_SIZE')
         order.quantity_step=float(lot['stepSize'])
         row=dict(symbol=symbol,entryKey=position['entryKey'],side=side,order=asdict(order),
-                 generation=BOOKS.generation,accountedQty=0.0,template=deepcopy(position),
+                 generation=BOOKS.generation_for(symbol),accountedQty=0.0,template=deepcopy(position),
                  reservedRisk=position['risk'] if side=='buy' else 0,
                  reservedCash=position['notional']+position['fee'] if side=='buy' else 0)
         self.commit(lambda:self.orders.append(row))
@@ -122,6 +110,24 @@ class DeskMaker:
     def cancel(self,symbol):
         # El llamador confirma la cancelación junto con su cambio de posición.
         self.desk.state['makerOrders']=[o for o in self.orders if o['symbol']!=symbol]
+
+    def cancel_entries(self,reason='cancelled-control'):
+        """Persist cancellation of buy remainders, preserving recorded fills/exits.
+
+        A control first reconciles observations through its timestamp, then calls
+        this method while holding the desk lock. Later events cannot fill a buy
+        that has already been removed from the pending book.
+        """
+        entries=[row for row in self.orders if row['side']=='buy']
+        if not entries: return 0
+        def update():
+            for row in entries:
+                order=PostOnlyOrder(**row['order'])
+                order.status=reason
+                row['order']=asdict(order)
+                self._finish(row,order)
+        self.commit(update)
+        return len(entries)
 
     def pending_entry(self):
         return any(o['side']=='buy' for o in self.orders)
@@ -144,7 +150,9 @@ class DeskMaker:
                 p['makerPartialFallbackQty']=max(0,remaining)
                 p['makerPartialAttempted']=True
 
-    def reconcile(self,data):
+    def reconcile(self,data,cutoff=None):
+        if cutoff is not None and (type(cutoff) not in (int,float) or not math.isfinite(cutoff)):
+            raise ValueError('A finite maker reconciliation cutoff is required')
         engine=self.desk
         if not self.orders: return
         BOOKS.watch_trades([o['symbol'] for o in self.orders])
@@ -154,6 +162,8 @@ class DeskMaker:
             if events is None:
                 order.disconnect()
                 events=[]
+            if cutoff is not None:
+                events=[event for event in events if event['at']<=cutoff]
             def update():
                 previous_fills=len(order.fills)
                 for event in events:
@@ -171,7 +181,7 @@ class DeskMaker:
                                                 price_override=order.price,persist=False)
                             p['partialExits'][-1]['observedFills']=observed
                     row['accountedQty']=order.filled
-                order.advance(time.time())
+                order.advance(time.time() if cutoff is None else cutoff)
                 if row['side']=='buy' and (not engine.state['enabled'] or engine.state.get('flatten') or engine.state['dailyStopped']):
                     if order.status=='pending': order.status='cancelled-risk'
                 row['order']=asdict(order)
@@ -186,7 +196,7 @@ class DeskMaker:
         p=next((p for p in engine.state['positions'] if p['entryKey']==row['entryKey']),None)
         if p is None:
             p=deepcopy(template)
-            p.update(qty=0.0,notional=0.0,fee=0.0,entryTime=order.fills[0]['at'],
+            p.update(qty=0.0,notional=0.0,fee=0.0,initialRisk=0.0,entryTime=order.fills[0]['at'],
                      entryExecution='paper-maker-observed',executionVerified=False)
             engine.state['positions'].append(p)
         p['qty']=float(Decimal(str(p['qty']))+Decimal(str(quantity)))
@@ -195,6 +205,7 @@ class DeskMaker:
         p['entry']=p['notional']/p['qty']
         p['initialDist']=p['entry']-p['sl']
         rate,slip=engine.costs(p)
+        p['initialRisk']=p.get('initialRisk',0)+max(0,cost+fee-quantity*template['sl']*(1-slip)*(1-rate))
         p['risk']=p['notional']+p['fee']-p['qty']*p['sl']*(1-slip)*(1-rate)
         p['economics']=planned_trade(p['entry'],p['sl'],p['tp'],p['qty'],fee_rate=rate,exit_slippage=slip)
         engine.state['cash']-=cost+fee

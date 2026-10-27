@@ -1,0 +1,72 @@
+{
+  "desktopBotsConnected": true,
+  "desktopAgentsSeen": [
+    "grok-desk-commander",
+    "market-radar",
+    "news-verifier",
+    "quant-researcher",
+    "technical-reviewer"
+  ],
+  "expectedDesktopAgents": [
+    "grok-desk-commander",
+    "market-radar",
+    "news-verifier",
+    "quant-researcher",
+    "technical-reviewer"
+  ],
+  "allExpectedDesktopAgentsConnected": true,
+  "pendingAgents": [],
+  "challenges": [
+    {
+      "state": "receipt_verified",
+      "taskId": "team-check-20261026",
+      "correlationId": "team-20261026-7906e42946bb",
+      "agent": "grok-desk-commander",
+      "createdAt": 1793039451.8778794,
+      "observedAt": 1793039946
+    },
+    {
+      "state": "receipt_verified",
+      "taskId": "team-check-20261026",
+      "correlationId": "team-20261026-7906e42946bb",
+      "agent": "market-radar",
+      "createdAt": 1793039451.874656,
+      "observedAt": 1793039948.7803133
+    },
+    {
+      "state": "receipt_verified",
+      "taskId": "team-check-20261026",
+      "correlationId": "team-20261026-7906e42946bb",
+      "agent": "news-verifier",
+      "createdAt": 1793039451.875541,
+      "observedAt": 1793039963
+    },
+    {
+      "state": "receipt_verified",
+      "taskId": "team-check-20261026",
+      "correlationId": "team-20261026-7906e42946bb",
+      "agent": "quant-researcher",
+      "createdAt": 1793039451.8761635,
+      "observedAt": 1793039962.022711
+    },
+    {
+      "state": "receipt_verified",
+      "taskId": "team-check-20261026",
+      "correlationId": "team-20261026-7906e42946bb",
+      "agent": "technical-reviewer",
+      "createdAt": 1793039451.876932,
+      "observedAt": 1793039959.3098283
+    }
+  ],
+  "state": "receipt_verified",
+  "verifiedReceipts": 5,
+  "invalidReceipts": 10,
+  "receiptMeaning": "Local nonce and artifact match; not a signed provider identity",
+  "errors": [],
+  "taskId": "team-check-20261026",
+  "correlationId": "team-20261026-7906e42946bb",
+  "observedAt": 1793039963,
+  "verifiedAtUTC": "2026-10-26T18:43:58.433739+00:00",
+  "verifiedAtMadrid": "2026-10-26T19:43:58.457450+01:00",
+  "scope": "Role-specific file delivery proven; not cryptographic agent authentication, source verification or profitability"
+}

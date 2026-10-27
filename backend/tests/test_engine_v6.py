@@ -38,12 +38,12 @@ class MemoryTests(EconomicDatabaseTests):
     def test_old_close_without_cost_contract_is_not_relabelled_as_net(self):
         snap=dict(engineVersion=3,confirmations=[dict(system='MACD',vote=.7)])
         self.assertIsNone(learning._trade_features('scalper',('BTC','long',0,json.dumps(snap))))
-    def test_size_increase_requires_current_validation_and_mature_model(self):
+    def test_uncalibrated_score_never_increases_risk_even_after_thirty_closes(self):
         self.assertLessEqual(learning.meta_size_multiplier('scalper',.9,True),1)
-        learning._models['scalper']['n']=35
+        learning._load_model('scalper')['n']=35
         self.assertLessEqual(learning.meta_size_multiplier('scalper',.9,False),1)
-        self.assertGreater(learning.meta_size_multiplier('scalper',.9,True),1)
-        self.assertEqual(learning.meta_size_multiplier('scalper',1,True),1.25)
+        self.assertLessEqual(learning.meta_size_multiplier('scalper',.9,True),1)
+        self.assertEqual(learning.meta_size_multiplier('scalper',1,True),1)
     def test_compatible_weights_and_receipts_survive_engine_and_additive_feature_upgrade(self):
         old=dict(w={'bias':.8},n=35,lastTradeId=8,updatedAt=1,engineVersion=5,
                  featureVersion=3,processingVersion=learning.META_PROCESSING_VERSION)
@@ -109,7 +109,7 @@ class ValidationTests(unittest.TestCase):
         with patch.object(training,'simulate',side_effect=replay) as mock,patch.object(training,'GRID_THRESHOLD',(.4,.5)),patch.object(training,'GRID_SL',(2,)),patch.object(training,'GRID_TP',(4,)),patch.object(training,'GRID_TRAIL',(1.2,)):
             args=('trend',rows,[.8]*2000,[2]*2000,.001,10,2,1,100)
             result=training.optimize(*args,cost_model=dict(feeRate=.001))
-            self.assertTrue(result['applied'])
+            self.assertTrue(result['historicalPassed']); self.assertFalse(result['applied'])
             self.assertTrue(all(call.kwargs['exit_on_signal'] is False for call in mock.call_args_list))
             self.assertEqual(result['holdoutStressMultiplier'],2)
             fail_holdout=True

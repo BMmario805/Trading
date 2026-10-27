@@ -1,3 +1,4 @@
+from desk_unit_support import fund_unit_desk
 import asyncio
 from contextlib import closing
 import json
@@ -128,6 +129,7 @@ class ChandelierAndRegimeTests(unittest.TestCase):
         folder=tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.engine=desk.Desk(db_path=Path(folder.name)/'desk.sqlite')
+        fund_unit_desk(self,self.engine)
         self.now=400*14400
         patcher=patch.object(desk.time,'time',return_value=self.now)
         patcher.start();self.addCleanup(patcher.stop)
@@ -200,6 +202,7 @@ class DeskTests(unittest.IsolatedAsyncioTestCase):
         self.db=patch.object(desk,'DB_PATH',Path(self.tmp.name)/'desk.sqlite')
         self.db.start()
         self.engine=desk.Desk()
+        fund_unit_desk(self,self.engine)
         self.engine.state['selected']='SOLUSDT'
         self.engine.state['selectionAt']=time.time()
         self.analysis=dict(bar=int(time.time())-900,close=100,ema20=100,ema50=99,atr=2,rsi=55,trend=True,pullback=True,rows=[])

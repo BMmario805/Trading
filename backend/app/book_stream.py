@@ -33,6 +33,7 @@ class BookStream:
         self.trade_wanted = {}
         self.trades = {}
         self.generation = uuid.uuid4().hex
+        self.symbol_generations = {}
 
     def watch_trades(self,symbols):
         before=set(self.trade_wanted)
@@ -93,8 +94,12 @@ class BookStream:
         cvd = flow.get('cvdDelta')
         return dict(flow, allowed=cvd is None or cvd >= floor)
 
+    def generation_for(self,symbol):
+        return self.generation+':'+self.symbol_generations.get(symbol,'initial')
+
     def observed_trades(self,symbol,placed_at,last_id,generation):
-        if not self.connected or generation!=self.generation: return None
+        if not self.connected or generation not in (self.generation_for(symbol),
+                self.generation if symbol not in self.symbol_generations else None): return None
         rows=list(self.trades.get(symbol,[]))
         if last_id>=0 and rows and rows[0]['id']>last_id+1: return None
         return [dict(e) for e in rows if e['at']>placed_at and e['id']>last_id]
@@ -127,8 +132,8 @@ class BookStream:
                 rows=self.trades.setdefault(symbol,deque(maxlen=2048))
                 if rows and event['id']<=rows[-1]['id']: return False
                 if rows and event['id']!=rows[-1]['id']+1:
-                    self.generation=uuid.uuid4().hex  # Una discontinuidad cancela órdenes pendientes.
-                    self.trades.clear()
+                    self.symbol_generations[symbol]=uuid.uuid4().hex
+                    self.trades.pop(symbol,None)
                     rows=self.trades.setdefault(symbol,deque(maxlen=2048))
                 rows.append(event)
                 return True
@@ -165,6 +170,7 @@ class BookStream:
                     messages=self.messages, reconnects=self.reconnects, streamQuotes=self.hits,
                     restFallbacks=self.fallbacks, error=self.error, maximumQuoteAgeSeconds=MAX_AGE,
                     timestampBasis='local-receipt', endpoint='Binance public bookTicker',
+                    sourceTimestampAvailable=False,
                     observedTradeSymbols=len(self.trade_wanted),observedTradeBufferLimit=2048)
 
     async def _subscriptions(self, socket):

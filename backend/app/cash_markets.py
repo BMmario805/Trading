@@ -43,6 +43,7 @@ class CashMarketFeed:
         self.scope='Forex · pares con cotización USD' if market=='forex' else 'Acciones y ETF de EE. UU. · USD'
         self.cache={}
         self.quote_per_euro=None
+        self.quote_per_euro_at=None
 
     def session(self):
         return market_session(self.market)
@@ -87,6 +88,7 @@ class CashMarketFeed:
         if (eur and eur.get('currency')=='USD' and math.isfinite(eur['price']) and eur['price']>0
                 and 0<=time.time()-eur['at']<=120):
             self.quote_per_euro=eur['price']
+            self.quote_per_euro_at=eur['at']
         data=dict(at=time.time(),metadata={},books={},tickers={},quotes=raw,session=self.session())
         for key in keys:
             quote=raw.get(key)

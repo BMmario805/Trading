@@ -19,9 +19,9 @@ export default function AnalysisPanel({ analysis, loading, error, onSourceClick 
     <div className="panels">
       {error && <p role="status">{error} Se muestran los últimos datos recibidos.</p>}
       <div className="panel">
-        <h3>Probabilidad combinada</h3>
+        <h3>Puntuación de dirección</h3>
         <div className={`verdict ${verdictClass}`}>
-          {upProbability}% <span>de dirección alcista · {verdict}</span>
+          {upProbability}/100 <span>sesgo observado · {verdict}</span>
         </div>
         <div className="meter">
           <div className="meter-fill" style={{ width: `${upProbability}%` }} />
@@ -29,7 +29,7 @@ export default function AnalysisPanel({ analysis, loading, error, onSourceClick 
         <p className="muted small">
           {sentiment.sampleSize > 0
             ? '60% análisis técnico + 40% opinión pública.'
-            : 'Solo análisis técnico: opinión pública sin muestra disponible.'} No es asesoramiento financiero.
+            : 'Solo análisis técnico: opinión pública sin muestra disponible.'} Esta puntuación no es una probabilidad calibrada ni una previsión de beneficio.
         </p>
       </div>
 

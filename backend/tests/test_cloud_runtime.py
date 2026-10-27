@@ -19,6 +19,15 @@ spec.loader.exec_module(bundle)
 
 
 class CloudRuntimeTests(unittest.TestCase):
+    def running_services(self, *, now=1000, started=100):
+        alive = Mock()
+        alive.done.return_value = False
+        engines = {name: SimpleNamespace(task=alive, risk_task=alive,
+                   progress=dict(startedAt=started, scanProgressAt=now - 1, riskCompletedAt=now - 1))
+                   for name in ('crypto', 'forex', 'stocks')}
+        lab = {cfg.id: SimpleNamespace(_task=alive, _risk_task=alive) for cfg in cloud_runtime.bots.ALL_BOTS}
+        return engines, lab
+
     def test_health_detects_dead_risk_monitor(self):
         alive, dead = Mock(), Mock()
         alive.done.return_value = False
@@ -32,6 +41,61 @@ class CloudRuntimeTests(unittest.TestCase):
                 cloud_runtime.health_snapshot()
             self.assertEqual(exc.exception.status_code, 503)
             self.assertIn('mesa crypto: risk_task', exc.exception.detail['services'])
+
+    def test_live_task_with_stalled_risk_loop_is_unhealthy(self):
+        engines, lab = self.running_services()
+        engines['crypto'].progress['riskCompletedAt'] = 900
+        with patch.object(cloud_runtime.desk, 'DESKS', engines), patch.object(cloud_runtime.bots, 'BOTS', lab), \
+             patch.object(cloud_runtime.time, 'time', return_value=1000):
+            with self.assertRaises(HTTPException) as exc:
+                cloud_runtime.health_snapshot()
+            self.assertEqual(exc.exception.status_code, 503)
+            self.assertIn('mesa crypto: risk sin progreso', exc.exception.detail['services'])
+
+    def test_new_attempt_does_not_mask_old_success(self):
+        engines,lab=self.running_services()
+        engines['crypto'].progress.update(riskCompletedAt=1,riskStartedAt=999)
+        with patch.object(cloud_runtime.desk,'DESKS',engines),patch.object(cloud_runtime.bots,'BOTS',lab):
+            rows=cloud_runtime.progress_snapshot(now=1000)['services']
+        risk=next(r for r in rows if r['id']=='crypto' and r['role']=='risk')
+        self.assertEqual(risk['state'],'stalled')
+
+    def test_lab_risk_progress_requires_completion(self):
+        bot=SimpleNamespace(cfg=SimpleNamespace(scan_seconds=60),running=True,diagnostics={},
+            risk_monitor=dict(startedAt=1,lastCompletedAt=1),_last_scan_completed=999)
+        with patch.object(cloud_runtime.desk,'DESKS',{}),patch.object(cloud_runtime.bots,'BOTS',{'example':bot}):
+            rows=cloud_runtime.progress_snapshot(now=1000)['services']
+        self.assertEqual(next(r for r in rows if r['role']=='risk')['state'],'stalled')
+
+    def test_live_task_with_stalled_scan_is_unhealthy(self):
+        engines, lab = self.running_services()
+        engines['forex'].progress['scanProgressAt'] = 800
+        with patch.object(cloud_runtime.desk, 'DESKS', engines), patch.object(cloud_runtime.bots, 'BOTS', lab), \
+             patch.object(cloud_runtime.time, 'time', return_value=1000):
+            with self.assertRaises(HTTPException) as exc:
+                cloud_runtime.health_snapshot()
+            self.assertIn('mesa forex: scan sin progreso', exc.exception.detail['services'])
+
+    def test_recent_progress_and_startup_grace_keep_service_healthy(self):
+        engines, lab = self.running_services()
+        with patch.object(cloud_runtime.desk, 'DESKS', engines), patch.object(cloud_runtime.bots, 'BOTS', lab), \
+             patch.object(cloud_runtime.time, 'time', return_value=1000):
+            status = cloud_runtime.health_snapshot()
+            self.assertEqual(status['status'], 'ok')
+            self.assertTrue(all(row['state'] == 'progressing' for row in status['progress']['services']))
+            for engine in engines.values():
+                engine.progress = {'startedAt': 990}
+            status = cloud_runtime.health_snapshot()
+            self.assertEqual(status['status'], 'ok')
+            self.assertTrue(all(row['state'] == 'warming' for row in status['progress']['services']))
+
+    def test_missing_heartbeat_after_startup_is_stalled(self):
+        engines, lab = self.running_services()
+        engines['stocks'].progress = {'startedAt': 100}
+        with patch.object(cloud_runtime.desk, 'DESKS', engines), patch.object(cloud_runtime.bots, 'BOTS', lab):
+            progress = cloud_runtime.progress_snapshot(now=1000)
+            stalled = {(row['id'], row['role']) for row in progress['stalled']}
+            self.assertEqual(stalled, {('stocks', 'scan'), ('stocks', 'risk')})
 
     def test_panel_does_not_shadow_api(self):
         with tempfile.TemporaryDirectory() as folder:

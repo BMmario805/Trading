@@ -32,6 +32,7 @@ from .execution import closed_candles, fresh_signal
 from .economics import cost_profile, execution_fill, net_outcome, planned_trade, ECONOMICS_VERSION
 from .indicators import atr_series
 from .strategy import TREND_STEP, resample, score_series, extension_series
+from .validation import cooldown_seconds, promotion_allowed, promotion_decision, fixed_cohort_costs
 
 log = logging.getLogger("training")
 
@@ -52,7 +53,7 @@ MIN_TRAIN_TRADES = {
     "flow": 10, "scalper": 20, "swing": 8, "trend": 6, "meanrev": 8, "orb": 10, "squeeze": 8,
 }
 MIN_VALIDATION_TRADES = 8
-ENGINE_VERSION = 7
+ENGINE_VERSION = 8
 VALIDATION_PROTOCOL = 'fixed-origin-2of3-dsr-holdout20-net-v2'
 
 # Segundos por vela de cada intervalo de trabajo
@@ -107,7 +108,8 @@ def load_applied_params() -> dict[tuple[str, str], dict]:
             "SELECT bot, symbol, params, metrics FROM bot_params WHERE applied = 1"
         ).fetchall()
     return {(b, s): json.loads(p) for b, s, p, m in rows
-            if json.loads(m).get("engineVersion") == ENGINE_VERSION}
+            if json.loads(m).get("engineVersion") == ENGINE_VERSION
+            and promotion_allowed(json.loads(m).get('promotion'))}
 
 
 def load_results() -> list[dict]:
@@ -118,7 +120,7 @@ def load_results() -> list[dict]:
     return [
         {
             "bot": r[0], "symbol": r[1], "params": json.loads(r[2]),
-            "metrics": json.loads(r[3]), "applied": bool(r[4]) and json.loads(r[3]).get("engineVersion") == ENGINE_VERSION, "trainedAt": r[5],
+            "metrics": json.loads(r[3]), "applied": bool(r[4]) and json.loads(r[3]).get("engineVersion") == ENGINE_VERSION and promotion_allowed(json.loads(r[3]).get('promotion')), "trainedAt": r[5],
         }
         for r in rows
     ]
@@ -249,6 +251,7 @@ def simulate(
     exit_on_signal: bool = True,
     exit_policy: dict | None = None,
     meta_builder=None,
+    cooldown_seconds_base: float | None = None,
 ) -> dict:
     """Backtest de una configuración sobre candles[start:end]. Sin capitalizar
     (tamaño fijo por operación) para que las métricas sean comparables.
@@ -263,6 +266,8 @@ def simulate(
     max_dd = 0.0
     trade_pnls: list[float] = []
     oos_trades = []
+    execution_events=[]
+    entry_mid=0.0
     entry_features, entry_risk = None, 0.0
     total_fees = total_carry = turnover = 0.0
     period_pnls = []
@@ -283,7 +288,11 @@ def simulate(
     direction = 0        # 0 sin posición, +1 largo, -1 corto
     entry = sl = tp = qty = atr0 = best = 0.0
     bars_held = 0
-    cooldown = 0
+    cooldown_until = 0.0
+    loss_streak = 0
+    deltas = [b['time']-a['time'] for a,b in zip(candles, candles[1:]) if b['time']>a['time']]
+    bar_seconds = min(deltas) if deltas else 1
+    cooldown_base = cooldown_bars * bar_seconds if cooldown_seconds_base is None else cooldown_seconds_base
     entry_fee = entry_time = exit_time = 0.0
 
     def carry_at(stamp: float) -> float:
@@ -303,7 +312,7 @@ def simulate(
 
     def close(price: float) -> None:
         nonlocal pnl, wins, losses, gross_win, gross_loss, direction
-        nonlocal equity, equity_peak, max_dd, cooldown
+        nonlocal equity, equity_peak, max_dd, cooldown_until, loss_streak
         nonlocal total_fees, total_carry, turnover
         carry = carry_at(exit_time)
         p = net_outcome(entry, price, qty, direction, entry_fee, fee_rate, carry=carry)
@@ -311,18 +320,21 @@ def simulate(
         total_carry += carry
         turnover += (entry + price) * qty
         trade_pnls.append(p)
+        execution_events.append(dict(entryMid=entry_mid,exitMid=price/exit_fill(1.0),qty=qty,
+                                     direction=direction,entryTime=entry_time,exitTime=exit_time))
         if entry_features is not None and entry_risk>0:
-            oos_trades.append((entry_features,p/entry_risk))
+            oos_trades.append(dict(id=f'{entry_time}:{exit_time}:{direction}', features=entry_features,
+                                   r=p/entry_risk, entryTime=entry_time, exitTime=exit_time))
         pnl += p
         if p > 0:
             wins += 1
             gross_win += p
             # tras ganar, cooldown corto (mismo criterio que el bot en vivo)
-            cooldown = max(1, cooldown_bars // 4)
         else:
             losses += 1
             gross_loss -= p
-            cooldown = cooldown_bars
+        loss_streak = loss_streak + 1 if p < 0 else 0
+        cooldown_until = exit_time + cooldown_seconds(cooldown_base, p, loss_streak)
         equity += p
         equity_peak = max(equity_peak, equity)
         max_dd = max(max_dd, equity_peak - equity)
@@ -384,8 +396,7 @@ def simulate(
                     close(exit_fill(c['close']))
             continue
 
-        if cooldown:
-            cooldown -= 1
+        if c['time'] < cooldown_until:
             continue
         s, a = scores[i], atrs[i]
         if a is None or not math.isfinite(a) or a <= 0 or not math.isfinite(s) or abs(s) < threshold or (s < 0 and not allow_short):
@@ -404,6 +415,7 @@ def simulate(
         if i + 1 >= end:
             continue
         fill = candles[i + 1]["open"]
+        entry_mid=fill
         if abs(fill - c["close"]) > a:
             continue
         direction = 1 if s > 0 else -1
@@ -450,6 +462,7 @@ def simulate(
         "tradePnls": trade_pnls,
         "periodPnls": period_pnls,
         "oosTrades": oos_trades,
+        "executionEvents":execution_events,
         "costModel": model or {'mode': 'legacy-spread-only'},
     }
 
@@ -502,19 +515,26 @@ def expectancy_uncertainty(pnls: list[float], samples: int = 512, seed: int = 41
 
 
 def compact_metrics(metrics: dict) -> dict:
-    return {k: v for k, v in metrics.items() if k not in ('tradePnls', 'periodPnls', 'costModel', 'oosTrades')}
+    return {k: v for k, v in metrics.items() if k not in ('tradePnls', 'periodPnls', 'costModel', 'oosTrades','executionEvents')}
 
 
-def deflated_sharpe(period_pnls, trial_sharpes):
+def deflated_sharpe(period_pnls, trial_sharpes, *, total_trials=None):
     """DSR por vela (capital fijo), Bailey/López de Prado 2014, eq. 2.
 
     Todos los ensayos de esta rejilla cuentan como independientes, sin reducir
-    artificialmente N por correlación. No corrige búsquedas de otras ejecuciones.
+    artificialmente N por correlación. El contador puede incluir las búsquedas
+    registradas anteriores; la dispersión sigue estimándose con esta rejilla.
     Ajuste conservador del tamaño efectivo por autocorrelaciones positivas.
     """
     n = len(period_pnls)
-    result = dict(probability=None, passed=False, sample=n, trials=len(trial_sharpes),
-                  scope='this-grid-only', method='deflated-sharpe-bar-pnl-v1', threshold=.95,
+    if total_trials is not None and (type(total_trials) is not int or total_trials<len(trial_sharpes)):
+        raise ValueError('Cumulative trial count cannot be smaller than the current search')
+    count=total_trials if total_trials is not None else len(trial_sharpes)
+    result = dict(probability=None, passed=False, sample=n, trials=count, currentTrials=len(trial_sharpes),
+                  scope='this-grid-only' if total_trials is None else 'registered-cumulative-trial-count',
+                  varianceScope='current-grid-only',legacySearchesIncluded=False,
+                  limitation='Unknown legacy searches and cross-run Sharpe dispersion are not reconstructed',
+                  method='deflated-sharpe-bar-pnl-v2', threshold=.95,
                   source='https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf')
     if n < 30 or len(trial_sharpes) < 2: return result
     mean = statistics.fmean(period_pnls)
@@ -530,7 +550,6 @@ def deflated_sharpe(period_pnls, trial_sharpes):
              for lag in range(1,min(20,n//4)+1))
     effective = max(2, n/(1+2*ac))
     normal = statistics.NormalDist()
-    count = len(trial_sharpes)
     sigma = math.sqrt(max(statistics.variance(trial_sharpes),1/(n-1)))
     gamma = .5772156649015329
     benchmark = sigma*((1-gamma)*normal.inv_cdf(1-1/count)
@@ -561,6 +580,8 @@ def optimize(
     cost_model: dict | None = None,
     allow_short: bool = True,
     meta_builder=None,
+    cooldown_seconds_base: float | None = None,
+    ledger_context: dict | None = None,
 ) -> dict:
     extensions = extension_series(candles)
     protocol = temporal_protocol(len(candles), max_hold_bars)
@@ -580,7 +601,8 @@ def optimize(
                         max_hold_bars, cooldown_bars, risk_amount, notional_cap,
                         lo, hi, extensions, overext_atr, costs or model, allow_short,
                         min_atr_spread=atr_spread_multiple(bot_id), exit_on_signal=signal_exit_enabled(bot_id),
-                        exit_policy=exit_policy(bot_id),meta_builder=meta_builder if collect else None)
+                        exit_policy=exit_policy(bot_id),meta_builder=meta_builder if collect else None,
+                        cooldown_seconds_base=cooldown_seconds_base)
 
     best_cfg: tuple | None = None
     best_score = float("-inf")
@@ -607,6 +629,13 @@ def optimize(
         if m["pnl"] > 0 and score > best_score:
             best_score, best_cfg, best_train = score, (th, sl, tp, tr), m
 
+    cumulative_trials=None
+    if ledger_context:
+        from . import experiments
+        experiments.record_observation(ledger_context['experimentId'],'selection_trials',
+            dict(trials=trials,sharpes=trial_sharpes,winnerFound=best_cfg is not None),
+            db_path=ledger_context.get('dbPath'))
+        cumulative_trials=max(trials,experiments.accumulated_trials(db_path=ledger_context.get('dbPath')))
     if best_cfg is None:
         return dict(ok=False, applied=False, engineVersion=ENGINE_VERSION, costVersion=ECONOMICS_VERSION,
                     protocol=protocol, trials=trials, costModel=model,
@@ -622,24 +651,46 @@ def optimize(
                       pnl=sum(evaluate(c, lo, hi)['pnl'] for lo, hi in protocol['folds']))
                  for c in neighbor_configs]
     uncertainty = expectancy_uncertainty([p for m in segments for p in m['tradePnls']])
-    dsr = deflated_sharpe(best_train.get('periodPnls',[]), trial_sharpes)
+    dsr = deflated_sharpe(best_train.get('periodPnls',[]),trial_sharpes,total_trials=cumulative_trials)
     development_passed = (sum(m['trades'] for m in segments) >= 20
                 and sum(m['pnl'] > 0 for m in segments) >= 2
                 and sum(m['pnl'] for m in segments) > 0
                 and sum(m['pnl'] for m in stress_segments) > 0
                 and sum(n['pnl'] > 0 for n in neighbors) >= 2
                 and dsr['passed'])
-    # No consultar el holdout si falla el desarrollo. Nunca exportar sus cierres.
-    val = evaluate(best_cfg, *protocol['holdout']) if development_passed else dict(pnl=0,trades=0,skipped=True)
-    stress = evaluate(best_cfg, *protocol['holdout'], stressed_costs(model)) if development_passed else dict(pnl=0,trades=0,skipped=True)
+    claim = None
+    if development_passed and ledger_context:
+        from . import experiments
+        lo, hi = protocol['holdout']
+        dataset = experiments.dataset_manifest(candles[lo:hi], ledger_context['symbol'],
+                   ledger_context['interval'], ledger_context['source'], ledger_context['seconds'])
+        experiments.record_observation(ledger_context['experimentId'], 'candidate_frozen',
+            dict(parameters=dict(entryThreshold=th,slAtr=sl,tpAtr=tp,trailAtr=tr),
+                 developmentPassed=True), db_path=ledger_context.get('dbPath'))
+        claim = experiments.claim_holdout(ledger_context['experimentId'], dataset, ledger_context.get('dbPath'))
+    read_final = development_passed and (claim is None or claim['allowed'])
+    # An overlapping final interval is never silently reopened by the scheduler.
+    val = evaluate(best_cfg, *protocol['holdout']) if read_final else dict(pnl=0,trades=0,skipped=True)
+    stress = evaluate(best_cfg, *protocol['holdout'], stressed_costs(model)) if read_final else dict(pnl=0,trades=0,skipped=True)
     accepted = (development_passed and val['pnl']>0 and val['trades']>=MIN_VALIDATION_TRADES
                 and stress['pnl']>0 and stress['trades']>=MIN_VALIDATION_TRADES)
+    promotion = promotion_decision(checks_passed=accepted)
+    if claim is not None:
+        promotion = experiments.finalize_evidence(ledger_context['experimentId'],
+            dict(validation=compact_metrics(val),stress=compact_metrics(stress)),
+            [dict(id='frozen-historical-filters',passed=bool(accepted))], claim,
+            equivalence=False,costs_verified=model.get('verified') is True,db_path=ledger_context.get('dbPath'))
     return {
         "ok": True,
         "params": {"entryThreshold": th, "slAtr": sl, "tpAtr": tp, "trailAtr": tr},
         "train": compact_metrics(best_train),
         "validation": compact_metrics(val),
-        "applied": accepted,
+        "applied": promotion_allowed(promotion),
+        "historicalPassed": bool(accepted),
+        "promotion": promotion,
+        "holdoutClaim": claim,
+        "fixedCohortStress":fixed_cohort_costs(val.get('executionEvents',[]),stressed_costs(model)) if read_final else None,
+        "stressScope":"Policy rerun may change trades and quantities; fixedCohortStress isolates cost erosion",
         "oosTrades": [trade for segment in segments for trade in segment.get('oosTrades',[])]
                      if accepted and all(m['pnl']>0 for m in segments) else [],
         "segments": [compact_metrics(m) for m in segments],
@@ -655,7 +706,9 @@ def optimize(
         "costModel": model,
         "costVersion": ECONOMICS_VERSION,
         "engineVersion": ENGINE_VERSION,
-        "reason": "Dos de tres bloques, DSR, holdout a doble coste y vecindad superados" if accepted else "Muestra, consistencia, DSR, vecindad o costes insuficientes",
+        "reason": ("Filtros históricos superados; promoción pendiente de evidencia futura equivalente" if accepted else
+                   "Holdout ya observado; no se consulta de nuevo" if claim and not claim['allowed'] else
+                   "Muestra, consistencia, DSR, vecindad o costes insuficientes"),
         "bars": len(candles),
     }
 
@@ -679,13 +732,37 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
     c_work = closed_candles(c_work, WORK_SECONDS[cfg.work_interval], time.time())
     if len(c_work) < 500:
         return {"symbol": sym.id, "ok": False, "reason": f"histórico insuficiente ({len(c_work)} velas)"}
-    trend_step = TREND_STEP.get(cfg.id, 86400)
+    trend_step = WORK_SECONDS[cfg.trend_interval]
     c_trend = resample(c_work, trend_step)
 
     work_seconds = WORK_SECONDS.get(cfg.work_interval, 3600)
     max_hold_bars = max(1, cfg.max_hold_seconds // work_seconds)
     cooldown_bars = max(1, cfg.cooldown_seconds // work_seconds)
     spread = bot.spread_pct(sym)
+    from . import data_archive, experiments
+    source = c_work[-1].get('dataSource') or dict(zip(('provider','symbol'), train_source(sym,cfg.work_interval)))
+    costs = {**cost_profile('lab',sym.category), 'spreadPct':spread}
+    ledger_path = experiments.registry_path(DB_PATH)
+    registered = experiments.register_experiment(f'training:{cfg.id}:{sym.id}', dict(
+        parameters=dict(gridThreshold=GRID_THRESHOLD,gridSL=GRID_SL,gridTP=GRID_TP,gridTrail=GRID_TRAIL,
+                        workInterval=cfg.work_interval,trendInterval=cfg.trend_interval,
+                        maxHoldSeconds=cfg.max_hold_seconds,cooldownSeconds=cfg.cooldown_seconds),
+        costModel=costs,trialCount=len(GRID_THRESHOLD)*len(GRID_SL)*len(GRID_TP)*len(GRID_TRAIL),
+        dataset=experiments.dataset_manifest(c_work,sym.id,cfg.work_interval,source,work_seconds),
+        engineVersion=ENGINE_VERSION,executionEquivalent=False),db_path=ledger_path)
+    archive_source=source if isinstance(source,str) else experiments.canonical(source)
+    chunk_count=max(1,(len(c_work)+9999)//10000)
+    chunk_size,extra=divmod(len(c_work),chunk_count)
+    offset=0
+    for index in range(chunk_count):
+        end=offset+chunk_size+(index<extra)
+        receipt=data_archive.archive_dataset(dict(symbol=sym.id,interval=cfg.work_interval,
+            source=archive_source,candles=c_work[offset:end]),root=ledger_path.parent/'research-data')
+        experiments.record_observation(registered['id'],'dataset_snapshot',dict(receipt,
+            symbol=sym.id,interval=cfg.work_interval,chunkIndex=index,chunkCount=chunk_count,
+            rowOffset=offset,totalBars=len(c_work),inputDataHash=registered['manifest']['dataset']['dataHash']),
+            db_path=ledger_path)
+        offset=end
 
     def _run() -> dict:
         from . import learning
@@ -706,11 +783,18 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
             risk_amount=cfg.initial_balance * cfg.risk_pct,
             notional_cap=cfg.initial_balance * cfg.max_leverage,
             overext_atr=cfg.overext_atr,
-            cost_model=cost_profile('lab', sym.category),
+            cost_model=costs,
             meta_builder=build_meta,
+            cooldown_seconds_base=cfg.cooldown_seconds,
+            ledger_context=dict(experimentId=registered['id'],symbol=sym.id,interval=cfg.work_interval,
+                                source=source,seconds=work_seconds,dbPath=ledger_path),
         )
 
     result = await asyncio.to_thread(_run)
+    result['experimentId'] = registered['id']
+    result['accumulatedTrials'] = experiments.accumulated_trials(db_path=ledger_path)
+    experiments.record_observation(registered['id'],'training_result',
+        {k:v for k,v in result.items() if k!='oosTrades'},db_path=ledger_path)
     result["symbol"] = sym.id
     result["source"] = c_work[-1].get("dataSource") or dict(zip(("provider", "symbol"), train_source(sym, cfg.work_interval)))
     result["proxy"] = sym.source == "swissquote" and result["source"]["provider"] != 'mt5'
@@ -726,14 +810,14 @@ async def _train_symbol(bot, sym: Symbol) -> dict:
     oos_trades = result.pop('oosTrades', [])
     if result.get('applied') and oos_trades:
         from . import learning
-        result['warmStartSamples'] = learning.warm_start_from_oos(cfg.id, oos_trades)
+        result['warmStartSamples'] = learning.warm_start_from_oos(cfg.id, oos_trades, namespace=sym.id)
     with _conn() as con:
         con.execute(
                 "INSERT OR REPLACE INTO bot_params VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     cfg.id, sym.id,
                     json.dumps(result["params"]),
-                    json.dumps({k: result.get(k) for k in ("train", "validation", "segments", "stress", "stressSegments", "neighbors", "uncertainty", "deflatedSharpe", "developmentStressMultiplier", "holdoutStressMultiplier", "protocol", "trials", "costModel", "costVersion", "engineVersion", "reason", "source", "proxy")}),
+                    json.dumps({k: result.get(k) for k in ("train", "validation", "segments", "stress", "stressSegments", "neighbors", "uncertainty", "deflatedSharpe", "developmentStressMultiplier", "holdoutStressMultiplier", "protocol", "trials", "costModel", "costVersion", "engineVersion", "reason", "source", "proxy", "promotion", "historicalPassed", "experimentId", "accumulatedTrials", "holdoutClaim","fixedCohortStress","stressScope")}),
                     int(result["applied"]), int(time.time()),
                 ),
             )

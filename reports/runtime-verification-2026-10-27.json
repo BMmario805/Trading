@@ -1,0 +1,617 @@
+{
+  "observedAt": 1793125705.2745185,
+  "health": {
+    "status": "ok",
+    "mode": "paper",
+    "desks": 3,
+    "bots": 7,
+    "stalled": []
+  },
+  "professional": {
+    "mode": "paper/demo",
+    "profitabilityProven": false,
+    "automaticPromotion": false,
+    "trainingEngine": 8,
+    "deskPolicy": "desk-rs-chandelier-1h-v9",
+    "limitations": [
+      "Costes de cuenta sin verificar",
+      "Observación futura pendiente",
+      "La entrega de un agente no autoriza operaciones"
+    ]
+  },
+  "team": {
+    "integration": {
+      "desktopBotsConnected": false,
+      "desktopAgentsSeen": [],
+      "expectedDesktopAgents": [
+        "grok-desk-commander",
+        "market-radar",
+        "news-verifier",
+        "quant-researcher",
+        "technical-reviewer"
+      ],
+      "allExpectedDesktopAgentsConnected": false,
+      "pendingAgents": [
+        "grok-desk-commander",
+        "market-radar",
+        "news-verifier",
+        "quant-researcher",
+        "technical-reviewer"
+      ],
+      "challenges": [
+        {
+          "state": "blocked",
+          "taskId": "desktop-read-proof",
+          "correlationId": "flow-20261025-7c4e26973935",
+          "agent": "technical-reviewer",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "team-check-20261026",
+          "correlationId": "team-20261026-7906e42946bb",
+          "agent": "grok-desk-commander",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "team-check-20261026",
+          "correlationId": "team-20261026-7906e42946bb",
+          "agent": "market-radar",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "team-check-20261026",
+          "correlationId": "team-20261026-7906e42946bb",
+          "agent": "news-verifier",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "team-check-20261026",
+          "correlationId": "team-20261026-7906e42946bb",
+          "agent": "quant-researcher",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "team-check-20261026",
+          "correlationId": "team-20261026-7906e42946bb",
+          "agent": "technical-reviewer",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "professional-team-proof",
+          "correlationId": "team-b19c6a1ceeb6",
+          "agent": "grok-desk-commander",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "professional-team-proof",
+          "correlationId": "team-b19c6a1ceeb6",
+          "agent": "market-radar",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "professional-team-proof",
+          "correlationId": "team-b19c6a1ceeb6",
+          "agent": "news-verifier",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "professional-team-proof",
+          "correlationId": "team-b19c6a1ceeb6",
+          "agent": "quant-researcher",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        },
+        {
+          "state": "blocked",
+          "taskId": "professional-team-proof",
+          "correlationId": "team-b19c6a1ceeb6",
+          "agent": "technical-reviewer",
+          "error": "Invalid, expired, or unconfined desktop challenge"
+        }
+      ],
+      "state": "blocked",
+      "verifiedReceipts": 0,
+      "invalidReceipts": 0,
+      "receiptMeaning": "Local nonce and artifact match; not a signed provider identity",
+      "errors": [
+        "Desktop evidence has not passed the current challenge"
+      ],
+      "localProfiles": [
+        "news-verifier",
+        "quant-researcher",
+        "technical-reviewer"
+      ],
+      "profileMeaning": "Local validation functions; .grok/agents files are instructions, not desktop bots",
+      "liveExecution": false,
+      "automaticPromotion": false
+    },
+    "provider": {
+      "providers": [
+        {
+          "provider": "xai",
+          "installed": true,
+          "state": "unobserved",
+          "lastObservedAt": null,
+          "lastSuccessAt": null,
+          "durationSeconds": null,
+          "authenticated": null,
+          "probePerformed": false
+        },
+        {
+          "provider": "openai",
+          "installed": true,
+          "state": "unobserved",
+          "lastObservedAt": null,
+          "lastSuccessAt": null,
+          "durationSeconds": null,
+          "authenticated": null,
+          "probePerformed": false
+        }
+      ],
+      "readOnly": true,
+      "startedClients": 0,
+      "authenticationChecked": false,
+      "paidApiFallback": false,
+      "meaning": "Installation and prior transport receipts only; no current quota or authentication guarantee"
+    }
+  },
+  "workflow": {
+    "protocol": "mesa-siete-workflow-v1",
+    "taskId": "flow-check-20261027",
+    "correlationId": "flow-check-20261027-final",
+    "requestDigest": "27d9c91cc9368fbabcce3408a32be6dc08118f54ec3893bcf4f6c767c00b5827",
+    "status": "blocked",
+    "createdAt": 1793125705.1160488,
+    "updatedAt": 1793125705.2687593,
+    "symbols": [
+      "BTC",
+      "LINK"
+    ],
+    "brief": "Verificar flujo acotado con cache disponible; sin nuevas llamadas al modelo ni operaciones",
+    "stages": [
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "encargo",
+        "actor": {
+          "id": "local-intake",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "completed",
+        "receivedAt": 1793125705.1160488,
+        "observedAt": 1793125705.1282148,
+        "durationSeconds": 0.012166738510131836,
+        "result": {
+          "accepted": true,
+          "dag": [
+            "encargo",
+            "radar",
+            "verificador",
+            "investigador",
+            "revisor",
+            "coordinador",
+            "propuesta"
+          ],
+          "newProviderCallsMaximum": 0
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "radar",
+        "actor": {
+          "id": "grok-x-pulse",
+          "kind": "radar-adapter",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "started",
+        "receivedAt": 1793125705.1429725,
+        "observedAt": 1793125705.1429791,
+        "durationSeconds": 7.867813110351562e-06,
+        "result": {
+          "acknowledged": true
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "radar",
+        "actor": {
+          "id": "grok-x-pulse",
+          "kind": "radar-adapter",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "blocked",
+        "receivedAt": 1793125705.1429725,
+        "observedAt": 1793125705.1539607,
+        "durationSeconds": 0.010988712310791016,
+        "result": {
+          "status": "blocked",
+          "reports": [],
+          "missingSymbols": [
+            "BTC",
+            "LINK"
+          ],
+          "ageSeconds": {},
+          "refreshed": false,
+          "transport": "cached",
+          "providerCallsMaximum": 0,
+          "evidenceScope": "model-claimed citations; no independent URL retrieval"
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "verificador",
+        "actor": {
+          "id": "news-verifier",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "started",
+        "receivedAt": 1793125705.1638412,
+        "observedAt": 1793125705.1638453,
+        "durationSeconds": 4.5299530029296875e-06,
+        "result": {
+          "acknowledged": true
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "verificador",
+        "actor": {
+          "id": "news-verifier",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "blocked",
+        "receivedAt": 1793125705.1638412,
+        "observedAt": 1793125705.178659,
+        "durationSeconds": 0.01481771469116211,
+        "result": {
+          "status": "blocked",
+          "verdicts": [],
+          "blockedSymbols": [],
+          "claimedUrls": 0,
+          "retrievedUrls": 0,
+          "uniqueContents": 0,
+          "retrievalReceipts": [],
+          "retrievalFailures": [],
+          "urlLimit": 4,
+          "retrievalVerified": false,
+          "factVerified": false,
+          "editorialIndependenceVerified": false,
+          "independentlyVerifiedUrls": 0,
+          "verificationBlockers": [],
+          "claimsPending": [],
+          "meaning": "Captured content can support research proposals only; factual claims and editorial independence remain pending"
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "investigador",
+        "actor": {
+          "id": "quant-researcher",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "started",
+        "receivedAt": 1793125705.1892118,
+        "observedAt": 1793125705.189215,
+        "durationSeconds": 3.0994415283203125e-06,
+        "result": {
+          "acknowledged": true
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "investigador",
+        "actor": {
+          "id": "quant-researcher",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "skipped",
+        "receivedAt": 1793125705.1892118,
+        "observedAt": 1793125705.1985426,
+        "durationSeconds": 0.009330987930297852,
+        "result": {
+          "profile": "quant-researcher",
+          "activated": false,
+          "success": false,
+          "searches": 0,
+          "applyToLive": false,
+          "criterion": "La propuesta es válida solo si la hipótesis es falsable, los costes son netos, las variables son causales y el holdout no se usa para elegir."
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "revisor",
+        "actor": {
+          "id": "technical-reviewer",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "started",
+        "receivedAt": 1793125705.2069921,
+        "observedAt": 1793125705.2069955,
+        "durationSeconds": 3.5762786865234375e-06,
+        "result": {
+          "acknowledged": true
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "revisor",
+        "actor": {
+          "id": "technical-reviewer",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "skipped",
+        "receivedAt": 1793125705.2069921,
+        "observedAt": 1793125705.216226,
+        "durationSeconds": 0.009234428405761719,
+        "result": {
+          "profile": "technical-reviewer",
+          "activated": false,
+          "success": false,
+          "searches": 0,
+          "demonstrable": false,
+          "failingTest": null,
+          "regressionTest": null,
+          "protected": [],
+          "marketBridgeSubagents": false,
+          "applyToLive": false,
+          "contractPassed": false,
+          "regressionExecuted": false,
+          "profitabilityProven": false,
+          "criterion": "El cambio se acepta solo si el fallo es demostrable y queda cubierto por una prueba de regresión que no toca el puente ni los controles de riesgo."
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "coordinador",
+        "actor": {
+          "id": "local-coordinator",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "started",
+        "receivedAt": 1793125705.2327273,
+        "observedAt": 1793125705.2327297,
+        "durationSeconds": 2.6226043701171875e-06,
+        "result": {
+          "acknowledged": true
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "coordinador",
+        "actor": {
+          "id": "local-coordinator",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "blocked",
+        "receivedAt": 1793125705.2327273,
+        "observedAt": 1793125705.24237,
+        "durationSeconds": 0.009642839431762695,
+        "result": {
+          "status": "blocked",
+          "blockers": [
+            "radar_missing_or_failed",
+            "news_evidence_not_verified",
+            "concrete_research_proposal_missing",
+            "desktop_receipt_pending"
+          ],
+          "desktop": {
+            "desktopBotsConnected": false,
+            "desktopAgentsSeen": [],
+            "expectedDesktopAgents": [],
+            "allExpectedDesktopAgentsConnected": false,
+            "pendingAgents": [],
+            "challenges": [],
+            "state": "pending",
+            "verifiedReceipts": 0,
+            "invalidReceipts": 0,
+            "receiptMeaning": "Local nonce and artifact match; not a signed provider identity",
+            "errors": [],
+            "taskId": "flow-check-20261027",
+            "correlationId": "flow-check-20261027-final"
+          },
+          "profileContractOnly": true,
+          "regressionExecuted": false,
+          "experimentExecuted": false,
+          "executionAuthorized": false
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "propuesta",
+        "actor": {
+          "id": "local-proposal-gate",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "started",
+        "receivedAt": 1793125705.2514932,
+        "observedAt": 1793125705.2514956,
+        "durationSeconds": 2.6226043701171875e-06,
+        "result": {
+          "acknowledged": true
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      },
+      {
+        "taskId": "flow-check-20261027",
+        "correlationId": "flow-check-20261027-final",
+        "stage": "propuesta",
+        "actor": {
+          "id": "local-proposal-gate",
+          "kind": "local-validator",
+          "desktopBot": false
+        },
+        "attempt": 1,
+        "status": "blocked",
+        "receivedAt": 1793125705.2514932,
+        "observedAt": 1793125705.2598624,
+        "durationSeconds": 0.008369207382202148,
+        "result": {
+          "status": "blocked",
+          "kind": "research-proposal",
+          "hypothesis": null,
+          "blockers": [
+            "radar_missing_or_failed",
+            "news_evidence_not_verified",
+            "concrete_research_proposal_missing",
+            "desktop_receipt_pending"
+          ],
+          "scope": "research_only",
+          "newsEvidenceState": "blocked",
+          "retrievalVerified": false,
+          "factVerified": false,
+          "verificationBlockers": [],
+          "claimsPending": [],
+          "validationState": "not_executed",
+          "reviewState": "not_requested",
+          "requiredGates": [
+            "frozen_experiment",
+            "net_costs",
+            "independent_out_of_sample",
+            "future_observation",
+            "regression_evidence",
+            "local_risk_approval"
+          ],
+          "applyToLive": false,
+          "executionAuthorized": false,
+          "profitabilityProven": false
+        },
+        "profitabilityProven": false,
+        "executionAuthorized": false
+      }
+    ],
+    "proposal": {
+      "status": "blocked",
+      "kind": "research-proposal",
+      "hypothesis": null,
+      "blockers": [
+        "radar_missing_or_failed",
+        "news_evidence_not_verified",
+        "concrete_research_proposal_missing",
+        "desktop_receipt_pending"
+      ],
+      "scope": "research_only",
+      "newsEvidenceState": "blocked",
+      "retrievalVerified": false,
+      "factVerified": false,
+      "verificationBlockers": [],
+      "claimsPending": [],
+      "validationState": "not_executed",
+      "reviewState": "not_requested",
+      "requiredGates": [
+        "frozen_experiment",
+        "net_costs",
+        "independent_out_of_sample",
+        "future_observation",
+        "regression_evidence",
+        "local_risk_approval"
+      ],
+      "applyToLive": false,
+      "executionAuthorized": false,
+      "profitabilityProven": false
+    },
+    "profitabilityProven": false,
+    "executionAuthorized": false,
+    "applyToLive": false,
+    "providerE2EVerified": false,
+    "workflowCompleted": true
+  },
+  "finalSnapshot": {
+    "observedAt": 1793126013.0064323,
+    "status": "ok",
+    "mode": "paper",
+    "stalled": [],
+    "desktop": {
+      "allExpectedDesktopAgentsConnected": true,
+      "desktopAgentsSeen": [
+        "grok-desk-commander",
+        "market-radar",
+        "news-verifier",
+        "quant-researcher",
+        "technical-reviewer"
+      ],
+      "pendingAgents": [],
+      "verifiedReceipts": 5,
+      "state": "receipt_verified"
+    },
+    "risk": {
+      "pendingReservations": 0,
+      "exposureComplete": false,
+      "conversionComplete": true,
+      "unknownExposurePositions": 1,
+      "accountSnapshotsFresh": true
+    }
+  },
+  "riskFollowup": {
+    "observedAt": 1793126052.2445786,
+    "exposureComplete": true,
+    "conversionComplete": true,
+    "pendingReservations": 0,
+    "unknownExposurePositions": 0,
+    "staleMarks": [],
+    "newEntriesRequireCompleteExposure": true
+  }
+}

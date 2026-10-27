@@ -7,7 +7,7 @@ import threading
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from app import ai_swarm, subscription_bridge as bridge
+from app import ai_swarm, decision_audit, subscription_bridge as bridge
 from test_ai_swarm import economics, pulse, flow, risk, commander, batch_pulse
 
 
@@ -15,6 +15,20 @@ READY=dict(configured=True,grokReady=True,chatgptReady=True,requiresApiKeys=Fals
 
 
 class BridgeContractTests(unittest.TestCase):
+    def test_health_never_starts_clients_reads_auth_or_claims_live_authentication(self):
+        with patch.object(bridge,'status',side_effect=AssertionError('No auth probe')), \
+             patch.object(bridge,'executable',return_value='installed'), \
+             patch.object(bridge.subprocess,'Popen',side_effect=AssertionError('No child')):
+            health=bridge.health_snapshot()
+        self.assertTrue(health['readOnly'])
+        self.assertEqual(health['startedClients'],0)
+        self.assertTrue(all(p['installed'] and p['authenticated'] is None for p in health['providers']))
+
+    def test_grok_non_object_envelope_is_an_invalid_response(self):
+        with self.assertRaises(bridge.SubscriptionError) as error:
+            bridge.parse_result('xai','[]')
+        self.assertEqual(error.exception.state,'invalid')
+
     def test_paid_api_environment_is_not_inherited(self):
         with patch.dict(os.environ,{'XAI_API_KEY':'not-for-this-bridge','OPENAI_API_KEY':'not-for-this-bridge',
                                     'CODEX_API_KEY':'not-for-this-bridge','OPENAI_BASE_URL':'https://other.invalid'}):
@@ -128,6 +142,10 @@ class SubscriptionSwarmTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(order,['grok-x-pulse','grok-desk-commander'])
         http.assert_not_awaited()
         self.assertEqual(self.swarm.limits()['estimatedCostMonthUSD'],0)
+        audit=decision_audit.health_snapshot()
+        self.assertEqual((audit['candidates'],audit['pairedDecisionCandidates'],audit['outcomes']),(1,1,0))
+        self.assertFalse(audit['incrementalAdvantageMeasured'])
+        self.assertEqual(decision['auditState'],'decision_recorded_without_outcome')
 
     async def test_usage_limit_closes_entry_without_switching_to_paid_api(self):
         self.swarm.market_pack=AsyncMock(return_value=({},{}))

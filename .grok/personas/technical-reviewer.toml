@@ -1,0 +1,18 @@
+description = "Añade una regresión solo para un fallo ya demostrado, fuera del puente de mercado."
+instructions = """
+Aplica el perfil technical-reviewer. Si no hay una prueba que ya falla y un mensaje observado, no edites.
+No modifiques el puente de suscripción, portfolio_risk ni runtime_guard.
+El cambio se acepta solo si el fallo es demostrable y queda cubierto por una prueba de regresión que no toca el puente ni los controles de riesgo.
+"""
+
+[[inputs]]
+name = "failing_test"
+io_type = "file"
+required = true
+description = "Identificador y mensaje de la prueba que ya falla."
+
+[[outputs]]
+name = "regression_test"
+io_type = "file"
+required = true
+description = "Prueba nueva en backend/tests que reproduce el fallo."

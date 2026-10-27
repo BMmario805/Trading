@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock, patch
 
-from app import bots, learning, training, mt5_demo, mt5_performance as perf, reset_accounts
+from app import bots, learning, training, mt5_demo, mt5_performance as perf, reset_accounts, portfolio_risk, fx_rates
 from app.config import SYMBOLS_BY_ID
 from app.mt5_gateway import DemoGateway, DemoOnlyError
 from tests.test_mt5_demo import setup_api
@@ -14,6 +14,8 @@ from tests.test_mt5_performance import deal
 
 class ResetSessionTests(unittest.TestCase):
     def setUp(self):
+        self.fx_patch=patch.object(fx_rates,'get',side_effect=lambda currency:dict(rate={'USDT':1,'USD':1,'JPY':.005,'EUR':1}[currency],at=bots.time.time(),source='synthetic conversion fixture'))
+        self.fx_patch.start();self.addCleanup(self.fx_patch.stop)
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         for module in (bots,learning,training,mt5_demo,perf):
@@ -26,8 +28,8 @@ class ResetSessionTests(unittest.TestCase):
     def test_lab_reset_clears_all_bot_trades_and_persists_euro_funding(self):
         b=bots.TradingBot(bots.SCALPER)
         b.load_state()
-        with patch.object(learning,'size_multiplier',return_value=(1,None)),patch.object(bots.systems,'chart_overlays',return_value={}):
-            b._open(SYMBOLS_BY_ID['BTC'],'long',100,2,.8,dict(reasons=[],candles=[],confirmations=[]),2,4,.8)
+        with patch.object(learning,'size_multiplier',return_value=(1,None)),patch.object(bots.systems,'chart_overlays',return_value={}),patch.object(portfolio_risk,'assess',return_value=dict(allowed=True,token=None,reason='Isolated conversion fixture')):
+            b._open(SYMBOLS_BY_ID['BTC'],'long',100,2,.8,dict(reasons=[],entryQuote=dict(price=100,time=bots.time.time()),candles=[dict(time=0,open=100,high=101,low=99,close=100,volume=100)],confirmations=[]),2,4,.8)
         reset_accounts.reset_lab(self.session)
         for cfg in bots.ALL_BOTS:
             restored=bots.TradingBot(cfg)
@@ -42,8 +44,8 @@ class ResetSessionTests(unittest.TestCase):
         reset_accounts.reset_lab(self.session)
         b=bots.TradingBot(bots.SCALPER)
         b.load_state()
-        with patch.object(learning,'size_multiplier',return_value=(1,None)),patch.object(bots.systems,'chart_overlays',return_value={}):
-            b._open(SYMBOLS_BY_ID['USDJPY'],'long',150,1,.8,dict(reasons=[],candles=[],confirmations=[]),2,4,.8)
+        with patch.object(learning,'size_multiplier',return_value=(1,None)),patch.object(bots.systems,'chart_overlays',return_value={}),patch.object(portfolio_risk,'assess',return_value=dict(allowed=True,token=None,reason='Isolated conversion fixture')):
+            b._open(SYMBOLS_BY_ID['USDJPY'],'long',150,1,.8,dict(reasons=[],entryQuote=dict(price=150,time=bots.time.time()),candles=[dict(time=0,open=150,high=151,low=149,close=150,volume=100)],confirmations=[]),2,4,.8)
         pos=b.positions['USDJPY']
         self.assertEqual(pos.quote_to_account,.005)
         self.assertLessEqual(pos.qty*pos.r_dist*.005,100*b.cfg.risk_pct)

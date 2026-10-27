@@ -10,7 +10,8 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from app import bots, history, learning, training
+from app import bots, history, learning, training, experiments
+from test_learning_economics import forward_contract
 from app.database import Connection
 
 
@@ -20,7 +21,7 @@ class TemporaryDatabaseTests(unittest.TestCase):
         self.addCleanup(self.stack.close)
         tmp = self.stack.enter_context(tempfile.TemporaryDirectory())
         self.path = Path(tmp) / 'audit.db'
-        for module in (bots, history, learning, training):
+        for module in (bots, history, learning, training, experiments):
             self.stack.enter_context(patch.object(module, 'DB_PATH', self.path))
         for cache in (learning._policies, learning._edges, learning._models, training.STATUS):
             self.stack.enter_context(patch.dict(cache, {}, clear=True))
@@ -56,7 +57,7 @@ class TrainingAttemptTests(TemporaryDatabaseTests):
     def save_previous(self):
         with training._conn() as con:
             con.execute('INSERT INTO bot_params VALUES (?,?,?,?,?,?)',
-                        ('swing', 'BTC', '{}', json.dumps(dict(engineVersion=training.ENGINE_VERSION)), 1, 99000))
+                        ('swing', 'BTC', '{}', json.dumps(dict(engineVersion=training.ENGINE_VERSION,promotion=forward_contract())), 1, 99000))
 
     def test_negative_evaluation_waits_full_cycle_and_revokes_previous(self):
         self.save_previous()
@@ -144,7 +145,7 @@ class MetaFeaturesTests(TemporaryDatabaseTests):
                                                [dict(system='MACD', vote=.7)] + self.confirmations(vote))
                 self.assertEqual(feats, base)
                 self.assertEqual(learning.meta_predict('scalper', feats), .5)
-                self.assertEqual(learning.meta_gate('scalper', feats)[:2], (True, .5))
+                self.assertEqual(learning.meta_gate('scalper', feats)[:2], (True, None))
             self.assertAlmostEqual(base['conf:MACD'], .7 if direction == 'long' else -.7)
 
     def test_persisted_contaminated_model_is_rebuilt_from_filtered_snapshots(self):
@@ -200,7 +201,7 @@ class ProbationSizingTests(TemporaryDatabaseTests):
         with patch.object(learning, 'size_multiplier', return_value=(learn_mult, None)), \
              patch.object(bots.systems, 'chart_overlays', return_value={}):
             bot._open(bots.SYMBOLS_BY_ID['BTC'], 'long', 100, 2, .8,
-                      dict(reasons=[], candles=[], confirmations=[]), 2, 4, 1,
+                      dict(reasons=[], entryQuote=dict(price=100,time=bots.time.time()), candles=[dict(time=0,open=100,high=101,low=99,close=100,volume=100)], confirmations=[]), 2, 4, 1,
                       p_win=p_win, probation_why='Sin validar')
         return bot.positions['BTC']
 
@@ -242,9 +243,9 @@ class MetaEntryDiagnosticsTests(TemporaryDatabaseTests):
     def scan(self, probability):
         bot = bots.TradingBot(replace(bots.SCALPER, universe=('EURUSD',)))
         signal = dict(score=.8, stale=False, atr=2, price=100, prev=0,
-                      recent_prev=[0]*3, extension=0, confirmations=[])
+                      recent_prev=[0]*3, extension=0, confirmations=[],candles=[dict(time=0,open=100,high=101,low=99,close=100,volume=100)])
         learning._models['scalper'] = {
-            **learning._new_model(), 'n': 46,
+            **learning._new_model(), 'n': 46, 'calibrated':True,'promotion':forward_contract(),
             'w': {'bias': math.log(probability/(1-probability))},
         }
         with patch.object(learning, 'entry_mode', return_value=('probation', 'Sin validar')), \
@@ -303,7 +304,7 @@ class ManualParameterTests(TemporaryDatabaseTests):
         bot = bots.TradingBot(bots.SWING)
         bot.reload_params()
         self.assertIn('BTC', bot.manual_params)
-        self.save(dict(engineVersion=training.ENGINE_VERSION), applied=1)
+        self.save(dict(engineVersion=training.ENGINE_VERSION,promotion=forward_contract()), applied=1)
         bot.reload_params()
         self.assertNotIn('BTC', bot.manual_params)
         self.assertIn('BTC', bot.trained_params)

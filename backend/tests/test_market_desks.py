@@ -1,3 +1,4 @@
+from desk_unit_support import fund_unit_desk
 import tempfile
 import time
 import unittest
@@ -34,6 +35,7 @@ class DeskIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.engines={key:desk.Desk(key,Path(self.tmp.name)/(key+'.sqlite')) for key in ('crypto','forex','stocks')}
+        for engine in self.engines.values(): fund_unit_desk(self,engine)
 
     async def test_pause_cash_and_history_are_independent_and_survive_restart(self):
         await self.engines['forex'].control('pause')

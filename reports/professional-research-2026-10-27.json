@@ -1,0 +1,1067 @@
+{
+  "createdAt": 1793125624.5453763,
+  "codeHash": "2c4369ffd4c8941f78d490f6d6042a22da74c1d4bc3764ce6678e2ada1b1f9d2",
+  "purpose": "Seven fixed hypotheses; bounded historical exploration and prospective paired contracts",
+  "automaticPromotion": false,
+  "inputsManifest": "research-inputs-2026-10-26.json",
+  "experiments": [
+    {
+      "id": "8c5f9667912e4d63b59ccd07ec20ff89",
+      "planId": "A1",
+      "frozenAt": 1793125624.5454965,
+      "manifestHash": "a9fec6556767088158f15cea8b8a41cf949ecfdac154be1906920c99916b369a",
+      "manifest": {
+        "plan": {
+          "id": "A1",
+          "version": "preregistered-plans-v1",
+          "name": "Tendencia diaria",
+          "interval": "1d",
+          "kind": "donchian",
+          "lookback": 55,
+          "hypothesis": "Ruptura diaria 55 barras, larga, con costes netos y riesgo fijo",
+          "trialCount": 1,
+          "parameters": {
+            "slAtr": 2,
+            "tpAtr": 4,
+            "trailAtr": 2,
+            "maxHoldBars": 48,
+            "threshold": 0.6,
+            "riskPerTrade": 1,
+            "capitalReference": 100,
+            "minimumTrades": 20,
+            "maximumDrawdown": 30
+          },
+          "status": "preregisterable",
+          "automaticPromotion": false
+        },
+        "parameters": {
+          "slAtr": 2,
+          "tpAtr": 4,
+          "trailAtr": 2,
+          "maxHoldBars": 48,
+          "threshold": 0.6,
+          "riskPerTrade": 1,
+          "capitalReference": 100,
+          "minimumTrades": 20,
+          "maximumDrawdown": 30
+        },
+        "symbols": [
+          "BTC",
+          "ETH"
+        ],
+        "benchmark": null,
+        "costModel": {
+          "version": "net-costs-v1",
+          "feeRate": 0.001,
+          "slippageRate": 0.0002,
+          "spreadPct": 0.0005,
+          "carryDailyRate": 0.0,
+          "mode": "spot",
+          "verified": false,
+          "assumption": "Escenario conservador; costes de cuenta sin verificar"
+        },
+        "trialCount": 1,
+        "pairedContract": null,
+        "executionEquivalent": false,
+        "analysis": "fixed hypothesis; no parameter search",
+        "registryVersion": "research-ledger-v1",
+        "codeHash": "2c4369ffd4c8941f78d490f6d6042a22da74c1d4bc3764ce6678e2ada1b1f9d2",
+        "codeScope": "all backend/app Python sources and backend/requirements.lock when present; runtime data excluded"
+      },
+      "result": {
+        "version": "preregistered-plans-v1",
+        "experimentId": "8c5f9667912e4d63b59ccd07ec20ff89",
+        "planId": "A1",
+        "results": [
+          {
+            "symbol": "BTC",
+            "status": "rejected",
+            "normal": {
+              "expectancy": 0.957,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 1.91,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.85,
+              "fees": 0.07237,
+              "carry": 0.0,
+              "turnover": 72.3698
+            },
+            "stress": {
+              "expectancy": 0.8663,
+              "trades": 2,
+              "wins": 2,
+              "pnl": 1.73,
+              "winRate": 100.0,
+              "profitFactor": null,
+              "maxDrawdown": 0.82,
+              "fees": 0.138748,
+              "carry": 0.0,
+              "turnover": 69.374
+            },
+            "uncertainty": {
+              "sample": 2,
+              "mean": 0.9569973798831167,
+              "lower95": 0.9569973798831167,
+              "upper95": 0.9569973798831167,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "checks": [
+              {
+                "id": "sample",
+                "passed": false
+              },
+              {
+                "id": "net",
+                "passed": true
+              },
+              {
+                "id": "stress",
+                "passed": true
+              },
+              {
+                "id": "uncertainty",
+                "passed": true
+              },
+              {
+                "id": "drawdown",
+                "passed": true
+              }
+            ],
+            "fixedCohortStress": {
+              "trades": 2,
+              "pnl": 1.80906,
+              "fixedCohort": true,
+              "currency": "quote",
+              "scope": "Same entry/exit references, times and quantities; cost repricing only"
+            },
+            "claim": {
+              "id": "4bee96da6edf4b0d864e0cc425053561",
+              "experimentId": "8c5f9667912e4d63b59ccd07ec20ff89",
+              "allowed": true,
+              "reused": false,
+              "independentFuture": false,
+              "dataset": {
+                "symbol": "BTC",
+                "interval": "1d",
+                "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+                "bars": 200,
+                "start": 1775692800.0,
+                "end": 1792972800.0,
+                "dataHash": "1110c862b2397963e69ec9658102a9557c2c2dadc12cdbf60d92ed29c9a413df"
+              },
+              "classification": "historical"
+            },
+            "promotion": {
+              "version": "promotion-contract-v1",
+              "status": "rejected",
+              "promotable": false,
+              "reasons": [
+                "Predeclared economic and sample checks did not pass",
+                "Independent observations after candidate freeze are required",
+                "Replay and deployed policy are not verified equivalent",
+                "Execution costs are scenarios, not verified account costs"
+              ],
+              "independentFuture": false,
+              "executionEquivalent": false,
+              "costsVerified": false,
+              "holdoutReused": false,
+              "experimentId": "8c5f9667912e4d63b59ccd07ec20ff89",
+              "evidenceId": "6b2b9ab8bf5100ba1c6e67c688c94d13ba05b258d547f51d120e2cf72c2ac088"
+            }
+          },
+          {
+            "symbol": "ETH",
+            "status": "rejected",
+            "normal": {
+              "expectancy": -0.0394,
+              "trades": 2,
+              "wins": 1,
+              "pnl": -0.08,
+              "winRate": 50.0,
+              "profitFactor": 0.92,
+              "maxDrawdown": 1.0,
+              "fees": 0.050845,
+              "carry": 0.0,
+              "turnover": 50.8454
+            },
+            "stress": {
+              "expectancy": -0.0764,
+              "trades": 2,
+              "wins": 1,
+              "pnl": -0.15,
+              "winRate": 50.0,
+              "profitFactor": 0.85,
+              "maxDrawdown": 1.0,
+              "fees": 0.098664,
+              "carry": 0.0,
+              "turnover": 49.3322
+            },
+            "uncertainty": {
+              "sample": 2,
+              "mean": -0.03943747891161331,
+              "lower95": -0.03943747891161331,
+              "upper95": -0.03943747891161331,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "checks": [
+              {
+                "id": "sample",
+                "passed": false
+              },
+              {
+                "id": "net",
+                "passed": false
+              },
+              {
+                "id": "stress",
+                "passed": false
+              },
+              {
+                "id": "uncertainty",
+                "passed": false
+              },
+              {
+                "id": "drawdown",
+                "passed": true
+              }
+            ],
+            "fixedCohortStress": {
+              "trades": 2,
+              "pnl": -0.152601,
+              "fixedCohort": true,
+              "currency": "quote",
+              "scope": "Same entry/exit references, times and quantities; cost repricing only"
+            },
+            "claim": {
+              "id": "32d15f1624ab47a488da7f62cf3358bd",
+              "experimentId": "8c5f9667912e4d63b59ccd07ec20ff89",
+              "allowed": true,
+              "reused": false,
+              "independentFuture": false,
+              "dataset": {
+                "symbol": "ETH",
+                "interval": "1d",
+                "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+                "bars": 200,
+                "start": 1775692800.0,
+                "end": 1792972800.0,
+                "dataHash": "9d94949c4265c1a6da2f3e894777a10da5fd04e74f69db2164a28b7e3e2c8622"
+              },
+              "classification": "historical"
+            },
+            "promotion": {
+              "version": "promotion-contract-v1",
+              "status": "rejected",
+              "promotable": false,
+              "reasons": [
+                "Predeclared economic and sample checks did not pass",
+                "Independent observations after candidate freeze are required",
+                "Replay and deployed policy are not verified equivalent",
+                "Execution costs are scenarios, not verified account costs"
+              ],
+              "independentFuture": false,
+              "executionEquivalent": false,
+              "costsVerified": false,
+              "holdoutReused": false,
+              "experimentId": "8c5f9667912e4d63b59ccd07ec20ff89",
+              "evidenceId": "e0e7ffc24f733100b2ee7a4a29c0c8ef3b491a749d6a5660523da102dea981a3"
+            }
+          }
+        ],
+        "automaticPromotion": false,
+        "capitalScope": "Independent reference per series; no aggregate portfolio return",
+        "stressScope": "Policy rerun at stressed costs; trades and quantities may change",
+        "accumulatedTrials": 10741
+      }
+    },
+    {
+      "id": "ffc94d2925ba4c5b81b01ac62e4eb39e",
+      "planId": "A2",
+      "frozenAt": 1793125624.6861558,
+      "manifestHash": "e4b3c2f2b61b0353baa3fdc0712575655e30433d342386e02ed09636afc5a21b",
+      "manifest": {
+        "plan": {
+          "id": "A2",
+          "version": "preregistered-plans-v1",
+          "name": "Tendencia cuatro horas",
+          "interval": "4h",
+          "kind": "donchian",
+          "lookback": 40,
+          "hypothesis": "La ruptura 4h se evalúa independientemente de la señal diaria",
+          "trialCount": 1,
+          "parameters": {
+            "slAtr": 2,
+            "tpAtr": 4,
+            "trailAtr": 2,
+            "maxHoldBars": 48,
+            "threshold": 0.6,
+            "riskPerTrade": 1,
+            "capitalReference": 100,
+            "minimumTrades": 20,
+            "maximumDrawdown": 30
+          },
+          "status": "preregisterable",
+          "automaticPromotion": false
+        },
+        "parameters": {
+          "slAtr": 2,
+          "tpAtr": 4,
+          "trailAtr": 2,
+          "maxHoldBars": 48,
+          "threshold": 0.6,
+          "riskPerTrade": 1,
+          "capitalReference": 100,
+          "minimumTrades": 20,
+          "maximumDrawdown": 30
+        },
+        "symbols": [
+          "BTC",
+          "ETH"
+        ],
+        "benchmark": null,
+        "costModel": {
+          "version": "net-costs-v1",
+          "feeRate": 0.001,
+          "slippageRate": 0.0002,
+          "spreadPct": 0.0005,
+          "carryDailyRate": 0.0,
+          "mode": "spot",
+          "verified": false,
+          "assumption": "Escenario conservador; costes de cuenta sin verificar"
+        },
+        "trialCount": 1,
+        "pairedContract": null,
+        "executionEquivalent": false,
+        "analysis": "fixed hypothesis; no parameter search",
+        "registryVersion": "research-ledger-v1",
+        "codeHash": "2c4369ffd4c8941f78d490f6d6042a22da74c1d4bc3764ce6678e2ada1b1f9d2",
+        "codeScope": "all backend/app Python sources and backend/requirements.lock when present; runtime data excluded"
+      },
+      "result": {
+        "version": "preregistered-plans-v1",
+        "experimentId": "ffc94d2925ba4c5b81b01ac62e4eb39e",
+        "planId": "A2",
+        "results": [
+          {
+            "symbol": "BTC",
+            "status": "rejected",
+            "normal": {
+              "expectancy": -1.0,
+              "trades": 2,
+              "wins": 0,
+              "pnl": -2.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 2.04,
+              "fees": 0.177227,
+              "carry": 0.0,
+              "turnover": 177.2267
+            },
+            "stress": {
+              "expectancy": -1.0,
+              "trades": 2,
+              "wins": 0,
+              "pnl": -2.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 2.0,
+              "fees": 0.319674,
+              "carry": 0.0,
+              "turnover": 159.8371
+            },
+            "uncertainty": {
+              "sample": 2,
+              "mean": -1.0,
+              "lower95": -1.0,
+              "upper95": -1.0,
+              "blockLength": 2,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false,
+              "warning": "Intervalo descriptivo; no corrige selección ni garantiza independencia"
+            },
+            "checks": [
+              {
+                "id": "sample",
+                "passed": false
+              },
+              {
+                "id": "net",
+                "passed": false
+              },
+              {
+                "id": "stress",
+                "passed": false
+              },
+              {
+                "id": "uncertainty",
+                "passed": false
+              },
+              {
+                "id": "drawdown",
+                "passed": true
+              }
+            ],
+            "fixedCohortStress": {
+              "trades": 2,
+              "pnl": -2.25698,
+              "fixedCohort": true,
+              "currency": "quote",
+              "scope": "Same entry/exit references, times and quantities; cost repricing only"
+            },
+            "claim": {
+              "id": "ee02caf90d7d4a59bc9fc500b051a9c1",
+              "experimentId": "ffc94d2925ba4c5b81b01ac62e4eb39e",
+              "allowed": true,
+              "reused": false,
+              "independentFuture": false,
+              "dataset": {
+                "symbol": "BTC",
+                "interval": "4h",
+                "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+                "bars": 200,
+                "start": 1790150400.0,
+                "end": 1793030400.0,
+                "dataHash": "9d8f5cb6c4e32ec2b236ff47e7be22f93f9f32afc31cfe3754f41d85855db655"
+              },
+              "classification": "historical"
+            },
+            "promotion": {
+              "version": "promotion-contract-v1",
+              "status": "rejected",
+              "promotable": false,
+              "reasons": [
+                "Predeclared economic and sample checks did not pass",
+                "Independent observations after candidate freeze are required",
+                "Replay and deployed policy are not verified equivalent",
+                "Execution costs are scenarios, not verified account costs"
+              ],
+              "independentFuture": false,
+              "executionEquivalent": false,
+              "costsVerified": false,
+              "holdoutReused": false,
+              "experimentId": "ffc94d2925ba4c5b81b01ac62e4eb39e",
+              "evidenceId": "94bd21f6ad46128026b692d3d2964a62573fcfbb5251700e2dd7742b9e1c5f4b"
+            }
+          },
+          {
+            "symbol": "ETH",
+            "status": "rejected",
+            "normal": {
+              "expectancy": -1.0,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -1.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.0,
+              "fees": 0.061706,
+              "carry": 0.0,
+              "turnover": 61.7062
+            },
+            "stress": {
+              "expectancy": -1.0,
+              "trades": 1,
+              "wins": 0,
+              "pnl": -1.0,
+              "winRate": 0.0,
+              "profitFactor": 0.0,
+              "maxDrawdown": 1.0,
+              "fees": 0.114784,
+              "carry": 0.0,
+              "turnover": 57.392
+            },
+            "uncertainty": {
+              "sample": 1,
+              "mean": -1.0,
+              "lower95": null,
+              "upper95": null,
+              "method": "circular-trade-block-bootstrap",
+              "selectionAdjusted": false
+            },
+            "checks": [
+              {
+                "id": "sample",
+                "passed": false
+              },
+              {
+                "id": "net",
+                "passed": false
+              },
+              {
+                "id": "stress",
+                "passed": false
+              },
+              {
+                "id": "uncertainty",
+                "passed": false
+              },
+              {
+                "id": "drawdown",
+                "passed": true
+              }
+            ],
+            "fixedCohortStress": {
+              "trades": 1,
+              "pnl": -1.089475,
+              "fixedCohort": true,
+              "currency": "quote",
+              "scope": "Same entry/exit references, times and quantities; cost repricing only"
+            },
+            "claim": {
+              "id": "e868862da38b49139c036630c307a081",
+              "experimentId": "ffc94d2925ba4c5b81b01ac62e4eb39e",
+              "allowed": true,
+              "reused": false,
+              "independentFuture": false,
+              "dataset": {
+                "symbol": "ETH",
+                "interval": "4h",
+                "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+                "bars": 200,
+                "start": 1790150400.0,
+                "end": 1793030400.0,
+                "dataHash": "604ad1736684d4f4826e23c01836424fb2366dcce407836f135dbde7bc31888a"
+              },
+              "classification": "historical"
+            },
+            "promotion": {
+              "version": "promotion-contract-v1",
+              "status": "rejected",
+              "promotable": false,
+              "reasons": [
+                "Predeclared economic and sample checks did not pass",
+                "Independent observations after candidate freeze are required",
+                "Replay and deployed policy are not verified equivalent",
+                "Execution costs are scenarios, not verified account costs"
+              ],
+              "independentFuture": false,
+              "executionEquivalent": false,
+              "costsVerified": false,
+              "holdoutReused": false,
+              "experimentId": "ffc94d2925ba4c5b81b01ac62e4eb39e",
+              "evidenceId": "be7e4911dbfcbbae76a97975bcc1f258e133fa2e217f3cda8db94dea530e9ee4"
+            }
+          }
+        ],
+        "automaticPromotion": false,
+        "capitalScope": "Independent reference per series; no aggregate portfolio return",
+        "stressScope": "Policy rerun at stressed costs; trades and quantities may change",
+        "accumulatedTrials": 10742
+      }
+    },
+    {
+      "id": "82007861c5cd4535966c11f773a26734",
+      "planId": "A3",
+      "frozenAt": 1793125624.8120198,
+      "manifestHash": "67cd6250d9246d22c44ad45b1ff10037a102c25930e02279e19fc654b29bf49a",
+      "manifest": {
+        "plan": {
+          "id": "A3",
+          "version": "preregistered-plans-v1",
+          "name": "Fuerza relativa",
+          "interval": "1d",
+          "kind": "relative-strength",
+          "lookback": 60,
+          "hypothesis": "El líder de momentum diario positivo y superior al benchmark fijo",
+          "trialCount": 1,
+          "parameters": {
+            "slAtr": 2,
+            "tpAtr": 4,
+            "trailAtr": 2,
+            "maxHoldBars": 48,
+            "threshold": 0.6,
+            "riskPerTrade": 1,
+            "capitalReference": 100,
+            "minimumTrades": 20,
+            "maximumDrawdown": 30
+          },
+          "status": "preregisterable",
+          "automaticPromotion": false
+        },
+        "parameters": {
+          "slAtr": 2,
+          "tpAtr": 4,
+          "trailAtr": 2,
+          "maxHoldBars": 48,
+          "threshold": 0.6,
+          "riskPerTrade": 1,
+          "capitalReference": 100,
+          "minimumTrades": 20,
+          "maximumDrawdown": 30
+        },
+        "symbols": [
+          "BTC",
+          "ETH"
+        ],
+        "benchmark": "BTC",
+        "costModel": {
+          "version": "net-costs-v1",
+          "feeRate": 0.001,
+          "slippageRate": 0.0002,
+          "spreadPct": 0.0005,
+          "carryDailyRate": 0.0,
+          "mode": "spot",
+          "verified": false,
+          "assumption": "Escenario conservador; costes de cuenta sin verificar"
+        },
+        "trialCount": 1,
+        "pairedContract": null,
+        "executionEquivalent": false,
+        "analysis": "fixed hypothesis; no parameter search",
+        "registryVersion": "research-ledger-v1",
+        "codeHash": "2c4369ffd4c8941f78d490f6d6042a22da74c1d4bc3764ce6678e2ada1b1f9d2",
+        "codeScope": "all backend/app Python sources and backend/requirements.lock when present; runtime data excluded"
+      },
+      "result": {
+        "version": "preregistered-plans-v1",
+        "experimentId": "82007861c5cd4535966c11f773a26734",
+        "planId": "A3",
+        "results": [
+          {
+            "symbol": "BTC",
+            "status": "previously_seen",
+            "claim": {
+              "id": "857557dbcd984b7c8b5af90c559c93b8",
+              "experimentId": "82007861c5cd4535966c11f773a26734",
+              "allowed": false,
+              "reused": true,
+              "independentFuture": false,
+              "dataset": {
+                "symbol": "BTC",
+                "interval": "1d",
+                "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+                "bars": 200,
+                "start": 1775692800.0,
+                "end": 1792972800.0,
+                "dataHash": "1110c862b2397963e69ec9658102a9557c2c2dadc12cdbf60d92ed29c9a413df"
+              },
+              "classification": "previously_seen"
+            }
+          },
+          {
+            "symbol": "ETH",
+            "status": "previously_seen",
+            "claim": {
+              "id": "cbf55fbaf8444556a3c86fc88d097465",
+              "experimentId": "82007861c5cd4535966c11f773a26734",
+              "allowed": false,
+              "reused": true,
+              "independentFuture": false,
+              "dataset": {
+                "symbol": "ETH",
+                "interval": "1d",
+                "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+                "bars": 200,
+                "start": 1775692800.0,
+                "end": 1792972800.0,
+                "dataHash": "9d94949c4265c1a6da2f3e894777a10da5fd04e74f69db2164a28b7e3e2c8622"
+              },
+              "classification": "previously_seen"
+            }
+          }
+        ],
+        "automaticPromotion": false,
+        "capitalScope": "Independent reference per series; no aggregate portfolio return",
+        "stressScope": "Policy rerun at stressed costs; trades and quantities may change",
+        "accumulatedTrials": 10743
+      }
+    },
+    {
+      "id": "9ac407aa8c804840ab52ad9f86aade7a",
+      "planId": "A4",
+      "frozenAt": 1793125624.87568,
+      "manifestHash": "a77390721ef07bd4118effe733bb99a916dfda8992d2d3c2da48eb565a0063f6",
+      "manifest": {
+        "plan": {
+          "id": "A4",
+          "version": "preregistered-plans-v1",
+          "name": "Régimen de tendencia",
+          "interval": "4h",
+          "kind": "regime",
+          "lookback": 40,
+          "hypothesis": "ADX causal mayor o igual a20 filtra la ruptura 4h",
+          "trialCount": 1,
+          "parameters": {
+            "slAtr": 2,
+            "tpAtr": 4,
+            "trailAtr": 2,
+            "maxHoldBars": 48,
+            "threshold": 0.6,
+            "riskPerTrade": 1,
+            "capitalReference": 100,
+            "minimumTrades": 20,
+            "maximumDrawdown": 30
+          },
+          "status": "preregisterable",
+          "automaticPromotion": false
+        },
+        "parameters": {
+          "slAtr": 2,
+          "tpAtr": 4,
+          "trailAtr": 2,
+          "maxHoldBars": 48,
+          "threshold": 0.6,
+          "riskPerTrade": 1,
+          "capitalReference": 100,
+          "minimumTrades": 20,
+          "maximumDrawdown": 30
+        },
+        "symbols": [
+          "BTC",
+          "ETH"
+        ],
+        "benchmark": null,
+        "costModel": {
+          "version": "net-costs-v1",
+          "feeRate": 0.001,
+          "slippageRate": 0.0002,
+          "spreadPct": 0.0005,
+          "carryDailyRate": 0.0,
+          "mode": "spot",
+          "verified": false,
+          "assumption": "Escenario conservador; costes de cuenta sin verificar"
+        },
+        "trialCount": 1,
+        "pairedContract": null,
+        "executionEquivalent": false,
+        "analysis": "fixed hypothesis; no parameter search",
+        "registryVersion": "research-ledger-v1",
+        "codeHash": "2c4369ffd4c8941f78d490f6d6042a22da74c1d4bc3764ce6678e2ada1b1f9d2",
+        "codeScope": "all backend/app Python sources and backend/requirements.lock when present; runtime data excluded"
+      },
+      "result": {
+        "version": "preregistered-plans-v1",
+        "experimentId": "9ac407aa8c804840ab52ad9f86aade7a",
+        "planId": "A4",
+        "results": [
+          {
+            "symbol": "BTC",
+            "status": "previously_seen",
+            "claim": {
+              "id": "bf7303d74cea44eea9eb9cddcd90da23",
+              "experimentId": "9ac407aa8c804840ab52ad9f86aade7a",
+              "allowed": false,
+              "reused": true,
+              "independentFuture": false,
+              "dataset": {
+                "symbol": "BTC",
+                "interval": "4h",
+                "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+                "bars": 200,
+                "start": 1790150400.0,
+                "end": 1793030400.0,
+                "dataHash": "9d8f5cb6c4e32ec2b236ff47e7be22f93f9f32afc31cfe3754f41d85855db655"
+              },
+              "classification": "previously_seen"
+            }
+          },
+          {
+            "symbol": "ETH",
+            "status": "previously_seen",
+            "claim": {
+              "id": "6a0c543891e24dc6ac942eaa9db87e92",
+              "experimentId": "9ac407aa8c804840ab52ad9f86aade7a",
+              "allowed": false,
+              "reused": true,
+              "independentFuture": false,
+              "dataset": {
+                "symbol": "ETH",
+                "interval": "4h",
+                "source": "Binance public Spot klines (data-only mirror with official API fallback)",
+                "bars": 200,
+                "start": 1790150400.0,
+                "end": 1793030400.0,
+                "dataHash": "604ad1736684d4f4826e23c01836424fb2366dcce407836f135dbde7bc31888a"
+              },
+              "classification": "previously_seen"
+            }
+          }
+        ],
+        "automaticPromotion": false,
+        "capitalScope": "Independent reference per series; no aggregate portfolio return",
+        "stressScope": "Policy rerun at stressed costs; trades and quantities may change",
+        "accumulatedTrials": 10744
+      }
+    },
+    {
+      "id": "3473477ba98540d18fbeba6d4aa9ec6e",
+      "planId": "A5",
+      "frozenAt": 1793125624.9504828,
+      "manifestHash": "fbd6548c73338b0c33e4ab25ea8a84d4507cf78bc123573fb2ae8d3cc2b3d21a",
+      "manifest": {
+        "plan": {
+          "id": "A5",
+          "version": "preregistered-plans-v1",
+          "name": "Maker frente a taker",
+          "interval": null,
+          "kind": "paired-execution",
+          "lookback": null,
+          "hypothesis": "Diferencia neta emparejada con fills, colas y comisiones observados",
+          "trialCount": 1,
+          "parameters": {
+            "slAtr": 2,
+            "tpAtr": 4,
+            "trailAtr": 2,
+            "maxHoldBars": 48,
+            "threshold": 0.6,
+            "riskPerTrade": 1,
+            "capitalReference": 100,
+            "minimumTrades": 20,
+            "maximumDrawdown": 30
+          },
+          "status": "preregisterable",
+          "automaticPromotion": false
+        },
+        "parameters": {
+          "slAtr": 2,
+          "tpAtr": 4,
+          "trailAtr": 2,
+          "maxHoldBars": 48,
+          "threshold": 0.6,
+          "riskPerTrade": 1,
+          "capitalReference": 100,
+          "minimumTrades": 20,
+          "maximumDrawdown": 30
+        },
+        "symbols": [
+          "BTC",
+          "ETH"
+        ],
+        "benchmark": null,
+        "costModel": {
+          "version": "net-costs-v1",
+          "feeRate": 0.001,
+          "slippageRate": 0.0002,
+          "spreadPct": 0.0005,
+          "carryDailyRate": 0.0,
+          "mode": "spot",
+          "verified": false,
+          "assumption": "Escenario conservador; costes de cuenta sin verificar"
+        },
+        "trialCount": 1,
+        "pairedContract": {
+          "basePolicyHash": "e9c69e9bd76b75a80a5e7a3ea73eb1ba0603fea2dca6d60981ef5af6080e67b5",
+          "overlayPolicyHash": "22a75ea0b6e02050c4f5304358d90ef9be96e9a4681f6ebf4adbb8316deca57a",
+          "currency": "USDT",
+          "riskBudget": 1.0,
+          "costVersion": "net-costs-v1"
+        },
+        "executionEquivalent": false,
+        "analysis": "fixed hypothesis; no parameter search",
+        "registryVersion": "research-ledger-v1",
+        "codeHash": "2c4369ffd4c8941f78d490f6d6042a22da74c1d4bc3764ce6678e2ada1b1f9d2",
+        "codeScope": "all backend/app Python sources and backend/requirements.lock when present; runtime data excluded"
+      },
+      "result": {
+        "experimentId": "3473477ba98540d18fbeba6d4aa9ec6e",
+        "planId": "A5",
+        "status": "awaiting_point_in_time_data",
+        "samples": 0,
+        "rejected": 0,
+        "incrementalNet": null,
+        "pairedContractFrozen": true,
+        "eventLimitReached": false,
+        "uncertainty": {
+          "sample": 0,
+          "mean": null,
+          "lower95": null,
+          "upper95": null,
+          "method": "circular-trade-block-bootstrap",
+          "selectionAdjusted": false
+        },
+        "automaticPromotion": false,
+        "limitation": "Paired observed outcomes are descriptive; execution equivalence and verified costs remain required"
+      }
+    },
+    {
+      "id": "b049afdc8cf4490c91830654ed6dc004",
+      "planId": "A6",
+      "frozenAt": 1793125624.9841547,
+      "manifestHash": "f92f0f0be033509f0da76a74309a9d27e2d7a76745bd8d65fcb09d030d330026",
+      "manifest": {
+        "plan": {
+          "id": "A6",
+          "version": "preregistered-plans-v1",
+          "name": "Ablación IA y derivados",
+          "interval": null,
+          "kind": "paired-ai",
+          "lookback": null,
+          "hypothesis": "Comparación emparejada base/overlay con inputs disponibles al decidir",
+          "trialCount": 1,
+          "parameters": {
+            "slAtr": 2,
+            "tpAtr": 4,
+            "trailAtr": 2,
+            "maxHoldBars": 48,
+            "threshold": 0.6,
+            "riskPerTrade": 1,
+            "capitalReference": 100,
+            "minimumTrades": 20,
+            "maximumDrawdown": 30
+          },
+          "status": "preregisterable",
+          "automaticPromotion": false
+        },
+        "parameters": {
+          "slAtr": 2,
+          "tpAtr": 4,
+          "trailAtr": 2,
+          "maxHoldBars": 48,
+          "threshold": 0.6,
+          "riskPerTrade": 1,
+          "capitalReference": 100,
+          "minimumTrades": 20,
+          "maximumDrawdown": 30
+        },
+        "symbols": [
+          "BTC",
+          "ETH"
+        ],
+        "benchmark": null,
+        "costModel": {
+          "version": "net-costs-v1",
+          "feeRate": 0.001,
+          "slippageRate": 0.0002,
+          "spreadPct": 0.0005,
+          "carryDailyRate": 0.0,
+          "mode": "spot",
+          "verified": false,
+          "assumption": "Escenario conservador; costes de cuenta sin verificar"
+        },
+        "trialCount": 1,
+        "pairedContract": {
+          "basePolicyHash": "99f753716b1f242e2373045a1f56896ffefe0291880ffa1c1bc125686449093e",
+          "overlayPolicyHash": "bf7c2f88459b7e8ecad19e4dc20f3ce4fdc54edcae409781d353f9df773ccd82",
+          "currency": "USDT",
+          "riskBudget": 1.0,
+          "costVersion": "net-costs-v1"
+        },
+        "executionEquivalent": false,
+        "analysis": "fixed hypothesis; no parameter search",
+        "registryVersion": "research-ledger-v1",
+        "codeHash": "2c4369ffd4c8941f78d490f6d6042a22da74c1d4bc3764ce6678e2ada1b1f9d2",
+        "codeScope": "all backend/app Python sources and backend/requirements.lock when present; runtime data excluded"
+      },
+      "result": {
+        "experimentId": "b049afdc8cf4490c91830654ed6dc004",
+        "planId": "A6",
+        "status": "awaiting_point_in_time_data",
+        "samples": 0,
+        "rejected": 0,
+        "incrementalNet": null,
+        "pairedContractFrozen": true,
+        "eventLimitReached": false,
+        "uncertainty": {
+          "sample": 0,
+          "mean": null,
+          "lower95": null,
+          "upper95": null,
+          "method": "circular-trade-block-bootstrap",
+          "selectionAdjusted": false
+        },
+        "automaticPromotion": false,
+        "limitation": "Paired observed outcomes are descriptive; execution equivalence and verified costs remain required"
+      }
+    },
+    {
+      "id": "2cda506b43234622a671ab4fd6986c59",
+      "planId": "A7",
+      "frozenAt": 1793125625.042622,
+      "manifestHash": "cc14038df6b28086d1253726cf69a2b4cb57b62d6101beddf5d22cf346ed3828",
+      "manifest": {
+        "plan": {
+          "id": "A7",
+          "version": "preregistered-plans-v1",
+          "name": "Noticias disponibles al decidir",
+          "interval": null,
+          "kind": "paired-news",
+          "lookback": null,
+          "hypothesis": "Noticias fechadas antes de decidir mejoran el resultado neto emparejado",
+          "trialCount": 1,
+          "parameters": {
+            "slAtr": 2,
+            "tpAtr": 4,
+            "trailAtr": 2,
+            "maxHoldBars": 48,
+            "threshold": 0.6,
+            "riskPerTrade": 1,
+            "capitalReference": 100,
+            "minimumTrades": 20,
+            "maximumDrawdown": 30
+          },
+          "status": "preregisterable",
+          "automaticPromotion": false
+        },
+        "parameters": {
+          "slAtr": 2,
+          "tpAtr": 4,
+          "trailAtr": 2,
+          "maxHoldBars": 48,
+          "threshold": 0.6,
+          "riskPerTrade": 1,
+          "capitalReference": 100,
+          "minimumTrades": 20,
+          "maximumDrawdown": 30
+        },
+        "symbols": [
+          "BTC",
+          "ETH"
+        ],
+        "benchmark": null,
+        "costModel": {
+          "version": "net-costs-v1",
+          "feeRate": 0.001,
+          "slippageRate": 0.0002,
+          "spreadPct": 0.0005,
+          "carryDailyRate": 0.0,
+          "mode": "spot",
+          "verified": false,
+          "assumption": "Escenario conservador; costes de cuenta sin verificar"
+        },
+        "trialCount": 1,
+        "pairedContract": {
+          "basePolicyHash": "a506550a331992de6845b4452c0c5513dbe45eb1e3c6b4751841108c33de7d86",
+          "overlayPolicyHash": "8464aa6fc1f4664606334741b0942532066b482a12d528716bbc54cdae9faa61",
+          "currency": "USDT",
+          "riskBudget": 1.0,
+          "costVersion": "net-costs-v1"
+        },
+        "executionEquivalent": false,
+        "analysis": "fixed hypothesis; no parameter search",
+        "registryVersion": "research-ledger-v1",
+        "codeHash": "2c4369ffd4c8941f78d490f6d6042a22da74c1d4bc3764ce6678e2ada1b1f9d2",
+        "codeScope": "all backend/app Python sources and backend/requirements.lock when present; runtime data excluded"
+      },
+      "result": {
+        "experimentId": "2cda506b43234622a671ab4fd6986c59",
+        "planId": "A7",
+        "status": "awaiting_point_in_time_data",
+        "samples": 0,
+        "rejected": 0,
+        "incrementalNet": null,
+        "pairedContractFrozen": true,
+        "eventLimitReached": false,
+        "uncertainty": {
+          "sample": 0,
+          "mean": null,
+          "lower95": null,
+          "upper95": null,
+          "method": "circular-trade-block-bootstrap",
+          "selectionAdjusted": false
+        },
+        "automaticPromotion": false,
+        "limitation": "Paired observed outcomes are descriptive; execution equivalence and verified costs remain required"
+      }
+    }
+  ],
+  "ledgerVerified": true,
+  "finishedAt": 1793125625.1074264
+}

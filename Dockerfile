@@ -5,7 +5,7 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.12-slim-bookworm
+FROM python:3.13-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TRADING_DATA_DB=/var/lib/trading/data.db \
@@ -13,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TRADING_MT5_ENABLED=0 \
     TRADING_KEEP_AWAKE=0
 WORKDIR /app/backend
-COPY backend/requirements.txt backend/requirements-cloud.txt ./
+COPY backend/requirements.lock backend/requirements-cloud.txt ./
 RUN pip install --no-cache-dir -r requirements-cloud.txt \
     && useradd --uid 10001 --create-home trader \
     && mkdir -p /app/.runtime /var/lib/trading /backups \

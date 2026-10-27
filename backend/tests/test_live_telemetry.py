@@ -1,3 +1,4 @@
+from desk_unit_support import fund_unit_desk
 import asyncio
 import json
 import tempfile
@@ -155,7 +156,7 @@ class DeskAdmissionTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.folder=tempfile.TemporaryDirectory()
         self.engine=desk.Desk(db_path=Path(self.folder.name)/'desk.sqlite')
-        self.engine.state['funding']=dict(netQuotePerEuro=1.0)
+        fund_unit_desk(self,self.engine)
         self.analysis=dict(bar=int(time.time())-900,close=100,ema20=100,ema50=99,
                            atr=2,rsi=55,trend=True,pullback=True,rows=[])
 

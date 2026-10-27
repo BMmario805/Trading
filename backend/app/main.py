@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel,ConfigDict,Field
 
 from .config import SYMBOLS, SYMBOLS_BY_ID
 from . import bots, history, learning, market_data, systems, training
@@ -22,6 +23,8 @@ from . import portfolio_risk, research_jobs, performance_review, runtime_guard
 from .sentiment import get_opinions, get_sentiment
 from .cloud_runtime import health_snapshot, mount_frontend
 from .book_stream import BOOKS
+from . import team_workflow,experiments,research_plans,fx_rates,data_archive
+from .cloud_runtime import progress_snapshot
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('httpx').setLevel(logging.WARNING)
@@ -44,6 +47,7 @@ async def lifespan(_: FastAPI):
             await telemetry.stop()
             await hub.stop()
             await research_jobs.stop()
+            await asyncio.gather(*tuple(_local_research_tasks),return_exceptions=True)
             await desk.stop()
             await gemini_agent.stop()
             await mt5_demo.stop()
@@ -51,6 +55,7 @@ async def lifespan(_: FastAPI):
             await training.stop_all()
             await bots.stop_all()
             await BOOKS.stop()
+            await fx_rates.stop()
             await market_data.close_client()
             await sentiment_mod.close_session()
             await tradingview.close_session()
@@ -84,6 +89,99 @@ async def portfolio_risk_status():
 @app.get('/api/research')
 async def research_status():
     return research_jobs.status()
+
+
+@app.get('/api/team/health')
+async def team_health():
+    return team_workflow.health_snapshot()
+
+
+@app.post('/api/team/tasks')
+async def team_task_submit(body:team_workflow.TaskRequest):
+    try:
+        return await team_workflow.submit_task(body.model_dump())
+    except team_workflow.WorkflowConflict as exc:
+        raise HTTPException(409,str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400,str(exc)) from exc
+
+
+@app.get('/api/team/tasks/{task_id}')
+async def team_task_status(task_id:str):
+    task=team_workflow.task_snapshot(task_id)
+    if task is None: raise HTTPException(404,'Encargo no encontrado')
+    return task
+
+
+@app.get('/api/research/plans')
+async def research_plan_catalog():
+    return dict(plans=research_plans.list_plans(),experiments=experiments.list_experiments(limit=100),
+                ledger=experiments.verify_ledger(),trials=experiments.accumulated_trials(),
+                automaticPromotion=False)
+
+
+class PlanFreezeRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid',strict=True)
+    symbols:list[str]=Field(min_length=1,max_length=5)
+    benchmark:str|None=None
+
+
+@app.post('/api/research/plans/{plan_id}/preregister')
+async def research_plan_freeze(plan_id:str,body:PlanFreezeRequest):
+    try:
+        return research_plans.preregister_plan(plan_id,symbols=body.symbols,benchmark=body.benchmark)
+    except ValueError as exc: raise HTTPException(400,str(exc)) from exc
+
+
+class PlanEvaluationRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid',strict=True)
+    datasets:list[dict]=Field(default_factory=list,max_length=5)
+
+
+_local_research_lock=asyncio.Lock()
+_local_research_tasks=set()
+
+
+@app.post('/api/research/experiments/{experiment_id}/evaluate')
+async def research_plan_evaluate(experiment_id:str,body:PlanEvaluationRequest):
+    if _local_research_lock.locked(): raise HTTPException(409,'Ya hay una evaluación local en curso')
+    await _local_research_lock.acquire()
+    ledger_path=experiments.DB_PATH
+    def evaluate():
+        try:
+            experiment=experiments.get_experiment(experiment_id,db_path=ledger_path)
+            # Validate bounds and policy identity before storing any client data.
+            if body.datasets:
+                interval=experiment['manifest']['plan']['interval']
+                for dataset in body.datasets:
+                    research_plans._validated_rows(dataset,interval)
+            for dataset in body.datasets:
+                receipt=data_archive.archive_dataset(dataset,root=ledger_path.parent/'research-data')
+                experiments.record_observation(experiment_id,'dataset_snapshot',receipt,db_path=ledger_path)
+            return research_plans.evaluate_plan(experiment_id,body.datasets,db_path=ledger_path)
+        except (ValueError,KeyError) as exc: raise HTTPException(400,str(exc)) from exc
+    async def owned_worker():
+        try: return await asyncio.to_thread(evaluate)
+        finally: _local_research_lock.release()
+    worker=asyncio.create_task(owned_worker(),name='bounded-local-research')
+    _local_research_tasks.add(worker)
+    def done(task):
+        _local_research_tasks.discard(task)
+        if not task.cancelled(): task.exception()
+    worker.add_done_callback(done)
+    # Cancellation of an HTTP client does not free the admission lease while
+    # its thread is still computing or writing immutable evidence.
+    return await asyncio.shield(worker)
+
+
+@app.get('/api/professional/status')
+async def professional_status():
+    return dict(mode='paper/demo',profitabilityProven=False,automaticPromotion=False,
+        trainingEngine=training.ENGINE_VERSION,deskPolicy=desk.POLICY_VERSION,
+        progress=progress_snapshot(),currentRiskConversions=fx_rates.snapshot(),
+        research=dict(ledger=experiments.verify_ledger(),experiments=experiments.list_experiments(limit=100)),
+        limitations=['Costes de cuenta sin verificar','Observación futura pendiente',
+                     'La entrega de un agente no autoriza operaciones'])
 
 
 @app.post('/api/research/run')
@@ -263,7 +361,7 @@ async def sentiment_history(symbol_id: str, hours: int = 72):
 
 @app.get("/api/analysis/{symbol_id}")
 async def analysis(symbol_id: str, interval: str = "1h"):
-    """Análisis técnico + sentimiento combinados en una probabilidad de subida."""
+    """Puntuación orientativa de técnico y sentimiento, sin calibración probabilística."""
     sym = _symbol(symbol_id)
     candles_data, senti = await asyncio.gather(
         market_data.get_candles(sym, interval), get_sentiment(sym),
@@ -295,6 +393,9 @@ async def analysis(symbol_id: str, interval: str = "1h"):
         "gemini": gemini_agent.snapshot(sym.id),
         "swarm": ai_swarm.public_symbol(sym.id),
         "upProbability": round(combined * 100, 1),
+        "directionScore": round(combined * 100, 1),
+        "probabilityCalibrated": False,
+        "scoreMeaning": "Puntuación 0–100; no es probabilidad de subida ni de beneficio",
         "verdict": (
             "alcista" if combined >= 0.6 else
             "bajista" if combined <= 0.4 else

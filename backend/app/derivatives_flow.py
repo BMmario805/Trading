@@ -103,11 +103,16 @@ def _change_over(points, horizon_ms):
     return (latest - prior[1]) / abs(prior[1]) * 100.0
 
 
-def _price_change(rows):
+def _price_change(rows, now=None):
+    now=time.time() if now is None else now
     if not isinstance(rows, list) or len(rows) < 2:
         return None
-    previous, latest = rows[-2], rows[-1]
     try:
+        completed=[r for r in rows if len(r)>6 and float(r[6])/1000<=now]
+        if len(completed)<2: return None
+        previous, latest = completed[-2:]
+        if float(latest[0])-float(previous[0])!=3_600_000 or not 0<=now-float(latest[6])/1000<=3660:
+            return None
         old, new = float(previous[4]), float(latest[4])
     except (TypeError, ValueError, IndexError):
         return None
@@ -116,24 +121,33 @@ def _price_change(rows):
     return (new / old - 1.0) * 100.0
 
 
-def _assemble(pair, premium, oi_rows, ratio_rows, klines):
+def _assemble(pair, premium, oi_rows, ratio_rows, klines, now=None):
+    now=time.time() if now is None else now
+    def recent(stamp, max_age):
+        value=_num(stamp)
+        return value is not None and -5<=now-value/1000<=max_age
     funding = mark = index = basis = None
-    if isinstance(premium, dict):
+    premium_fresh=isinstance(premium,dict) and recent(premium.get('time'),TTL)
+    oi_fresh=isinstance(oi_rows,list) and bool(oi_rows) and isinstance(oi_rows[-1],dict) and recent(oi_rows[-1].get('timestamp'),1200)
+    ratio_fresh=isinstance(ratio_rows,list) and bool(ratio_rows) and isinstance(ratio_rows[-1],dict) and recent(ratio_rows[-1].get('timestamp'),1200)
+    if premium_fresh:
         funding = _num(premium.get('lastFundingRate'))
         mark = _num(premium.get('markPrice'))
         index = _num(premium.get('indexPrice'))
         if mark is not None and index not in (None, 0.0):
             basis = (mark - index) / index
-    oi_1h, oi_4h = oi_changes(oi_rows) if isinstance(oi_rows, list) else (None, None)
+    oi_1h, oi_4h = oi_changes(oi_rows) if oi_fresh else (None, None)
     ratio = None
-    if isinstance(ratio_rows, list) and ratio_rows and isinstance(ratio_rows[-1], dict):
+    if ratio_fresh:
         ratio = _num(ratio_rows[-1].get('longShortRatio'))
-    price_change = _price_change(klines)
+    price_change = _price_change(klines,now)
     available = any(value is not None for value in (funding, oi_1h, oi_4h, ratio))
     return dict(available=available, symbol=pair, fundingRate=funding, markPrice=mark, indexPrice=index,
                 basis=basis, oiChange1hPct=oi_1h, oiChange4hPct=oi_4h, longShortRatio=ratio,
                 priceChange1hPct=price_change, reason=None if available else 'Lectura pública incompleta',
-                source=FAPI)
+                source=FAPI, observedAt=now,
+                freshness=dict(premium=premium_fresh,openInterest=oi_fresh,positionRatio=ratio_fresh),
+                priceChangeBasis='consecutive-closed-1h-bars')
 
 
 def _with_regime(snap, direction, price_change_1h_pct):
@@ -165,7 +179,7 @@ async def _fetch(pair):
                      {'symbol': pair, 'period': '15m', 'limit': 16}),
                 _get(client, '/futures/data/topLongShortPositionRatio',
                      {'symbol': pair, 'period': '15m', 'limit': 4}),
-                _get(client, '/fapi/v1/klines', {'symbol': pair, 'interval': '1h', 'limit': 2}),
+                _get(client, '/fapi/v1/klines', {'symbol': pair, 'interval': '1h', 'limit': 3}),
             )
         snap = _assemble(pair, premium, oi_rows, ratio_rows, klines)
     except asyncio.CancelledError:

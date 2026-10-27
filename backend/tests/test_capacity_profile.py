@@ -40,9 +40,11 @@ class DeskCapacityTests(unittest.TestCase):
 
 class LabCapacityTests(EconomicDatabaseTests):
     def open(self,bot):
+        with bots._conn() as con:
+            bar=3600*con.execute('SELECT COUNT(*) FROM bot_trades').fetchone()[0]
         with patch.object(bots.systems,'chart_overlays',return_value={}):
             bot._open(bots.SYMBOLS_BY_ID['BTC'],'long',100,2,.8,
-                dict(reasons=[],candles=[],confirmations=[]),2,7,2.6,probation_why='Sin validar')
+                dict(reasons=[],entryQuote=dict(price=100,time=bots.time.time()),candles=[dict(time=bar,open=100,high=101,low=99,close=100,volume=100)],confirmations=[]),2,7,2.6,probation_why='Sin validar')
         return bot.positions['BTC']
 
     def test_paper_doubles_its_effective_budget_and_snapshots_the_profile(self):

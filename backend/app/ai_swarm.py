@@ -53,6 +53,7 @@ import os
 import sqlite3
 import statistics
 import time
+import uuid
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -967,6 +968,11 @@ def store_pulse_batch(parsed, now=None):
         con.execute('INSERT INTO decisions(symbol, ts, prompt_version, payload) VALUES (?,?,?,?)',
                     ('BATCH', now, PROMPT_VERSION,
                      json.dumps(dict(kind='BatchPulseReport', at=now, items=reports), ensure_ascii=False)))
+    try:
+        from .specialist_team import observe_radar
+        observe_radar(reports, now)
+    except Exception:
+        log.warning('Verificador de noticias no aplicado al radar')
 
 
 def _cached_pulse_report(payload, symbol):
@@ -1468,6 +1474,41 @@ class MultiAgentSwarm:
         self.latest[decision['symbol']] = decision
         hub.broadcast_event(dict(type='swarm_status', data=self.status()))
 
+    def _audit_result(self, decision, economics, risk_eur, notional_eur, *, baseline=None):
+        """Prospective paired receipts, never outcomes or execution permissions."""
+        from . import decision_audit
+        economics = economics if isinstance(economics, dict) else {}
+        supplied = economics.get('candidateId')
+        try:
+            candidate_id = supplied or decision_audit.record_candidate(
+                'swarm', decision['symbol'], decision['direction'],
+                strategy_version=str(economics.get('strategyVersion') or PROTOCOL),
+                cost_version=str(economics.get('costVersion') or 'net-costs-v1'),
+                risk_policy=str(economics.get('riskPolicy') or 'local-risk-v2'),
+                economics=economics, risk_eur=risk_eur, notional_eur=notional_eur,
+                correlation_id=str(decision.get('cycleId') or uuid.uuid4().hex))
+            if not candidate_id:
+                decision['auditState'] = 'daily_candidate_budget'
+                return decision
+            decision['candidateId'] = candidate_id
+            decision['ablationVersion'] = decision_audit.VERSION
+            if not supplied:
+                control = baseline or dict(allowed=False, size=0.0, blockers=['Local control not evaluated'])
+                decision_audit.record_decision(candidate_id, 'rules_local', bool(control['allowed']),
+                    size_multiplier=control['size'], blockers=control['blockers'], execution_mode='counterfactual',
+                    model_versions=dict(flow='local-deterministic-v2', risk='local-net-risk-v2',
+                                        catalyst='shared-existing-gate'))
+            decision_audit.record_decision(candidate_id, 'rules_plus_ai', decision.get('quorum') is True,
+                size_multiplier=decision.get('sizeMultiplier') or 0.0,
+                blockers=decision.get('vetoes') or [], execution_mode=self.settings.mode,
+                prompt_version=PROMPT_VERSION,
+                model_versions={s.agent_id:s.model for s in self.specs()})
+            decision['auditState'] = 'decision_recorded_without_outcome'
+        except (OSError, sqlite3.Error, ValueError, TypeError):
+            decision['auditState'] = 'unavailable'
+            log.warning('Registro prospectivo de decisiones no disponible')
+        return decision
+
     async def _client(self):
         if self.http is None:
             self.http = httpx.AsyncClient(timeout=httpx.Timeout(45, connect=5), follow_redirects=False)
@@ -1690,7 +1731,8 @@ class MultiAgentSwarm:
         if not self.settings.configured:
             reason=('Inicia sesión en Grok Build y Codex para usar las suscripciones'
                     if self.settings.transport=='subscription' else 'Faltan XAI_API_KEY y OPENAI_API_KEY')
-            return empty_decision(symbol, direction, reason, self.settings)
+            return self._audit_result(empty_decision(symbol, direction, reason, self.settings),
+                                      economics, risk_eur, notional_eur)
         if economics is None:
             economics = {}
         planned = economics.get('planned') if isinstance(economics, dict) else None
@@ -1711,7 +1753,7 @@ class MultiAgentSwarm:
             cycle_id, attempts = self._reserve_cycle(symbol, now)
             if cycle_id is None:
                 decision = empty_decision(symbol, direction, 'Presupuesto, intervalo o cupo del enjambre', self.settings)
-                return decision
+                return self._audit_result(decision, merged, risk_eur, notional_eur)
         spent = 0.0
         try:
             pulse_spec, flow_spec, risk_spec, commander_spec = self.specs()
@@ -1748,10 +1790,12 @@ class MultiAgentSwarm:
             if self.settings.transport == 'subscription':
                 flow = local_flow_report(symbol, book, pack.get('cmf20'), _tape_cvd(book, pack.get('cvd_divergence', 0.0)))
             flow = harden_flow(flow, book, symbol)
+            catalyst_allowed = _catalyst_allowed(symbol, direction)
+            portfolio_allowed = _portfolio_allowed(symbol, direction, risk_eur, notional_eur)
             decision = consensus(
                 symbol, direction, pulse, flow, risk, commander, merged,
-                catalyst_allowed=_catalyst_allowed(symbol, direction),
-                portfolio_allowed=_portfolio_allowed(symbol, direction, risk_eur, notional_eur),
+                catalyst_allowed=catalyst_allowed,
+                portfolio_allowed=portfolio_allowed,
                 armed=self.settings.armed, mode=self.settings.mode)
             decision['handoff'] = handoff(decision)
             decision['book'] = _public_book(book)
@@ -1763,6 +1807,16 @@ class MultiAgentSwarm:
             decision['proposalNotionalEUR'] = notional_eur
             decision['transport'] = self.settings.transport
             decision['billing'] = 'subscription' if self.settings.transport=='subscription' else 'api'
+            decision['cycleId'] = cycle_id
+            local = local_risk_report(symbol, merged)
+            control_flow = local_flow_report(symbol, book, pack.get('cmf20'),
+                                             _tape_cvd(book, pack.get('cvd_divergence', 0.0)))
+            baseline_allowed = (local.get('approved') is True and control_flow.get('entryValid') is True
+                                and catalyst_allowed is True and portfolio_allowed is True)
+            self._audit_result(decision, merged, risk_eur, notional_eur,
+                baseline=dict(allowed=baseline_allowed,
+                              size=(local.get('sizeMultiplier') or 0.0) if baseline_allowed else 0.0,
+                              blockers=[] if baseline_allowed else ['Local flow, net economics, catalyst or portfolio gate']))
             self._persist(decision)
             spent = self._cycle_cost(cycle_id)
             readings=(pulse,flow,risk,commander)
@@ -1778,6 +1832,7 @@ class MultiAgentSwarm:
             log.warning('Ciclo de %s inutilizable', symbol)
             self._finish_cycle(cycle_id, 'unavailable', 'Ciclo inutilizable', self.cycle_reserve())
             decision = empty_decision(symbol, direction, 'Ciclo inutilizable', self.settings)
+            self._audit_result(decision, merged, risk_eur, notional_eur)
             self.latest[symbol] = decision
             return decision
 
@@ -2077,7 +2132,7 @@ def fresh_decision(symbol, now=None):
     return row
 
 
-def execution_clearance(symbol, direction, now=None):
+def execution_clearance(symbol, direction, now=None, *, candidate_id=None):
     """Lectura para spot_orders y mt5_gateway. No publica la orden.
 
     En sombra el enjambre no es vinculante. Armado y en paper, la ausencia de
@@ -2092,6 +2147,10 @@ def execution_clearance(symbol, direction, now=None):
     if not isinstance(decision, dict) or decision.get('direction') != direction:
         return dict(binding=True, allowed=False, sizeMultiplier=0, profile='flat', venue=None,
                     reason='Sin quorum reciente del enjambre para esta dirección')
+    if candidate_id is not None and (decision.get('candidateId')!=candidate_id
+            or decision.get('auditState')!='decision_recorded_without_outcome'):
+        return dict(binding=True,allowed=False,sizeMultiplier=0,profile='flat',venue=None,
+                    reason='Pendiente de auditoría de esta propuesta concreta')
     now = time.time() if now is None else now
     if not 0 <= now-decision.get('at', 0) < 120:
         return dict(binding=True, allowed=False, sizeMultiplier=0, profile='flat', venue=None,
@@ -2104,6 +2163,7 @@ def execution_clearance(symbol, direction, now=None):
     return dict(binding=True, allowed=decision.get('authorized') is True, sizeMultiplier=decision.get('sizeMultiplier'),
                 maxRiskEUR=decision.get('proposalRiskEUR'), maxNotionalEUR=decision.get('proposalNotionalEUR'),
                 profile=decision.get('profile'), venue=decision.get('venue'), adapter=(decision.get('handoff') or {}).get('adapter'),
+                candidateId=decision.get('candidateId'),
                 reason=decision.get('reason'))
 
 
@@ -2131,7 +2191,8 @@ def request_entry_audit(symbol, direction, economics, risk_eur=None, notional_eu
     if task and not task.done():
         return
     decision=swarm.latest.get(symbol)
-    if decision and decision.get('direction')==direction and 0<=time.time()-decision.get('at',0)<90:
+    if (decision and decision.get('direction')==direction and 0<=time.time()-decision.get('at',0)<90
+            and (not economics.get('candidateId') or decision.get('candidateId')==economics.get('candidateId'))):
         return
     _entry_tasks[symbol] = asyncio.create_task(_entry_audit(swarm, symbol, direction, economics, risk_eur, notional_eur),
                                                name=f'swarm-entry-{symbol}')

@@ -101,6 +101,11 @@ class ReconciliationTests(unittest.TestCase):
         self.engine=mt5_demo.DemoEngine(self.cfg,self.api)
         self.addCleanup(self.engine.worker.shutdown)
         self.request=dict(symbol='XAUUSD',magic=123,comment='cxp-scalper-1000',volume=.01,type=0)
+        self.reservations=patch.dict(mt5_demo.portfolio_risk._reservations,{},clear=True)
+        self.reservations.start()
+        self.addCleanup(self.reservations.stop)
+        mt5_demo.portfolio_risk.restore('reserved-test',dict(source='mt5',bot='scalper',symbol='GOLD',
+            factor='gold',direction='long',riskEUR=1,notionalEUR=10,at=1000))
         with patch.object(mt5_demo.time,'time',return_value=1000):
             self.engine.submit('entry:scalper:XAUUSD:1000','XAUUSD',self.request,portfolio_token='reserved-test')
 

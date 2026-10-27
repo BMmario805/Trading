@@ -10,7 +10,9 @@ import json
 import logging
 import math
 import sqlite3
+import threading
 import time
+from functools import wraps
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
@@ -19,6 +21,7 @@ from . import market_data
 from . import sentiment as sentiment_mod
 from . import systems
 from . import aggressive
+from . import fx_rates
 from .config import SYMBOLS_BY_ID, Symbol, EXTRA_CRYPTO
 from . import opportunities
 from .history import DB_PATH
@@ -31,6 +34,14 @@ from .strategy import extension_atr, score_series
 from .economics import cost_profile, execution_fill, net_outcome, planned_trade
 
 log = logging.getLogger("bots")
+
+
+def _book_mutation(method):
+    @wraps(method)
+    def synchronized(self,*args,**kwargs):
+        with self._book_lock:
+            return method(self,*args,**kwargs)
+    return synchronized
 
 # ---------------------------------------------------------------------------
 # Configuración
@@ -294,6 +305,9 @@ ALL_BOTS = (SCALPER, SWING, TREND, MEANREV, ORB, SQUEEZE, FLOW)
 
 def _conn() -> sqlite3.Connection:
     con = sqlite3.connect(DB_PATH, factory=Connection)
+    con.execute('''CREATE TABLE IF NOT EXISTS bot_signal_receipts
+        (bot TEXT NOT NULL, symbol TEXT NOT NULL, bar_time INTEGER NOT NULL,
+         PRIMARY KEY(bot,symbol,bar_time))''')
     con.execute(
         """CREATE TABLE IF NOT EXISTS bot_trades (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -363,6 +377,10 @@ class Position:
     economic_risk_dist: float | None = None
     exit_policy: dict | None = None
     max_hold_seconds: int | None = None
+    last_quote_at: float | None = None
+    risk_quote_to_account: float | None = None
+    risk_conversion_at: float | None = None
+    risk_conversion_source: str | None = None
 
     def exit_fill(self, price: float) -> float:
         if self.execution_costs is None:
@@ -413,6 +431,10 @@ class Position:
             "sl": self.sl,
             "tp": self.tp,
             "lastPrice": self.last_price,
+            "lastQuoteAt": self.last_quote_at,
+            "riskQuoteToAccount":self.risk_quote_to_account,
+            "riskConversionAt":self.risk_conversion_at,
+            "riskConversionSource":self.risk_conversion_source,
             "unrealizedPnl": round(self.unrealized(), 2),
             "reasons": self.reasons,
             "quoteToAccount": self.quote_to_account,
@@ -444,6 +466,7 @@ def _kick_sentiment_refresh(sym: Symbol) -> None:
 
 class TradingBot:
     def __init__(self, cfg: BotConfig) -> None:
+        self._book_lock=threading.RLock()
         self.cfg = cfg
         self.session = None
         self.balance = cfg.initial_balance
@@ -455,7 +478,8 @@ class TradingBot:
         self.manual_params: dict[str, dict] = {}    # ajustes explícitos a prueba
         self._task: asyncio.Task | None = None
         self._risk_task: asyncio.Task | None = None
-        self.risk_monitor=dict(independent=True,lastCompletedAt=None,durationSeconds=None,unavailable=[])
+        self.risk_monitor=dict(independent=True,startedAt=time.time(),lastCompletedAt=None,durationSeconds=None,unavailable=[])
+        self._last_scan_completed=None
         self._last_scan = 0.0
         self._scan_cursor = 0
         self.diagnostics: dict[str, dict] = {}
@@ -524,6 +548,7 @@ class TradingBot:
             and SYMBOLS_BY_ID[p.symbol].category == category
         )
 
+    @_book_mutation
     def reload_params(self) -> None:
         """Carga los parámetros entrenados y validados (tabla bot_params)."""
         from . import training
@@ -556,6 +581,7 @@ class TradingBot:
 
     # -------------------- persistencia --------------------
 
+    @_book_mutation
     def load_state(self) -> None:
         with _conn() as con:
             session=con.execute('SELECT payload FROM bot_sessions WHERE bot=?',(self.cfg.id,)).fetchone()
@@ -606,6 +632,7 @@ class TradingBot:
         if open_rows:
             log.info("%s: %d posiciones abiertas recuperadas", self.cfg.id, len(open_rows))
 
+    @_book_mutation
     def _save_state(self) -> None:
         with _conn() as con:
             con.execute(
@@ -640,6 +667,7 @@ class TradingBot:
                     if now - self._last_scan >= self.cfg.scan_seconds:
                         self._last_scan = now
                         await self._scan()
+                        self._last_scan_completed=time.time()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -662,6 +690,8 @@ class TradingBot:
     # -------------------- vigilancia de posiciones --------------------
 
     async def _manage_positions(self) -> None:
+        if (self.session or {}).get('currency')=='EUR':
+            fx_rates.schedule()
         positions=list(self.positions.values())
         semaphore=asyncio.Semaphore(4)
         async def observe(pos):
@@ -680,6 +710,13 @@ class TradingBot:
             sym = SYMBOLS_BY_ID[pos.symbol]
             price = tick["price"]
             pos.last_price = price
+            pos.last_quote_at = tick['time']
+            if (self.session or {}).get('currency')=='EUR':
+                quote_currency='USDT' if sym.source=='binance' else sym.id[3:] if sym.category=='forex' else 'USD'
+                conversion=fx_rates.get(quote_currency)
+                pos.risk_quote_to_account=conversion['rate'] if conversion else None
+                pos.risk_conversion_at=conversion['at'] if conversion else None
+                pos.risk_conversion_source=conversion['source'] if conversion else None
             half_spread = price * self.spread_pct(sym) / 2
 
             if pos.direction == "long":
@@ -738,7 +775,10 @@ class TradingBot:
                 exit_p = pos.exit_fill(price)
                 self._close(pos, exit_p, "tiempo agotado")
 
+    @_book_mutation
     def _update_stop(self, pos: Position, new_sl: float) -> None:
+        if self.positions.get(pos.symbol) is not pos:
+            return
         pos.sl = new_sl
         with _conn() as con:
             con.execute(
@@ -749,6 +789,8 @@ class TradingBot:
     # -------------------- búsqueda de entradas --------------------
 
     async def _scan(self) -> None:
+        if (self.session or {}).get('currency')=='EUR':
+            fx_rates.schedule()
         self._roll_day()
         universe = self.cfg.universe
         offset = self._scan_cursor % len(universe)
@@ -794,6 +836,9 @@ class TradingBot:
             if signal is None:
                 self.diagnostics[symbol_id]["reason"] = "Histórico cerrado insuficiente"
                 continue
+            if not isinstance(signal.get('candles'),list) or not signal['candles']:
+                self.diagnostics[symbol_id]['reason']='Entrada sin vela cerrada causal válida'
+                continue
             execution_params = self.trained_params.get(symbol_id) or self.manual_params.get(symbol_id, {})
             expected_source = execution_params.get('dataSource')
             if not has_pos and expected_source and signal['candles'][-1].get('dataSource') != expected_source:
@@ -804,16 +849,37 @@ class TradingBot:
                 self.diagnostics[symbol_id]["reason"] = "Velas antiguas / mercado cerrado"
                 continue
             score = signal["score"]
+            signal_bar = signal['candles'][-1]['time']
+            if not has_pos:
+                with _conn() as con:
+                    consumed = con.execute('SELECT 1 FROM bot_signal_receipts WHERE bot=? AND symbol=? AND bar_time=?',
+                                           (self.cfg.id,symbol_id,signal_bar)).fetchone()
+                if consumed:
+                    self.diagnostics[symbol_id]['reason']='Señal cerrada ya consumida'
+                    continue
             raw_derivatives = signal.get('derivatives')
+            overlay_attribution = dict(mode='shadow',baseScore=score)
             if isinstance(raw_derivatives, dict) and raw_derivatives.get('available') and score:
                 from .derivatives_flow import derivatives_regime
                 side = 'long' if score > 0 else 'short'
                 regime = derivatives_regime(raw_derivatives.get('fundingRate'), raw_derivatives.get('oiChange1hPct'),
                                             raw_derivatives.get('priceChange1hPct'), side)
-                score, signal['confirmations'] = apply_flow_overlay(
+                shadow_score, shadow_confirmations = apply_flow_overlay(
                     score, signal['confirmations'], regime['flowAdjustment'], side)
-                signal['score'] = score
-                signal['derivatives'] = dict(raw_derivatives, regime=regime)
+                overlay_attribution.update(derivativesScore=shadow_score,
+                    derivativesRegime=regime,derivativesConfirmations=shadow_confirmations,
+                    reason='Sin replay point-in-time equivalente; atribución en sombra')
+            signal['overlayAttribution'] = overlay_attribution
+            from . import experiments
+            try:
+                experiments.log_decision(self.cfg.id,symbol_id,signal_bar,score,overlay_attribution,
+                    dict(stage='candidate',threshold=self._exec_params(sym)[0]),
+                    {**cost_profile('lab',sym.category),'spreadPct':self.spread_pct(sym)},
+                    db_path=experiments.registry_path(DB_PATH))
+            except (OSError,sqlite3.Error,ValueError):
+                self.diagnostics[symbol_id]['reason']='Registro causal no disponible; entrada bloqueada'
+                if not has_pos:
+                    continue
             atr_val, price = signal["atr"], signal["price"]
             threshold, sl_m, tp_m, trail_m = self._exec_params(sym)
             if pre_mode == "probation":
@@ -881,6 +947,9 @@ class TradingBot:
                 learning.entry_context(price, atr_val, signal.get('extension'), self.spread_pct(sym), signal.get('derivatives')),
             )
             meta_ok, p_win, meta_note = learning.meta_gate(self.cfg.id, feats)
+            signal['overlayAttribution']['metaModel'] = dict(
+                shadowScore=learning.meta_predict(self.cfg.id,feats),
+                mode=learning.meta_summary(self.cfg.id).get('mode','shadow'),note=meta_note)
             if not meta_ok:
                 self.diagnostics[symbol_id]["reason"] = meta_note or "Filtrado por meta-modelo"
                 log.debug("%s: %s %s filtrado por meta-modelo (p=%.2f)",
@@ -935,6 +1004,8 @@ class TradingBot:
                 self.diagnostics[symbol_id]["reason"] = "Precio alejado más de 1 ATR de la señal"
                 continue
             price = tick["price"]
+            signal['entryQuote']={k:tick[k] for k in ('price','time','dataSource') if k in tick}
+            signal['decisionAt']=time.time()
             if (not self.running or symbol_id in self.positions or self.entries_paused()
                     or time.time()<self.cooldown_until.get(symbol_id,0)
                     or len(self.positions)>=self.cfg.max_positions):
@@ -1036,19 +1107,39 @@ class TradingBot:
 
     # -------------------- ejecución simulada --------------------
 
+    @_book_mutation
     def _open(
         self, sym: Symbol, direction: str, price: float, atr_val: float,
         score: float, signal: dict, sl_m: float, tp_m: float, trail_m: float,
         p_win: float | None = None, meta_note: str | None = None,
         probation_why: str | None = None,
     ) -> None:
-        gate=gemini_agent.catalyst_gate(sym.id,direction)
-        if not gate['allowed']:
-            self.diagnostics[sym.id]={"reason":gate['reason'],"at":int(time.time()),"catalystGate":gate}
+        if (sym.id in self.positions or not self.running or self.entries_paused()
+            or len(self.positions)>=self.cfg.max_positions
+            or time.time()<self.cooldown_until.get(sym.id,0)):
+            self.diagnostics[sym.id]={'reason':'Estado de riesgo actualizado; entrada bloqueada','at':int(time.time())}
             return
-        if not all(math.isfinite(v) for v in (price, atr_val, sl_m, tp_m, trail_m)) or min(price, atr_val, sl_m, tp_m) <= 0:
-            self.diagnostics[sym.id] = {"reason": "Precio, ATR o distancias inválidos", "at": int(time.time())}
+        rows=signal.get('candles')
+        try:
+            valid_rows=isinstance(rows,list) and bool(rows) and len(closed_candles(rows,INTERVAL_SECONDS[self.cfg.work_interval],time.time()))==len(rows)
+        except (TypeError,ValueError,KeyError):
+            valid_rows=False
+        if not valid_rows:
+            self.diagnostics[sym.id]={'reason':'Entrada sin vela cerrada causal válida','at':int(time.time())}
             return
+        quote=signal.get('entryQuote')
+        if not isinstance(quote,dict) or not valid_tick(quote,time.time()) or quote['price']!=price:
+            self.diagnostics[sym.id]={'reason':'Cotización caducada o distinta al confirmar entrada','at':int(time.time())}
+            return
+        if not all(type(v) in (int,float) and math.isfinite(v) for v in (price,atr_val,sl_m,tp_m,trail_m)) or min(price,atr_val,sl_m,tp_m)<=0:
+            self.diagnostics[sym.id]={'reason':'Precio, ATR o distancias inválidos','at':int(time.time())}
+            return
+        if abs(price-rows[-1]['close'])>atr_val:
+            self.diagnostics[sym.id]={'reason':'Precio alejado más de 1 ATR de la señal cerrada','at':int(time.time())}
+            return
+        shadow_gate=gemini_agent.catalyst_gate(sym.id,direction)
+        gate=dict(allowed=True,mode='shadow',shadowDecision=shadow_gate,
+                  reason='Contexto IA registrado; sin replay equivalente no modifica la política base')
         reasons: list[str] = list(signal["reasons"])
         if sym.id in self.manual_params:
             reasons.append("Parámetros ajustados manualmente; pendientes de revalidación")
@@ -1100,12 +1191,19 @@ class TradingBot:
                 + (f" ({meta_note})" if meta_note else "")
             )
         conversion=1.0
+        risk_conversion=1.0
+        risk_fx=None
         if self.session and self.session.get('currency')=='EUR':
-            quote='USDT' if sym.source=='binance' else sym.id[3:] if sym.category=='forex' else 'USD'
-            conversion=self.session['quoteToEuro'].get(quote)
+            quote_currency='USDT' if sym.source=='binance' else sym.id[3:] if sym.category=='forex' else 'USD'
+            conversion=self.session['quoteToEuro'].get(quote_currency)
             if conversion is None or conversion<=0:
                 self.diagnostics[sym.id]={'reason':'Sin conversión a EUR para este mercado','at':int(time.time())}
                 return
+            risk_fx=fx_rates.get(quote_currency)
+            if risk_fx is None:
+                self.diagnostics[sym.id]={'reason':'Sin conversión EUR actual para ampliar exposición','at':int(time.time())}
+                return
+            risk_conversion=risk_fx['rate']
         equity = max(0.0, self.balance + sum(p.unrealized() for p in self.positions.values()))
         open_risk = sum(p.initial_risk() for p in self.positions.values())
         size_mult = scale * min(1.0, learn_mult) * meta_mult
@@ -1115,12 +1213,12 @@ class TradingBot:
             size_mult = min(1.0, size_mult) * prob_mult
         budget = min(equity * self.cfg.risk_pct * size_mult,
                      max(0.0, equity * self.cfg.max_open_risk_pct - open_risk))
-        qty = budget / (economy["netRisk"] * conversion)
+        qty = budget / (economy["netRisk"] * risk_conversion)
         used_margin = sum(
             p.qty * p.entry_price * p.quote_to_account for p in self.positions.values()
         ) / self.cfg.max_leverage
         free_margin = max(equity - used_margin, 0.0)
-        qty = min(qty, free_margin * self.cfg.max_leverage / (entry*conversion))
+        qty = min(qty, free_margin * self.cfg.max_leverage / (entry*risk_conversion))
         if qty * entry * conversion < 1.0:
             self.diagnostics[sym.id] = {"reason": "Sin margen o presupuesto de riesgo", "at": int(time.time())}
             return
@@ -1149,12 +1247,17 @@ class TradingBot:
             "executionCosts": costs,
             "catalystGate": gate,
             "economics": economy,
+            "entryQuote":quote,
+            "decisionAt":signal.get('decisionAt'),
+            "signalAvailableAt":rows[-1]['time']+INTERVAL_SECONDS[self.cfg.work_interval],
+            "riskConversion":risk_fx,
+            "overlayAttribution": signal.get('overlayAttribution',{'mode':'shadow','baseScore':score}),
         }
         from . import portfolio_risk
         assessment = None
         if (self.session or {}).get("currency") == "EUR":
-            assessment = portfolio_risk.assess(sym.id, direction, economy["netRisk"],
-                                              qty * entry * conversion, "lab", self.cfg.id, reserve=True)
+            assessment = portfolio_risk.assess(sym.id, direction, economy["netRisk"]*risk_conversion/conversion,
+                                              qty * entry * risk_conversion, "lab", self.cfg.id, reserve=True)
             if not assessment["allowed"]:
                 self.diagnostics[sym.id] = {"reason": assessment["reason"], "at": int(time.time()),
                                            "portfolioRisk": assessment}
@@ -1163,6 +1266,10 @@ class TradingBot:
         now = int(time.time())
         try:
             with _conn() as con:
+                bar_time = signal['candles'][-1]['time']
+                if con.execute('SELECT 1 FROM bot_signal_receipts WHERE bot=? AND symbol=? AND bar_time=?',
+                               (self.cfg.id,sym.id,bar_time)).fetchone():
+                    return
                 cur = con.execute(
                     """INSERT INTO bot_trades
                        (bot, symbol, direction, qty, entry_price, entry_time,
@@ -1176,6 +1283,7 @@ class TradingBot:
                      economy["netRisk"] / qty / conversion),
                 )
                 trade_id = cur.lastrowid
+                con.execute('INSERT INTO bot_signal_receipts VALUES (?,?,?)',(self.cfg.id,sym.id,bar_time))
             pos = Position(
                 id=trade_id, symbol=sym.id, direction=direction, qty=qty,
                 entry_price=entry, entry_time=now, sl=sl, tp=tp,
@@ -1185,6 +1293,10 @@ class TradingBot:
                 execution_costs=costs, entry_fee=entry * qty * costs["feeRate"],
                 economic_risk_dist=economy["netRisk"] / qty / conversion,
                 exit_policy=aggressive.exit_policy(self.cfg.id),max_hold_seconds=self.cfg.max_hold_seconds,
+                last_quote_at=quote['time'],
+                risk_quote_to_account=risk_fx['rate'] if risk_fx else None,
+                risk_conversion_at=risk_fx['at'] if risk_fx else None,
+                risk_conversion_source=risk_fx['source'] if risk_fx else None,
             )
             self.positions[sym.id] = pos
         finally:
@@ -1199,6 +1311,7 @@ class TradingBot:
             qty * entry, qty * entry / self.cfg.max_leverage, score,
         )
 
+    @_book_mutation
     def _close(self, pos: Position, exit_price: float, reason: str) -> None:
         sign = 1.0 if pos.direction == "long" else -1.0
         # exit_price ya es un fill: los llamadores aplican spread/slippage una vez.
@@ -1230,12 +1343,11 @@ class TradingBot:
         if pnl < 0:
             self.consec_losses += 1
             self.loss_streak[pos.symbol] = self.loss_streak.get(pos.symbol, 0) + 1
-            mult = min(8, 2 ** self.loss_streak.get(pos.symbol, 0))
-            cooldown = self.cfg.cooldown_seconds * mult
         else:
             self.consec_losses = 0
             self.loss_streak[pos.symbol] = 0
-            cooldown = self.cfg.cooldown_seconds / 4
+        from .validation import cooldown_seconds
+        cooldown = cooldown_seconds(self.cfg.cooldown_seconds,pnl,self.loss_streak.get(pos.symbol,0))
         self.cooldown_until[pos.symbol] = time.time() + cooldown
         self._save_state()
         # cada cierre alimenta el aprendizaje: vetos, tamaños adaptativos y
@@ -1252,10 +1364,12 @@ class TradingBot:
 
     # -------------------- control y estado --------------------
 
+    @_book_mutation
     def set_running(self, running: bool) -> None:
         self.running = running
         self._save_state()
 
+    @_book_mutation
     def reset(self) -> None:
         """Borra historial y posiciones y vuelve al balance inicial."""
         with _conn() as con:
@@ -1270,6 +1384,7 @@ class TradingBot:
         learning.reset(self.cfg.id)
         self._save_state()
 
+    @_book_mutation
     def status(self) -> dict:
         self._roll_day()
         unrealized = sum(p.unrealized() for p in self.positions.values())

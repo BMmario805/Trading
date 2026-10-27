@@ -1,0 +1,10 @@
+{
+  "protocol": "mesa-siete-handoff-v1",
+  "correlationId": "team-check-20261027-final",
+  "taskId": "team-check-20261027",
+  "nonce": "20ed3be48042ff78fb0583fd4d876467",
+  "agent": "market-radar",
+  "artifact": ".grok/handoffs/proof-20261027.txt",
+  "sha256": "22114272569ac6f79abadefbea226f6b605245d20f0cf856dd1df1b6917ceccc",
+  "createdAt": 1793125730.9881892
+}
